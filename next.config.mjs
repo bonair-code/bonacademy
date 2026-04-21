@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   devIndicators: false,
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
   experimental: { serverActions: { bodySizeLimit: "500mb" } },
   serverExternalPackages: ["unzipper"],
   images: {

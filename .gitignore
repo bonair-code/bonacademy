@@ -9,3 +9,5 @@ coverage
 uploads
 playwright-report
 test-results
+
+.vercel

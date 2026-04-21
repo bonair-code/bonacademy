@@ -13,7 +13,7 @@ export async function GET(
   const blobPath = path.join("/");
   const file = await getFile(blobPath);
   if (!file) return new NextResponse("Not found", { status: 404 });
-  return new NextResponse(file.body, {
+  return new NextResponse(new Uint8Array(file.body as unknown as ArrayBuffer), {
     headers: {
       "Content-Type": file.contentType,
       "Cache-Control": "private, max-age=600",
