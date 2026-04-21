@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --brand: #e31e24;
+  --accent: #14b8a6;
+}
+
+@layer base {
+  body {
+    @apply antialiased text-slate-800 bg-slate-50;
+  }
+  h1,
+  h2,
+  h3 {
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-slate-200/70 rounded-2xl shadow-card;
+  }
+  .card-hover {
+    @apply transition hover:shadow-cardHover hover:-translate-y-[1px];
+  }
+  .page-title {
+    @apply text-2xl font-semibold tracking-tight text-slate-900;
+  }
+  .page-subtitle {
+    @apply text-sm text-slate-500;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-teal-500 hover:bg-teal-600 text-white rounded-lg px-4 py-2 text-sm font-medium transition shadow-sm focus:outline-none focus:ring-2 focus:ring-teal-300;
+  }
+  .btn-brand {
+    @apply inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 text-sm font-medium transition shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-300;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium transition;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg px-3 py-1.5 text-sm transition;
+  }
+
+  /* Forms */
+  .input {
+    @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-300 focus:border-teal-400 transition;
+  }
+  .label {
+    @apply text-xs font-medium text-slate-600 uppercase tracking-wide;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium;
+  }
+  .badge-red   { @apply badge bg-red-50 text-red-700 ring-1 ring-red-200; }
+  .badge-slate { @apply badge bg-slate-100 text-slate-700 ring-1 ring-slate-200; }
+  .badge-green { @apply badge bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200; }
+  .badge-amber { @apply badge bg-amber-50 text-amber-700 ring-1 ring-amber-200; }
+  .badge-teal  { @apply badge bg-teal-50 text-teal-700 ring-1 ring-teal-200; }
+
+  /* Sidebar nav (white sidebar) */
+  .nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition text-sm;
+  }
+  .nav-item-active {
+    @apply bg-teal-50 text-teal-700;
+  }
+  .nav-section {
+    @apply text-[10px] font-semibold text-slate-400 uppercase tracking-[0.14em] px-3 mb-2 mt-4;
+  }
+  .nav-count {
+    @apply ml-auto inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-[11px] font-semibold rounded-full bg-teal-50 text-teal-600;
+  }
+  .nav-count-muted {
+    @apply ml-auto inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-500;
+  }
+
+  /* KPI tile */
+  .kpi {
+    @apply bg-white border border-slate-200/70 rounded-2xl p-5 shadow-card;
+  }
+  .tile-icon {
+    @apply h-11 w-11 rounded-xl flex items-center justify-center mb-4;
+  }
+  .tile-teal  { @apply bg-teal-50 text-teal-600; }
+  .tile-amber { @apply bg-amber-50 text-amber-600; }
+  .tile-green { @apply bg-emerald-50 text-emerald-600; }
+  .tile-red   { @apply bg-red-50 text-red-500; }
+  .tile-slate { @apply bg-slate-100 text-slate-500; }
+}

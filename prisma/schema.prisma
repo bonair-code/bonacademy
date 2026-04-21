@@ -1,0 +1,267 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+}
+
+enum Recurrence {
+  NONE
+  SIX_MONTHS
+  ONE_YEAR
+  TWO_YEARS
+}
+
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  SCORM_COMPLETED
+  EXAM_PASSED
+  EXAM_FAILED
+  RETAKE_REQUIRED
+  COMPLETED
+  OVERDUE
+}
+
+enum AttemptType {
+  SCORM
+  EXAM
+}
+
+enum TokenType {
+  INVITE
+  RESET
+}
+
+model PasswordToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  type      TokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum ScormVersion {
+  SCORM_12
+  SCORM_2004
+}
+
+model User {
+  id            String       @id @default(cuid())
+  email         String       @unique
+  name          String
+  passwordHash  String?
+  failedLoginAttempts Int    @default(0)
+  lockedAt      DateTime?
+  azureAdOid    String?      @unique
+  role          Role         @default(USER)
+  departmentId  String?
+  department    Department?  @relation(fields: [departmentId], references: [id])
+  managerId     String?
+  manager       User?        @relation("TeamManager", fields: [managerId], references: [id])
+  reports       User[]       @relation("TeamManager")
+  isActive      Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  assignments   Assignment[]
+  plansCreated  TrainingPlan[] @relation("PlanCreator")
+  certificates  Certificate[]
+  auditLogs     AuditLog[]
+  jobTitles     UserJobTitle[]
+  passwordTokens PasswordToken[]
+
+  @@index([departmentId])
+  @@index([role])
+}
+
+model JobTitle {
+  id        String                 @id @default(cuid())
+  name      String                 @unique
+  users     UserJobTitle[]
+  plans     TrainingPlanJobTitle[]
+  createdAt DateTime               @default(now())
+}
+
+model UserJobTitle {
+  userId     String
+  jobTitleId String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobTitle   JobTitle @relation(fields: [jobTitleId], references: [id], onDelete: Cascade)
+  assignedAt DateTime @default(now())
+
+  @@id([userId, jobTitleId])
+  @@index([jobTitleId])
+}
+
+model TrainingPlanJobTitle {
+  planId     String
+  jobTitleId String
+  plan       TrainingPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  jobTitle   JobTitle     @relation(fields: [jobTitleId], references: [id], onDelete: Cascade)
+
+  @@id([planId, jobTitleId])
+  @@index([jobTitleId])
+}
+
+model Department {
+  id        String  @id @default(cuid())
+  name      String  @unique
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model Course {
+  id                String        @id @default(cuid())
+  title             String
+  description       String?
+  scormPackagePath  String?
+  scormEntryPoint   String?
+  scormVersion      ScormVersion  @default(SCORM_12)
+  passingScore      Int           @default(70)
+  durationMinutes   Int?
+  isActive          Boolean       @default(true)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  questionBank      QuestionBank?
+  exam              Exam?
+  plans             TrainingPlan[]
+}
+
+model QuestionBank {
+  id        String     @id @default(cuid())
+  courseId  String     @unique
+  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[]
+  createdAt DateTime   @default(now())
+}
+
+model Question {
+  id        String         @id @default(cuid())
+  bankId    String
+  bank      QuestionBank   @relation(fields: [bankId], references: [id], onDelete: Cascade)
+  text      String
+  points    Int            @default(1)
+  options   AnswerOption[]
+}
+
+model AnswerOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  text       String
+  isCorrect  Boolean  @default(false)
+}
+
+model Exam {
+  id            String  @id @default(cuid())
+  courseId      String  @unique
+  course        Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questionCount Int     @default(10)
+  passingScore  Int     @default(70)
+  timeLimitMin  Int?
+  shuffle       Boolean @default(true)
+}
+
+model TrainingPlan {
+  id          String                 @id @default(cuid())
+  courseId    String
+  course      Course                 @relation(fields: [courseId], references: [id])
+  recurrence  Recurrence             @default(NONE)
+  startDate   DateTime
+  dueInDays   Int                    @default(30)
+  createdById String
+  createdBy   User                   @relation("PlanCreator", fields: [createdById], references: [id])
+  assignments Assignment[]
+  jobTitles   TrainingPlanJobTitle[]
+  isActive    Boolean                @default(true)
+  createdAt   DateTime               @default(now())
+
+  @@index([courseId])
+}
+
+model Assignment {
+  id           String           @id @default(cuid())
+  planId       String
+  plan         TrainingPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycleNumber  Int              @default(1)
+  status       AssignmentStatus @default(PENDING)
+  dueDate      DateTime
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+
+  attempts     Attempt[]
+  examAttempts ExamAttempt[]
+  certificate  Certificate?
+
+  @@unique([planId, userId, cycleNumber])
+  @@index([userId, status])
+  @@index([dueDate])
+}
+
+model Attempt {
+  id           String      @id @default(cuid())
+  assignmentId String
+  assignment   Assignment  @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  type         AttemptType
+  score        Float?
+  passed       Boolean?
+  cmiData      Json?
+  startedAt    DateTime    @default(now())
+  finishedAt   DateTime?
+}
+
+model ExamAttempt {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  attemptNo    Int
+  score        Float
+  passed       Boolean
+  answers      Json
+  createdAt    DateTime   @default(now())
+
+  @@unique([assignmentId, attemptNo])
+}
+
+model Certificate {
+  id           String     @id @default(cuid())
+  assignmentId String     @unique
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User       @relation(fields: [userId], references: [id])
+  pdfPath      String
+  issuedAt     DateTime   @default(now())
+  serialNo     String     @unique
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String
+  actor     User     @relation(fields: [actorId], references: [id])
+  action    String
+  entity    String
+  entityId  String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

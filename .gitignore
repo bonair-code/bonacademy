@@ -1,0 +1,11 @@
+node_modules
+.next
+.env
+.env.local
+*.log
+dist
+coverage
+.vscode
+uploads
+playwright-report
+test-results
