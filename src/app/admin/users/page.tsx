@@ -4,8 +4,7 @@ import { Shell } from "@/components/Shell";
 import { revalidatePath } from "next/cache";
 import type { Role } from "@prisma/client";
 import { enrollUserIntoJobTitlePlans } from "@/lib/scheduler/assignments";
-import { createPasswordToken, hashPassword, validatePasswordStrength } from "@/lib/password";
-import { sendInviteEmail, sendResetEmail } from "@/lib/notifications/mailer";
+import { hashPassword, validatePasswordStrength } from "@/lib/password";
 
 async function upsertUser(formData: FormData) {
   "use server";
@@ -17,7 +16,6 @@ async function upsertUser(formData: FormData) {
   const departmentId = String(formData.get("departmentId") || "") || null;
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
   const password = String(formData.get("password") || "");
-  const sendInvite = formData.get("sendInvite") === "on";
 
   let passwordHash: string | undefined;
   if (password) {
@@ -29,7 +27,15 @@ async function upsertUser(formData: FormData) {
   const user = id
     ? await prisma.user.update({
         where: { id },
-        data: { email, name, role, departmentId, ...(passwordHash ? { passwordHash } : {}) },
+        data: {
+          email,
+          name,
+          role,
+          departmentId,
+          ...(passwordHash
+            ? { passwordHash, failedLoginAttempts: 0, lockedAt: null }
+            : {}),
+        },
       })
     : await prisma.user.create({
         data: { email, name, role, departmentId, ...(passwordHash ? { passwordHash } : {}) },
@@ -43,12 +49,21 @@ async function upsertUser(formData: FormData) {
   }
 
   await enrollUserIntoJobTitlePlans(user.id);
+  revalidatePath("/admin/users");
+}
 
-  if (sendInvite) {
-    const token = await createPasswordToken(user.id, "INVITE", 72);
-    await sendInviteEmail(user.email, user.name, token);
-  }
-
+async function setPassword(formData: FormData) {
+  "use server";
+  await requireRole("ADMIN");
+  const userId = String(formData.get("userId"));
+  const password = String(formData.get("password") || "");
+  const err = validatePasswordStrength(password);
+  if (err) throw new Error(err);
+  const passwordHash = await hashPassword(password);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, failedLoginAttempts: 0, lockedAt: null },
+  });
   revalidatePath("/admin/users");
 }
 
@@ -60,18 +75,6 @@ async function unlockUser(formData: FormData) {
     where: { id: userId },
     data: { failedLoginAttempts: 0, lockedAt: null },
   });
-  revalidatePath("/admin/users");
-}
-
-async function sendResetLink(formData: FormData) {
-  "use server";
-  await requireRole("ADMIN");
-  const userId = String(formData.get("userId"));
-  const user = await prisma.user.findUnique({ where: { id: userId } });
-  if (user) {
-    const token = await createPasswordToken(user.id, "RESET", 2);
-    await sendResetEmail(user.email, user.name, token);
-  }
   revalidatePath("/admin/users");
 }
 
@@ -98,32 +101,30 @@ export default async function AdminUsers() {
   ]);
 
   return (
-    <Shell user={user}>
-      <h1 className="text-xl font-semibold mb-4">Kullanıcılar</h1>
-
-      <section className="bg-white border rounded-xl p-4 mb-6">
-        <h2 className="font-semibold mb-2">Yeni Departman</h2>
+    <Shell user={user} title="Kullanıcılar" subtitle="Kullanıcı yönetimi ve şifre işlemleri">
+      <section className="card p-5 mb-6">
+        <h2 className="font-semibold mb-3">Yeni Departman</h2>
         <form action={createDepartment} className="flex gap-2">
-          <input name="name" placeholder="Departman adı" className="border rounded px-3 py-1.5 flex-1" />
-          <button className="bg-slate-900 text-white rounded-lg px-4">Ekle</button>
+          <input name="name" placeholder="Departman adı" className="input flex-1" />
+          <button className="btn-primary">Ekle</button>
         </form>
       </section>
 
-      <section className="bg-white border rounded-xl p-4 mb-6">
-        <h2 className="font-semibold mb-2">Yeni / Güncelle Kullanıcı</h2>
+      <section className="card p-5 mb-6">
+        <h2 className="font-semibold mb-3">Yeni / Güncelle Kullanıcı</h2>
         <p className="text-xs text-slate-500 mb-3">
-          Şifre alanını boş bırakırsanız mevcut şifre değişmez. &quot;Davet e-postası gönder&quot; işaretliyse
-          kullanıcıya şifre belirleme bağlantısı e-postalanır (72 saat geçerli).
+          Yeni kullanıcıda şifre zorunludur. Mevcut kullanıcıyı güncellerken şifre alanını boş
+          bırakırsanız mevcut şifre korunur. Şifre en az 8 karakter olmalı ve harf + rakam içermelidir.
         </p>
         <form action={upsertUser} className="grid grid-cols-2 gap-3 items-end text-sm">
-          <input name="email" placeholder="E-posta" required className="border rounded px-2 py-1.5" />
-          <input name="name" placeholder="Ad Soyad" required className="border rounded px-2 py-1.5" />
-          <select name="role" className="border rounded px-2 py-1.5">
+          <input name="email" placeholder="E-posta" required className="input" />
+          <input name="name" placeholder="Ad Soyad" required className="input" />
+          <select name="role" className="input">
             <option value="USER">Kullanıcı</option>
             <option value="MANAGER">Yönetici</option>
             <option value="ADMIN">Admin</option>
           </select>
-          <select name="departmentId" className="border rounded px-2 py-1.5">
+          <select name="departmentId" className="input">
             <option value="">Departman (seçiniz)</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
@@ -134,20 +135,17 @@ export default async function AdminUsers() {
           <input
             name="password"
             type="password"
-            placeholder="Başlangıç şifresi (opsiyonel)"
-            className="border rounded px-2 py-1.5"
+            placeholder="Başlangıç şifresi"
+            className="input"
             autoComplete="new-password"
           />
-          <label className="flex items-center gap-2">
-            <input name="sendInvite" type="checkbox" />
-            Davet e-postası gönder
-          </label>
-          <label className="col-span-2 block">
+          <div />
+          <label className="col-span-2 block text-xs text-slate-600">
             Görev tanımları (Ctrl / Cmd ile çoklu seçim)
             <select
               name="jobTitleIds"
               multiple
-              className="border rounded px-2 py-1.5 w-full h-32 mt-1"
+              className="input h-32 mt-1"
             >
               {jobTitles.map((j) => (
                 <option key={j.id} value={j.id}>
@@ -156,46 +154,121 @@ export default async function AdminUsers() {
               ))}
             </select>
           </label>
-          <button className="bg-slate-900 text-white rounded-lg px-4 py-1.5 col-span-2 w-max">
-            Kaydet
-          </button>
+          <button className="btn-primary col-span-2 w-max">Kaydet</button>
         </form>
       </section>
 
-      <div className="bg-white border rounded-xl divide-y">
+      <div className="card divide-y divide-slate-100">
         {users.map((u) => (
-          <div key={u.id} className="p-3 flex justify-between items-center text-sm">
-            <div>
-              <b>{u.name}</b> <span className="text-slate-500">· {u.email}</span>
-              {!u.passwordHash && (
-                <span className="ml-2 text-xs text-amber-600">(şifre belirlenmemiş)</span>
-              )}
-              {u.lockedAt && (
-                <span className="ml-2 text-xs text-red-600">🔒 Kilitli</span>
-              )}
-              <div className="text-xs text-slate-500">
-                Görevler: {u.jobTitles.map((jt) => jt.jobTitle.name).join(", ") || "—"}
+          <div key={u.id} className="p-4 flex flex-col gap-3">
+            <div className="flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <div className="font-semibold text-slate-900">
+                  {u.name}{" "}
+                  <span className="text-slate-500 font-normal">· {u.email}</span>
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {u.role} · {u.department?.name ?? "Departman yok"}
+                  {u.jobTitles.length > 0 && (
+                    <> · {u.jobTitles.map((jt) => jt.jobTitle.name).join(", ")}</>
+                  )}
+                </div>
+                <div className="mt-1 flex gap-2 flex-wrap">
+                  {!u.passwordHash && <span className="badge-amber">Şifre yok</span>}
+                  {u.lockedAt && <span className="badge-red">Kilitli</span>}
+                  {u.failedLoginAttempts > 0 && !u.lockedAt && (
+                    <span className="badge-amber">
+                      {u.failedLoginAttempts} hatalı deneme
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-slate-500 text-xs">
-                {u.role} · {u.department?.name ?? "—"}
-              </span>
               {u.lockedAt && (
                 <form action={unlockUser}>
                   <input type="hidden" name="userId" value={u.id} />
-                  <button className="text-xs border rounded px-2 py-1 hover:bg-slate-50 text-red-700">
-                    Kilidi Kaldır
-                  </button>
+                  <button className="btn-secondary text-xs py-1.5">Kilidi Kaldır</button>
                 </form>
               )}
-              <form action={sendResetLink}>
-                <input type="hidden" name="userId" value={u.id} />
-                <button className="text-xs border rounded px-2 py-1 hover:bg-slate-50">
-                  Sıfırlama gönder
-                </button>
-              </form>
             </div>
+
+            <details className="text-sm">
+              <summary className="cursor-pointer text-teal-700 hover:text-teal-800 text-xs font-medium select-none">
+                Düzenle / Şifre değiştir
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg">
+                <form action={upsertUser} className="col-span-2 grid grid-cols-2 gap-3">
+                  <input type="hidden" name="id" value={u.id} />
+                  <input
+                    name="email"
+                    defaultValue={u.email}
+                    required
+                    className="input"
+                  />
+                  <input
+                    name="name"
+                    defaultValue={u.name}
+                    required
+                    className="input"
+                  />
+                  <select name="role" defaultValue={u.role} className="input">
+                    <option value="USER">Kullanıcı</option>
+                    <option value="MANAGER">Yönetici</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                  <select
+                    name="departmentId"
+                    defaultValue={u.departmentId ?? ""}
+                    className="input"
+                  >
+                    <option value="">Departman (yok)</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                  <label className="col-span-2 text-xs text-slate-600">
+                    Görev tanımları (çoklu seçim için Ctrl/Cmd)
+                    <select
+                      name="jobTitleIds"
+                      multiple
+                      defaultValue={u.jobTitles.map((jt) => jt.jobTitleId)}
+                      className="input h-28 mt-1"
+                    >
+                      {jobTitles.map((j) => (
+                        <option key={j.id} value={j.id}>
+                          {j.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="btn-primary col-span-2 w-max text-xs py-1.5">
+                    Bilgileri Kaydet
+                  </button>
+                </form>
+
+                <form action={setPassword} className="col-span-2 border-t border-slate-200 pt-3">
+                  <div className="text-xs font-semibold text-slate-700 mb-2">
+                    Şifreyi Değiştir
+                  </div>
+                  <input type="hidden" name="userId" value={u.id} />
+                  <div className="flex gap-2">
+                    <input
+                      name="password"
+                      type="password"
+                      placeholder="Yeni şifre (min 8 karakter, harf + rakam)"
+                      required
+                      className="input flex-1"
+                      autoComplete="new-password"
+                    />
+                    <button className="btn-brand text-xs py-1.5">Şifreyi Ayarla</button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Yeni şifre belirlenince kilit ve hatalı deneme sayacı sıfırlanır.
+                  </p>
+                </form>
+              </div>
+            </details>
           </div>
         ))}
       </div>

@@ -16,6 +16,8 @@ const azureConfigured =
   !!process.env.AUTH_AZURE_AD_CLIENT_SECRET &&
   !!process.env.AUTH_AZURE_AD_TENANT_ID;
 
+const MAX_ATTEMPTS = 3;
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     ...(azureConfigured
@@ -38,10 +40,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(creds?.email || "").trim().toLowerCase();
         const password = String(creds?.password || "");
         if (!email || !password) return null;
-        // DEV BYPASS: şifre doğrulaması geçici olarak kapalı
-        void password;
+
         const user = await prisma.user.findUnique({ where: { email } });
-        if (!user || !user.isActive) return null;
+        if (!user || !user.isActive || !user.passwordHash) return null;
+        if (user.lockedAt) return null;
+
+        const ok = await verifyPassword(password, user.passwordHash);
+        if (!ok) {
+          const attempts = user.failedLoginAttempts + 1;
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              failedLoginAttempts: attempts,
+              lockedAt: attempts >= MAX_ATTEMPTS ? new Date() : null,
+            },
+          });
+          return null;
+        }
+
+        if (user.failedLoginAttempts > 0) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { failedLoginAttempts: 0 },
+          });
+        }
+
         return { id: user.id, email: user.email, name: user.name };
       },
     }),

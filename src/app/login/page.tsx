@@ -1,13 +1,11 @@
 import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
 import { verifySliderToken } from "@/lib/captcha";
 import { SliderCaptcha } from "@/components/SliderCaptcha";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import Link from "next/link";
 
-const LOGIN_BYPASS = true;
+const LOGIN_BYPASS = false;
 
 const MAX_ATTEMPTS = 3;
 const azureConfigured =
@@ -22,16 +20,32 @@ async function loginAction(formData: FormData) {
   const captchaToken = String(formData.get("captchaToken") || "");
   const remember = formData.get("remember") === "on";
 
-  // Captcha bypass (dev): token doğrulaması geçici olarak kapatıldı
-  void captchaToken;
-  if (!email) return redirect("/login?error=empty");
+  if (!verifySliderToken(captchaToken)) return redirect("/login?error=captcha");
+  if (!email || !password) return redirect("/login?error=empty");
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.isActive) {
     return redirect("/login?error=bad");
   }
+  if (user.lockedAt) {
+    return redirect("/login?error=locked");
+  }
 
-  await signIn("password", { email, password, redirect: false });
+  try {
+    await signIn("password", { email, password, redirect: false });
+  } catch {
+    // Fall through — check DB state below
+  }
+
+  const after = await prisma.user.findUnique({
+    where: { email },
+    select: { failedLoginAttempts: true, lockedAt: true },
+  });
+  if (after?.lockedAt) return redirect("/login?error=locked");
+  if (after && after.failedLoginAttempts > 0) {
+    const left = Math.max(0, MAX_ATTEMPTS - after.failedLoginAttempts);
+    return redirect(`/login?error=bad&left=${left}`);
+  }
 
   if (!remember) {
     const jar = await cookies();
@@ -66,7 +80,7 @@ function errorText(code?: string, left?: string): string | null {
     case "bad":
       return `E-posta veya şifre hatalı.${left ? ` Kalan deneme: ${left}` : ""}`;
     case "locked":
-      return "Hesabınız 3 hatalı denemeden dolayı kilitlendi. Şifremi unuttum ile sıfırlayın veya yöneticinize başvurun.";
+      return "Hesabınız 3 hatalı denemeden dolayı kilitlendi. Yöneticinize başvurun.";
     default:
       return null;
   }
@@ -78,12 +92,10 @@ export default async function LoginPage({
   searchParams: Promise<{
     error?: string;
     left?: string;
-    invited?: string;
-    reset?: string;
   }>;
 }) {
   if (LOGIN_BYPASS) redirect("/dashboard");
-  const { error, left, invited, reset } = await searchParams;
+  const { error, left } = await searchParams;
   const msg = errorText(error, left);
 
   return (
@@ -172,17 +184,6 @@ export default async function LoginPage({
             </form>
           )}
 
-          {invited && (
-            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-3">
-              Şifreniz belirlendi. Giriş yapabilirsiniz.
-            </p>
-          )}
-          {reset && (
-            <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-3">
-              Şifreniz güncellendi. Giriş yapabilirsiniz.
-            </p>
-          )}
-
           <form action={loginAction} className="space-y-4">
             <div>
               <label className="label">E-posta</label>
@@ -209,23 +210,15 @@ export default async function LoginPage({
 
             <SliderCaptcha />
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-xs text-slate-600">
-                <input
-                  name="remember"
-                  type="checkbox"
-                  defaultChecked
-                  className="accent-brand-600"
-                />
-                Beni hatırla
-              </label>
-              <Link
-                href="/forgot"
-                className="text-xs text-brand-700 hover:text-brand-800 hover:underline"
-              >
-                Şifremi unuttum
-              </Link>
-            </div>
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input
+                name="remember"
+                type="checkbox"
+                defaultChecked
+                className="accent-brand-600"
+              />
+              Beni hatırla
+            </label>
 
             {msg && (
               <p className="text-xs text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
