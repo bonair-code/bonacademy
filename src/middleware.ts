@@ -1,15 +1,25 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
 
 const PUBLIC_PATHS = ["/login", "/api/auth", "/api/captcha", "/403", "/logo.png", "/favicon.ico"];
 
-export default async function middleware(req: NextRequest) {
+// Edge-safe: only check for the session cookie's presence. Full session
+// validation (incl. Prisma role/dept lookup) happens in requireUser/requireRole
+// inside the Node.js runtime per page/route. Calling auth() from middleware
+// fails silently on the Edge because our auth config imports Prisma.
+const SESSION_COOKIES = [
+  "authjs.session-token",
+  "__Secure-authjs.session-token",
+  "next-auth.session-token",
+  "__Secure-next-auth.session-token",
+];
+
+export default function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"))) {
     return NextResponse.next();
   }
-  const session = await auth();
-  if (!session?.user) {
+  const hasSession = SESSION_COOKIES.some((n) => req.cookies.get(n)?.value);
+  if (!hasSession) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("from", pathname);
