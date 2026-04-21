@@ -31,43 +31,34 @@ async function loginAction(formData: FormData) {
     return redirect("/login?error=locked");
   }
 
-  try {
-    await signIn("password", { email, password, redirect: false });
-  } catch {
-    // Fall through — check DB state below
-  }
-
+  // Pre-check: verify DB state so we can show meaningful errors without
+  // relying on NextAuth's opaque error surface.
   const after = await prisma.user.findUnique({
     where: { email },
     select: { failedLoginAttempts: true, lockedAt: true },
   });
   if (after?.lockedAt) return redirect("/login?error=locked");
-  if (after && after.failedLoginAttempts > 0) {
-    const left = Math.max(0, MAX_ATTEMPTS - after.failedLoginAttempts);
+
+  // Let NextAuth handle the redirect + cookie setting atomically.
+  // It will throw a NEXT_REDIRECT on success (caught by Next.js) or
+  // CredentialsSignin on failure — in which case authorize() has already
+  // bumped failedLoginAttempts in DB.
+  try {
+    await signIn("password", { email, password, redirectTo: "/dashboard" });
+  } catch (e: any) {
+    // NEXT_REDIRECT must re-throw so the redirect actually happens.
+    if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
+    // Real auth failure — read updated DB state for attempt count.
+    const fresh = await prisma.user.findUnique({
+      where: { email },
+      select: { failedLoginAttempts: true, lockedAt: true },
+    });
+    if (fresh?.lockedAt) return redirect("/login?error=locked");
+    const left = Math.max(0, MAX_ATTEMPTS - (fresh?.failedLoginAttempts ?? 0));
     return redirect(`/login?error=bad&left=${left}`);
   }
 
-  if (!remember) {
-    const jar = await cookies();
-    const names = [
-      "authjs.session-token",
-      "__Secure-authjs.session-token",
-      "next-auth.session-token",
-      "__Secure-next-auth.session-token",
-    ];
-    for (const n of names) {
-      const c = jar.get(n);
-      if (c) {
-        jar.set(n, c.value, {
-          httpOnly: true,
-          sameSite: "lax",
-          secure: process.env.NODE_ENV === "production",
-          path: "/",
-        });
-      }
-    }
-  }
-
+  // Unreachable — signIn with redirectTo always throws NEXT_REDIRECT on success.
   redirect("/dashboard");
 }
 
