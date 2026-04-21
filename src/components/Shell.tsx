@@ -120,7 +120,7 @@ export function Shell({
         <div className="px-5 pt-5 pb-4">
           <div className="border border-slate-200 rounded-xl px-4 py-4 flex flex-col items-center shadow-card">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="Bon Air" className="h-9 w-auto mb-2" />
+            <img src="/Logo.png" alt="Bon Air" className="h-9 w-auto mb-2" />
             <p className="text-[10px] text-slate-400 tracking-[0.14em] uppercase text-center leading-tight">
               BonAcademy
               <br />
