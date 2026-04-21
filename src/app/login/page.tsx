@@ -2,6 +2,7 @@ import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { verifySliderToken } from "@/lib/captcha";
 import { SliderCaptcha } from "@/components/SliderCaptcha";
+import { PasswordField } from "@/components/PasswordField";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
@@ -189,14 +190,7 @@ export default async function LoginPage({
             </div>
             <div>
               <label className="label">Şifre</label>
-              <input
-                name="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                className="input mt-1"
-                placeholder="••••••••"
-              />
+              <PasswordField name="password" required autoComplete="current-password" />
             </div>
 
             <SliderCaptcha />
