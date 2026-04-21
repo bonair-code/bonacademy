@@ -28,7 +28,7 @@ export async function GET(
     issuedAt: cert.issuedAt,
     serialNo: cert.serialNo,
   });
-  return new NextResponse(pdf, {
+  return new NextResponse(new Uint8Array(pdf as unknown as ArrayBuffer), {
     headers: {
       "Content-Type": "application/pdf",
       "Content-Disposition": `inline; filename="sertifika-${cert.serialNo}.pdf"`,
