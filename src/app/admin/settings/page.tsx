@@ -3,6 +3,43 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { revalidatePath } from "next/cache";
 
+const OPTION_CATEGORIES: { key: string; title: string; placeholder: string; defaults: string[] }[] = [
+  {
+    key: "role",
+    title: "Roller",
+    placeholder: "Ör. Admin, Yönetici, Kullanıcı",
+    defaults: ["Admin", "Yönetici", "Kullanıcı"],
+  },
+  {
+    key: "recurrence",
+    title: "Tekrar Aralıkları",
+    placeholder: "Ör. 6 Ay, 1 Yıl",
+    defaults: ["Tekrar yok", "6 Ay", "1 Yıl", "2 Yıl"],
+  },
+  {
+    key: "scorm",
+    title: "SCORM Sürümleri",
+    placeholder: "Ör. SCORM 1.2",
+    defaults: ["SCORM 1.2", "SCORM 2004"],
+  },
+];
+
+async function ensureDefaults() {
+  for (const c of OPTION_CATEGORIES) {
+    const count = await prisma.appOption.count({ where: { category: c.key } });
+    if (count === 0) {
+      await prisma.appOption.createMany({
+        data: c.defaults.map((label, i) => ({
+          category: c.key,
+          label,
+          sortOrder: i,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
+}
+
 async function createDepartment(formData: FormData) {
   "use server";
   await requireRole("ADMIN");
@@ -57,9 +94,47 @@ async function deleteJobTitle(formData: FormData) {
   revalidatePath("/admin/settings");
 }
 
+async function createAppOption(formData: FormData) {
+  "use server";
+  await requireRole("ADMIN");
+  const category = String(formData.get("category") || "").trim();
+  const label = String(formData.get("label") || "").trim();
+  if (!category || !label) return;
+  const max = await prisma.appOption.aggregate({
+    where: { category },
+    _max: { sortOrder: true },
+  });
+  await prisma.appOption.upsert({
+    where: { category_label: { category, label } },
+    update: {},
+    create: { category, label, sortOrder: (max._max.sortOrder ?? -1) + 1 },
+  });
+  revalidatePath("/admin/settings");
+}
+
+async function renameAppOption(formData: FormData) {
+  "use server";
+  await requireRole("ADMIN");
+  const id = String(formData.get("id"));
+  const label = String(formData.get("label") || "").trim();
+  if (!label) return;
+  await prisma.appOption.update({ where: { id }, data: { label } });
+  revalidatePath("/admin/settings");
+}
+
+async function deleteAppOption(formData: FormData) {
+  "use server";
+  await requireRole("ADMIN");
+  const id = String(formData.get("id"));
+  await prisma.appOption.delete({ where: { id } });
+  revalidatePath("/admin/settings");
+}
+
 export default async function SettingsPage() {
   const user = await requireRole("ADMIN");
-  const [departments, jobTitles] = await Promise.all([
+  await ensureDefaults();
+
+  const [departments, jobTitles, options] = await Promise.all([
     prisma.department.findMany({
       include: { _count: { select: { users: true } } },
       orderBy: { name: "asc" },
@@ -68,26 +143,30 @@ export default async function SettingsPage() {
       include: { _count: { select: { users: true, plans: true } } },
       orderBy: { name: "asc" },
     }),
+    prisma.appOption.findMany({ orderBy: [{ category: "asc" }, { sortOrder: "asc" }] }),
   ]);
 
+  const grouped = new Map<string, typeof options>();
+  for (const opt of options) {
+    const arr = grouped.get(opt.category) ?? [];
+    arr.push(opt);
+    grouped.set(opt.category, arr);
+  }
+
   return (
-    <Shell user={user}>
-      <h1 className="text-xl font-semibold mb-1">Ayarlar</h1>
+    <Shell user={user} title="Ayarlar" subtitle="Açılır menü seçenekleri ve sistem ayarları">
       <p className="text-sm text-slate-500 mb-6">
-        Sistem genelinde açılır menülerde (Departman, Görev tanımı vb.) görünen seçenekleri buradan yönetin.
+        Sistem genelinde açılır menülerde (Departman, Görev tanımı, Rol, Tekrar sıklığı, SCORM sürümü)
+        görünen seçenekleri buradan yönetin.
       </p>
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Departments */}
-        <section className="bg-white border rounded-xl p-4">
+        <section className="card p-4">
           <h2 className="font-semibold mb-3">Departmanlar</h2>
           <form action={createDepartment} className="flex gap-2 mb-4">
-            <input
-              name="name"
-              placeholder="Yeni departman adı"
-              className="border rounded-lg px-3 py-2 flex-1 text-sm"
-            />
-            <button className="bg-slate-900 text-white rounded-lg px-4 text-sm">Ekle</button>
+            <input name="name" placeholder="Yeni departman adı" className="input flex-1" />
+            <button className="btn-primary">Ekle</button>
           </form>
           <div className="divide-y border rounded-lg">
             {departments.length === 0 && (
@@ -97,14 +176,8 @@ export default async function SettingsPage() {
               <div key={d.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameDepartment} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={d.id} />
-                  <input
-                    name="name"
-                    defaultValue={d.name}
-                    className="border rounded px-2 py-1 flex-1"
-                  />
-                  <button className="text-xs border rounded px-2 py-1 hover:bg-slate-50">
-                    Kaydet
-                  </button>
+                  <input name="name" defaultValue={d.name} className="input" />
+                  <button className="btn-secondary text-xs">Kaydet</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
                   {d._count.users} kullanıcı
@@ -119,15 +192,11 @@ export default async function SettingsPage() {
         </section>
 
         {/* Job Titles */}
-        <section className="bg-white border rounded-xl p-4">
+        <section className="card p-4">
           <h2 className="font-semibold mb-3">Görev Tanımları</h2>
           <form action={createJobTitle} className="flex gap-2 mb-4">
-            <input
-              name="name"
-              placeholder="Ör. Pilot, Kabin Memuru"
-              className="border rounded-lg px-3 py-2 flex-1 text-sm"
-            />
-            <button className="bg-slate-900 text-white rounded-lg px-4 text-sm">Ekle</button>
+            <input name="name" placeholder="Ör. Pilot, Kabin Memuru" className="input flex-1" />
+            <button className="btn-primary">Ekle</button>
           </form>
           <div className="divide-y border rounded-lg">
             {jobTitles.length === 0 && (
@@ -137,14 +206,8 @@ export default async function SettingsPage() {
               <div key={j.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameJobTitle} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={j.id} />
-                  <input
-                    name="name"
-                    defaultValue={j.name}
-                    className="border rounded px-2 py-1 flex-1"
-                  />
-                  <button className="text-xs border rounded px-2 py-1 hover:bg-slate-50">
-                    Kaydet
-                  </button>
+                  <input name="name" defaultValue={j.name} className="input" />
+                  <button className="btn-secondary text-xs">Kaydet</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
                   {j._count.users}k · {j._count.plans}p
@@ -159,38 +222,46 @@ export default async function SettingsPage() {
         </section>
       </div>
 
-      <section className="bg-white border rounded-xl p-4 mt-6">
-        <h2 className="font-semibold mb-2">Sabit Seçenekler (bilgi)</h2>
-        <p className="text-xs text-slate-500 mb-3">
-          Aşağıdaki listeler kod tarafında tanımlıdır; eklemek/çıkarmak için yazılım güncellemesi gerekir.
-        </p>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <div className="font-medium mb-1">Roller</div>
-            <ul className="list-disc pl-5 text-slate-600">
-              <li>Admin</li>
-              <li>Yönetici (Manager)</li>
-              <li>Kullanıcı</li>
-            </ul>
-          </div>
-          <div>
-            <div className="font-medium mb-1">Tekrar Aralıkları</div>
-            <ul className="list-disc pl-5 text-slate-600">
-              <li>Tekrar yok</li>
-              <li>6 Ay</li>
-              <li>1 Yıl</li>
-              <li>2 Yıl</li>
-            </ul>
-          </div>
-          <div>
-            <div className="font-medium mb-1">SCORM Sürümleri</div>
-            <ul className="list-disc pl-5 text-slate-600">
-              <li>SCORM 1.2</li>
-              <li>SCORM 2004</li>
-            </ul>
-          </div>
-        </div>
-      </section>
+      {/* Editable App Options (previously hardcoded) */}
+      <div className="grid md:grid-cols-3 gap-6 mt-6">
+        {OPTION_CATEGORIES.map((c) => {
+          const items = grouped.get(c.key) ?? [];
+          return (
+            <section key={c.key} className="card p-4">
+              <h2 className="font-semibold mb-3">{c.title}</h2>
+              <form action={createAppOption} className="flex gap-2 mb-4">
+                <input type="hidden" name="category" value={c.key} />
+                <input name="label" placeholder={c.placeholder} className="input flex-1" />
+                <button className="btn-primary">Ekle</button>
+              </form>
+              <div className="divide-y border rounded-lg">
+                {items.length === 0 && (
+                  <p className="p-4 text-slate-500 text-sm">Seçenek yok.</p>
+                )}
+                {items.map((opt) => (
+                  <div key={opt.id} className="p-3 flex items-center gap-2 text-sm">
+                    <form action={renameAppOption} className="flex gap-2 flex-1">
+                      <input type="hidden" name="id" value={opt.id} />
+                      <input name="label" defaultValue={opt.label} className="input" />
+                      <button className="btn-secondary text-xs">Kaydet</button>
+                    </form>
+                    <form action={deleteAppOption}>
+                      <input type="hidden" name="id" value={opt.id} />
+                      <button className="text-xs text-red-600 hover:underline">Sil</button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <p className="text-[11px] text-slate-400 mt-4">
+        Not: Roller, Tekrar Aralıkları ve SCORM Sürümleri için sistem motoru sabit mantık kullanır;
+        buradaki etiketler açılır menülerde görünecek ad/sıra düzenlemesi içindir. Yeni bir rol veya
+        tekrar aralığı türü eklenmek istenirse yazılım güncellemesi gerekir.
+      </p>
     </Shell>
   );
 }

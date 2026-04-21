@@ -253,6 +253,17 @@ model Certificate {
   serialNo     String     @unique
 }
 
+model AppOption {
+  id        String   @id @default(cuid())
+  category  String
+  label     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([category, label])
+  @@index([category])
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actorId   String
