@@ -43,7 +43,7 @@ export async function GET() {
   }
 
   const buf = await wb.xlsx.writeBuffer();
-  return new NextResponse(buf as Buffer, {
+  return new NextResponse(new Uint8Array(buf as ArrayBuffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="atamalar-${Date.now()}.xlsx"`,
