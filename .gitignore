@@ -12,3 +12,4 @@ test-results
 
 .vercel
 .claude/worktrees/
+.env*.local
