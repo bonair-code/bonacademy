@@ -61,8 +61,10 @@ export function BulkQuestionImport({ courseId }: { courseId: string }) {
         </pre>
       )}
       <p className="text-xs text-slate-500">
-        Şablonu indir, Excel'de doldur ve aynı dosyayı buradan yükle. Format:
-        Soru · Puan · Şık1–4 · Doğru1–4 (1/X = doğru).
+        Şablonu indir, Excel&apos;de doldur ve aynı dosyayı buradan yükle. Format:
+        Soru · Puan · Şık1–4 · Doğru1–4. Her soru için <strong>sadece bir
+        şıkkın</strong> Doğru sütununa <code>1</code> veya <code>X</code> yazın;
+        diğerlerini boş bırakın.
       </p>
     </div>
   );

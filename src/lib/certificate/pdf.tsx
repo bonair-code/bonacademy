@@ -1,14 +1,28 @@
 import React from "react";
+import fs from "node:fs";
+import path from "node:path";
 import {
   Document,
   Page,
   Text,
   View,
   StyleSheet,
-  Svg,
-  Polygon,
+  Image,
   renderToBuffer,
 } from "@react-pdf/renderer";
+
+// Logoyu bir kere okuyup bellekte tut; her sertifikada diskten okumaya gerek yok.
+let cachedLogo: Buffer | null = null;
+function loadLogo(): Buffer | null {
+  if (cachedLogo) return cachedLogo;
+  try {
+    const p = path.join(process.cwd(), "public", "Logo.png");
+    cachedLogo = fs.readFileSync(p);
+    return cachedLogo;
+  } catch {
+    return null;
+  }
+}
 
 const styles = StyleSheet.create({
   page: { padding: 40, fontSize: 12, fontFamily: "Helvetica", backgroundColor: "#ffffff" },
@@ -62,13 +76,15 @@ const styles = StyleSheet.create({
 });
 
 function Logo() {
+  const data = loadLogo();
   return (
     <View style={styles.logoRow}>
-      <Text style={styles.logoText}>BON</Text>
-      <Svg width="46" height="42" viewBox="0 0 100 120" style={{ marginHorizontal: 4 }}>
-        <Polygon points="45,0 65,60 35,120 75,60" fill="#e30613" />
-      </Svg>
-      <Text style={styles.logoText}>AIR</Text>
+      {data ? (
+        // @react-pdf/renderer Image src Buffer'ı destekler.
+        <Image src={data} style={{ height: 60, width: "auto" }} />
+      ) : (
+        <Text style={styles.logoText}>BON AIR</Text>
+      )}
     </View>
   );
 }

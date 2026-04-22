@@ -181,13 +181,19 @@ export default async function Dashboard() {
           {upcoming.map((a) => {
             const s = statusLabel[a.status] || { text: a.status, cls: "badge-slate" };
             const overdue = new Date(a.dueDate) < new Date();
+            // SCORM tamamlanmış (veya tek bir sınav başarısızlığı sonrası
+            // tekrar deneyebiliyor) → "Sınava Başla". Aksi halde eğitim sayfasına.
+            const examReady =
+              a.status === "SCORM_COMPLETED" || a.status === "EXAM_FAILED";
             return (
-              <Link
+              <div
                 key={a.id}
-                href={`/course/${a.id}`}
                 className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/70 transition"
               >
-                <div className="flex items-center gap-4 min-w-0">
+                <Link
+                  href={`/course/${a.id}`}
+                  className="flex items-center gap-4 min-w-0 flex-1"
+                >
                   <div className="tile-icon tile-teal !mb-0 !h-10 !w-10">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                       <path d={I.clipboard} />
@@ -204,9 +210,23 @@ export default async function Dashboard() {
                       </span>
                     </div>
                   </div>
+                </Link>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className={s.cls}>{s.text}</span>
+                  {examReady ? (
+                    <Link href={`/exam/${a.id}`} className="btn-primary text-xs py-1.5">
+                      Sınava Başla →
+                    </Link>
+                  ) : (
+                    <Link
+                      href={`/course/${a.id}`}
+                      className="btn-secondary text-xs py-1.5"
+                    >
+                      Eğitime Git →
+                    </Link>
+                  )}
                 </div>
-                <span className={s.cls}>{s.text}</span>
-              </Link>
+              </div>
             );
           })}
         </div>

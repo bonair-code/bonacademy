@@ -31,19 +31,21 @@ async function addQuestion(formData: FormData) {
   await requireRole("ADMIN");
   const courseId = String(formData.get("courseId"));
   const text = String(formData.get("text") || "").trim();
+  // Tek doğru cevap seçimi: radio "correct" değeri hangi indeks doğruysa onu verir.
+  const correctIdx = Number(formData.get("correct"));
   const opts = [0, 1, 2, 3]
     .map((i) => ({
       text: String(formData.get(`opt_${i}`) || "").trim(),
-      isCorrect: formData.get(`correct_${i}`) === "on",
+      isCorrect: i === correctIdx,
     }))
     .filter((o) => o.text);
   if (!text || opts.length < 2) return;
+  if (!opts.some((o) => o.isCorrect)) return; // doğru şık seçilmeli
   const bank = await prisma.questionBank.upsert({
     where: { courseId },
     update: {},
     create: { courseId },
   });
-  if (!opts.some((o) => o.isCorrect)) return; // en az bir doğru şık olmalı
   await prisma.question.create({
     data: { bankId: bank.id, text, options: { create: opts } },
   });
@@ -279,8 +281,8 @@ export default async function CourseDetail({
             rows={2}
           />
           <p className="text-xs text-slate-600">
-            Doğru cevabı/cevapları sol taraftaki <strong>&quot;Doğru&quot;</strong> kutucuğunu
-            işaretleyerek belirleyin. En az bir şık doğru olarak işaretlenmelidir.
+            Her sorunun <strong>tek bir doğru cevabı</strong> olmalıdır. Doğru şıkkın
+            solundaki yeşil yuvarlağı işaretleyin.
           </p>
           {[0, 1, 2, 3].map((i) => (
             <label
@@ -289,8 +291,9 @@ export default async function CourseDetail({
             >
               <span className="flex items-center gap-1.5 shrink-0 text-xs font-medium text-emerald-700">
                 <input
-                  name={`correct_${i}`}
-                  type="checkbox"
+                  name="correct"
+                  value={i}
+                  type="radio"
                   className="h-4 w-4 accent-emerald-600"
                 />
                 Doğru

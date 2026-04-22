@@ -50,8 +50,11 @@ export function ScormPlayer({
       (api as any).on("LMSCommit", persist);
       (api as any).on("CommitSuccess", persist);
       (api as any).on("LMSFinish", async () => {
+        // Just mark completion server-side and refresh the page so the
+        // learner sees the "Sınava Geç" button. Do NOT auto-jump to the
+        // exam — the user has to click it explicitly.
         await fetch(`/api/scorm/${assignmentId}/complete`, { method: "POST" });
-        window.location.href = `/exam/${assignmentId}`;
+        window.location.reload();
       });
     })();
 

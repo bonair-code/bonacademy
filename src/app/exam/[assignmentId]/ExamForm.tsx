@@ -13,35 +13,41 @@ export function ExamForm({
   questions: Q[];
 }) {
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  // Tek doğru cevap seçimi → soru başına sadece bir option id.
+  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit() {
+    // Tüm sorular cevaplanmadıysa uyar.
+    const unanswered = questions.filter((q) => !answers[q.id]);
+    if (unanswered.length > 0) {
+      setError(`Lütfen tüm soruları cevaplayın (${unanswered.length} soru boş).`);
+      return;
+    }
+    setError(null);
     setBusy(true);
+    // Engine çoklu-seçim bekliyor → tek cevabı diziye sarıyoruz.
+    const payload: Record<string, string[]> = {};
+    for (const q of questions) payload[q.id] = [answers[q.id]];
     const res = await fetch(`/api/exam/${assignmentId}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers: payload }),
     });
     const data = await res.json();
     setBusy(false);
     if (data.passed) {
-      alert(`Tebrikler! Puan: ${data.score.toFixed(0)}`);
-      router.push("/dashboard");
+      router.push(`/exam/${assignmentId}/result?attempt=${data.attemptNo}`);
     } else if (data.status === "RETAKE_REQUIRED") {
-      alert("İki deneme de başarısız oldu. Eğitimi tekrar etmeniz gerekiyor.");
-      router.push(`/course/${assignmentId}`);
+      router.push(`/exam/${assignmentId}/result?attempt=${data.attemptNo}&retake=1`);
     } else {
-      alert(`Başarısız. Puan: ${data.score.toFixed(0)}. Bir deneme hakkınız kaldı.`);
-      router.push("/dashboard");
+      router.push(`/exam/${assignmentId}/result?attempt=${data.attemptNo}`);
     }
   }
 
-  function toggle(qid: string, oid: string) {
-    setAnswers((prev) => {
-      const cur = prev[qid] ?? [];
-      return { ...prev, [qid]: cur.includes(oid) ? cur.filter((x) => x !== oid) : [...cur, oid] };
-    });
+  function pick(qid: string, oid: string) {
+    setAnswers((prev) => ({ ...prev, [qid]: oid }));
   }
 
   return (
@@ -53,11 +59,16 @@ export function ExamForm({
           </div>
           <div className="space-y-1">
             {q.options.map((o) => (
-              <label key={o.id} className="flex items-center gap-2 text-sm">
+              <label
+                key={o.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+              >
                 <input
-                  type="checkbox"
-                  checked={(answers[q.id] ?? []).includes(o.id)}
-                  onChange={() => toggle(q.id, o.id)}
+                  type="radio"
+                  name={`q_${q.id}`}
+                  checked={answers[q.id] === o.id}
+                  onChange={() => pick(q.id, o.id)}
+                  className="h-4 w-4 accent-teal-600"
                 />
                 {o.text}
               </label>
@@ -65,6 +76,11 @@ export function ExamForm({
           </div>
         </div>
       ))}
+      {error && (
+        <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+          {error}
+        </div>
+      )}
       <button
         onClick={submit}
         disabled={busy}
