@@ -7,11 +7,14 @@ import { getFile } from "@/lib/scorm/storage";
 
 export default async function CoursePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ assignmentId: string }>;
+  searchParams?: Promise<{ needsCompletion?: string }>;
 }) {
   const user = await requireUser();
   const { assignmentId } = await params;
+  const sp = (await searchParams) || {};
   const a = await prisma.assignment.findUnique({
     where: { id: assignmentId },
     include: {
@@ -68,6 +71,11 @@ export default async function CoursePage({
   const showOutdatedNotice =
     stampedRev != null && stampedRev < liveRev && a.status !== "COMPLETED";
 
+  const scormDone =
+    a.status === "SCORM_COMPLETED" ||
+    a.status === "EXAM_FAILED" ||
+    a.status === "RETAKE_REQUIRED";
+
   return (
     <Shell user={user}>
       <div className="flex items-center justify-between gap-3 mb-3">
@@ -85,12 +93,27 @@ export default async function CoursePage({
           döngüde yeni sürüm otomatik atanacak.
         </div>
       )}
+      {sp.needsCompletion === "1" && !scormDone && (
+        <div className="card p-3 mb-3 text-sm text-amber-900 bg-amber-50 border-amber-200">
+          Sınava geçebilmek için önce eğitim içeriğini sonuna kadar tamamlamanız gerekir.
+        </div>
+      )}
       <ScormPlayer
         assignmentId={a.id}
         contentUrl={contentUrl}
         version={course.scormVersion}
         initialCmi={initialCmi}
       />
+      {/* Manual bridge: when the SCORM package has been marked completed but
+          never auto-navigated (some packages don't follow through on LMSFinish),
+          give the learner an explicit path into the exam. */}
+      {scormDone && (
+        <div className="mt-4 flex items-center justify-end">
+          <a href={`/exam/${a.id}`} className="btn-primary">
+            Sınava Geç →
+          </a>
+        </div>
+      )}
     </Shell>
   );
 }

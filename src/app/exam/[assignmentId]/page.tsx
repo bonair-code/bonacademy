@@ -31,6 +31,11 @@ export default async function ExamPage({
   if (!a || a.userId !== user.id) notFound();
   if (a.status === "RETAKE_REQUIRED") redirect(`/course/${a.id}`);
   if (a.status === "EXAM_PASSED" || a.status === "COMPLETED") redirect("/dashboard");
+  // Gate: user must actually finish the SCORM content before taking the exam.
+  // PENDING / IN_PROGRESS here means the SCORM player never reported completion.
+  if (a.status === "PENDING" || a.status === "IN_PROGRESS") {
+    redirect(`/course/${a.id}?needsCompletion=1`);
+  }
 
   const bank = a.plan.course.questionBank;
   const exam = a.plan.course.exam;
