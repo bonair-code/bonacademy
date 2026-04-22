@@ -2,12 +2,25 @@ import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import type { Role } from "@prisma/client";
 
+type IconTone = "teal" | "violet" | "amber" | "red" | "green" | "sky" | "slate";
+
 type NavItem = {
   href: string;
   label: string;
   icon: keyof typeof ICONS;
+  iconTone: IconTone;
   count?: number;
   tone?: "teal" | "muted";
+};
+
+const ICON_TONE_CLASSES: Record<IconTone, string> = {
+  teal: "bg-teal-100 text-teal-600",
+  violet: "bg-violet-100 text-violet-600",
+  amber: "bg-amber-100 text-amber-600",
+  red: "bg-red-100 text-red-600",
+  green: "bg-emerald-100 text-emerald-600",
+  sky: "bg-sky-100 text-sky-600",
+  slate: "bg-slate-100 text-slate-600",
 };
 
 const ICONS = {
@@ -63,24 +76,24 @@ export function Shell({
   subtitle?: string;
 }) {
   const main: NavItem[] = [
-    { href: "/dashboard", label: "Gösterge Paneli", icon: "dashboard" },
+    { href: "/dashboard", label: "Gösterge Paneli", icon: "dashboard", iconTone: "teal" },
   ];
   if (user.role === "MANAGER" || user.role === "ADMIN") {
-    main.push({ href: "/manager/team", label: "Ekibim", icon: "users" });
+    main.push({ href: "/manager/team", label: "Ekibim", icon: "users", iconTone: "green" });
   }
   if (user.role === "ADMIN") {
     main.push(
-      { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar" },
-      { href: "/admin/courses", label: "Kurslar", icon: "book" }
+      { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar", iconTone: "violet" },
+      { href: "/admin/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
     );
   }
 
   const org: NavItem[] = [];
   if (user.role === "ADMIN") {
     org.push(
-      { href: "/admin/users", label: "Kullanıcılar", icon: "users" },
-      { href: "/admin/reports", label: "Raporlar", icon: "report" },
-      { href: "/admin/settings", label: "Ayarlar", icon: "cog" }
+      { href: "/admin/users", label: "Kullanıcılar", icon: "users", iconTone: "sky" },
+      { href: "/admin/reports", label: "Raporlar", icon: "report", iconTone: "red" },
+      { href: "/admin/settings", label: "Ayarlar", icon: "cog", iconTone: "slate" }
     );
   }
 
@@ -101,8 +114,10 @@ export function Shell({
 
   const renderItem = (it: NavItem) => (
     <Link key={it.href} href={it.href} className="nav-item group">
-      <span className="text-slate-400 group-hover:text-teal-600 transition">
-        <Icon d={ICONS[it.icon]} />
+      <span
+        className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${ICON_TONE_CLASSES[it.iconTone]}`}
+      >
+        <Icon d={ICONS[it.icon]} className="h-[18px] w-[18px]" />
       </span>
       <span className="font-medium">{it.label}</span>
       {typeof it.count === "number" && (
