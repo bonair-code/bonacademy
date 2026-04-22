@@ -59,6 +59,26 @@ export default async function ExamPage({
       <p className="text-sm text-slate-500 mb-4">
         Geçme notu: %{exam.passingScore}. Deneme: {a.examAttempts.length + 1}/2
       </p>
+      {a.examAttempts.length > 0 && (
+        <div className="card p-3 mb-4 text-sm">
+          <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+            Önceki denemeler
+          </div>
+          <ul className="space-y-1">
+            {a.examAttempts
+              .slice()
+              .sort((a, b) => b.attemptNo - a.attemptNo)
+              .map((e) => (
+                <li key={e.id} className="flex items-center gap-2">
+                  <span className="badge-teal text-[10px]">#{e.attemptNo}</span>
+                  <span className={e.passed ? "text-emerald-700" : "text-red-700"}>
+                    %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
       <ExamForm assignmentId={a.id} questions={picked} />
     </Shell>
   );

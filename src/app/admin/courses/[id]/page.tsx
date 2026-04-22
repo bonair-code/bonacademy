@@ -43,9 +43,19 @@ async function addQuestion(formData: FormData) {
     update: {},
     create: { courseId },
   });
+  if (!opts.some((o) => o.isCorrect)) return; // en az bir doğru şık olmalı
   await prisma.question.create({
     data: { bankId: bank.id, text, options: { create: opts } },
   });
+  revalidatePath(`/admin/courses/${courseId}`);
+}
+
+async function deleteQuestion(formData: FormData) {
+  "use server";
+  await requireRole("ADMIN");
+  const id = String(formData.get("id"));
+  const courseId = String(formData.get("courseId"));
+  await prisma.question.delete({ where: { id } });
   revalidatePath(`/admin/courses/${courseId}`);
 }
 
@@ -260,7 +270,7 @@ export default async function CourseDetail({
         <div className="mb-4">
           <BulkQuestionImport courseId={course.id} />
         </div>
-        <form action={addQuestion} className="space-y-2 mb-4">
+        <form action={addQuestion} className="space-y-3 mb-6 border border-slate-200 rounded-lg p-3 bg-slate-50">
           <input type="hidden" name="courseId" value={course.id} />
           <textarea
             name="text"
@@ -268,23 +278,75 @@ export default async function CourseDetail({
             className="input w-full"
             rows={2}
           />
+          <p className="text-xs text-slate-600">
+            Doğru cevabı/cevapları sol taraftaki <strong>&quot;Doğru&quot;</strong> kutucuğunu
+            işaretleyerek belirleyin. En az bir şık doğru olarak işaretlenmelidir.
+          </p>
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="flex items-center gap-2 text-sm">
-              <input name={`correct_${i}`} type="checkbox" title="Doğru şık" />
+            <label
+              key={i}
+              className="flex items-center gap-3 text-sm bg-white border border-slate-200 rounded-md px-3 py-2"
+            >
+              <span className="flex items-center gap-1.5 shrink-0 text-xs font-medium text-emerald-700">
+                <input
+                  name={`correct_${i}`}
+                  type="checkbox"
+                  className="h-4 w-4 accent-emerald-600"
+                />
+                Doğru
+              </span>
               <input
                 name={`opt_${i}`}
                 placeholder={`Şık ${i + 1}`}
                 className="input flex-1"
               />
-            </div>
+            </label>
           ))}
           <button className="btn-primary">Soru Ekle</button>
         </form>
-        <ul className="text-sm list-disc pl-5 space-y-1">
-          {course.questionBank?.questions.map((q) => (
-            <li key={q.id}>{q.text}</li>
+        <div className="space-y-2">
+          {course.questionBank?.questions.length === 0 && (
+            <p className="text-sm text-slate-500">Henüz soru eklenmemiş.</p>
+          )}
+          {course.questionBank?.questions.map((q, qi) => (
+            <div key={q.id} className="border border-slate-200 rounded-md p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-sm font-medium text-slate-900">
+                  {qi + 1}. {q.text}
+                </div>
+                <form action={deleteQuestion}>
+                  <input type="hidden" name="id" value={q.id} />
+                  <input type="hidden" name="courseId" value={course.id} />
+                  <button className="text-xs text-red-600 hover:underline">Sil</button>
+                </form>
+              </div>
+              <ul className="mt-2 space-y-1 text-sm">
+                {q.options.map((o) => (
+                  <li
+                    key={o.id}
+                    className={`flex items-center gap-2 ${
+                      o.isCorrect ? "text-emerald-700 font-medium" : "text-slate-600"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 rounded-full border ${
+                        o.isCorrect
+                          ? "bg-emerald-500 border-emerald-500"
+                          : "border-slate-300"
+                      }`}
+                    />
+                    {o.text}
+                    {o.isCorrect && (
+                      <span className="text-[10px] uppercase tracking-wide text-emerald-700">
+                        doğru
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
           ))}
-        </ul>
+        </div>
       </section>
     </Shell>
   );

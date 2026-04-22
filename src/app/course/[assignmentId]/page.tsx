@@ -19,7 +19,8 @@ export default async function CoursePage({
     where: { id: assignmentId },
     include: {
       plan: { include: { course: true } },
-      attempts: { where: { type: "SCORM" }, orderBy: { startedAt: "desc" }, take: 1 },
+      attempts: { orderBy: { startedAt: "desc" } },
+      examAttempts: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!a || a.userId !== user.id) notFound();
@@ -56,13 +57,27 @@ export default async function CoursePage({
   }
 
   const contentUrl = `/api/scorm-content/${course.scormPackagePath}/${course.scormEntryPoint}`;
-  const latest = a.attempts[0];
-  const initialCmi = (latest?.cmiData as Record<string, unknown> | null) ?? undefined;
+  const scormAttempts = a.attempts.filter((x) => x.type === "SCORM");
+  const latest = scormAttempts[0];
+  const retakeRequired = a.status === "RETAKE_REQUIRED";
+  // On a forced retake we deliberately do NOT restore prior CMI — the learner
+  // has to actually re-watch the content, not jump to the end of a cached run.
+  const initialCmi = retakeRequired
+    ? undefined
+    : ((latest?.cmiData as Record<string, unknown> | null) ?? undefined);
+  const examAttempts = a.examAttempts; // already desc
 
   if (a.status === "PENDING") {
     await prisma.assignment.update({
       where: { id: a.id },
       data: { status: "IN_PROGRESS", startedAt: new Date() },
+    });
+  } else if (a.status === "RETAKE_REQUIRED") {
+    // Learner coming back after a forced retake: flip to IN_PROGRESS so the
+    // progress route's completion auto-promotion can fire again.
+    await prisma.assignment.update({
+      where: { id: a.id },
+      data: { status: "IN_PROGRESS" },
     });
   }
 
@@ -71,10 +86,10 @@ export default async function CoursePage({
   const showOutdatedNotice =
     stampedRev != null && stampedRev < liveRev && a.status !== "COMPLETED";
 
+  // RETAKE_REQUIRED explicitly forces the learner to redo the SCORM — we do
+  // NOT treat that as "done" and we do NOT surface the jump-to-exam shortcut.
   const scormDone =
-    a.status === "SCORM_COMPLETED" ||
-    a.status === "EXAM_FAILED" ||
-    a.status === "RETAKE_REQUIRED";
+    a.status === "SCORM_COMPLETED" || a.status === "EXAM_FAILED";
 
   return (
     <Shell user={user}>
@@ -96,6 +111,59 @@ export default async function CoursePage({
       {sp.needsCompletion === "1" && !scormDone && (
         <div className="card p-3 mb-3 text-sm text-amber-900 bg-amber-50 border-amber-200">
           Sınava geçebilmek için önce eğitim içeriğini sonuna kadar tamamlamanız gerekir.
+        </div>
+      )}
+      {retakeRequired && (
+        <div className="card p-3 mb-3 text-sm text-red-800 bg-red-50 border-red-200">
+          Sınavda iki kez başarısız oldunuz. Eğitim içeriğini baştan tamamlamanız
+          ve ardından sınava yeniden girmeniz gerekiyor.
+        </div>
+      )}
+      {(scormAttempts.length > 0 || examAttempts.length > 0) && (
+        <div className="card p-4 mb-3">
+          <h2 className="font-semibold text-slate-900 mb-2 text-sm">Geçmiş denemeler</h2>
+          {scormAttempts.length > 0 && (
+            <div className="mb-3">
+              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Eğitim içeriği ({scormAttempts.length})
+              </div>
+              <ul className="text-sm space-y-1">
+                {scormAttempts.map((at, i) => (
+                  <li key={at.id} className="flex items-center gap-2 text-slate-700">
+                    <span className="badge-teal text-[10px]">#{scormAttempts.length - i}</span>
+                    <span>
+                      {at.startedAt.toLocaleString("tr-TR")}
+                      {at.finishedAt ? ` → ${at.finishedAt.toLocaleString("tr-TR")}` : " · devam ediyor"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {examAttempts.length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
+                Sınav denemeleri ({examAttempts.length})
+              </div>
+              <ul className="text-sm space-y-1">
+                {examAttempts.map((e) => (
+                  <li key={e.id} className="flex items-center gap-2">
+                    <span className="badge-teal text-[10px]">#{e.attemptNo}</span>
+                    <span
+                      className={
+                        e.passed ? "text-emerald-700 font-medium" : "text-red-700"
+                      }
+                    >
+                      %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                    </span>
+                    <span className="text-xs text-slate-500">
+                      {e.createdAt.toLocaleString("tr-TR")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
       <ScormPlayer
