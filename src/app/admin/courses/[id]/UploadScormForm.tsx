@@ -11,11 +11,13 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
     e.preventDefault();
     const form = e.currentTarget;
     const file = (form.elements.namedItem("file") as HTMLInputElement).files?.[0];
+    const changeNote = (form.elements.namedItem("changeNote") as HTMLInputElement).value;
     if (!file) return;
     setBusy(true);
     setError(null);
     const fd = new FormData();
     fd.append("file", file);
+    if (changeNote) fd.append("changeNote", changeNote);
     const res = await fetch(`/api/admin/courses/${courseId}/upload`, {
       method: "POST",
       body: fd,
@@ -29,15 +31,26 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
   }
 
   return (
-    <form onSubmit={upload} className="flex gap-2 items-center">
-      <input name="file" type="file" accept=".zip" required />
-      <button
-        disabled={busy}
-        className="bg-slate-900 text-white rounded-lg px-4 py-2 disabled:opacity-50"
-      >
-        {busy ? "Yükleniyor…" : "SCORM Yükle"}
-      </button>
-      {error && <span className="text-sm text-red-600">{error}</span>}
+    <form onSubmit={upload} className="space-y-2">
+      <div className="flex gap-2 items-center">
+        <input name="file" type="file" accept=".zip" required />
+        <button
+          disabled={busy}
+          className="btn-primary disabled:opacity-50"
+        >
+          {busy ? "Yükleniyor…" : "SCORM Yükle"}
+        </button>
+        {error && <span className="text-sm text-red-600">{error}</span>}
+      </div>
+      <input
+        name="changeNote"
+        type="text"
+        placeholder="Revizyon notu (örn. 'FAA kural güncellemesi 2026-Q1') — isteğe bağlı"
+        className="input w-full text-sm"
+      />
+      <p className="text-[11px] text-slate-500">
+        Her yeni SCORM yüklemesi otomatik olarak yeni bir revizyon oluşturur.
+      </p>
     </form>
   );
 }

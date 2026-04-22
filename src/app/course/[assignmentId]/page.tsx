@@ -63,9 +63,28 @@ export default async function CoursePage({
     });
   }
 
+  const stampedRev = a.revisionNumber;
+  const liveRev = course.currentRevision;
+  const showOutdatedNotice =
+    stampedRev != null && stampedRev < liveRev && a.status !== "COMPLETED";
+
   return (
     <Shell user={user}>
-      <h1 className="text-lg font-semibold mb-3">{course.title}</h1>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h1 className="text-lg font-semibold">{course.title}</h1>
+        <div className="flex items-center gap-2 text-xs">
+          {stampedRev != null && (
+            <span className="badge-teal">Atama: v{stampedRev}</span>
+          )}
+          <span className="text-slate-500">Mevcut sürüm: v{liveRev}</span>
+        </div>
+      </div>
+      {showOutdatedNotice && (
+        <div className="card p-3 mb-3 text-sm text-amber-800 bg-amber-50 border-amber-200">
+          Bu kursun daha güncel bir sürümü (v{liveRev}) yayınlandı. Bir sonraki
+          döngüde yeni sürüm otomatik atanacak.
+        </div>
+      )}
       <ScormPlayer
         assignmentId={a.id}
         contentUrl={contentUrl}

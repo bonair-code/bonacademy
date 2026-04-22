@@ -84,6 +84,7 @@ model User {
   auditLogs     AuditLog[]
   jobTitles     UserJobTitle[]
   passwordTokens PasswordToken[]
+  revisionsCreated CourseRevision[]
 
   @@index([departmentId])
   @@index([role])
@@ -135,12 +136,36 @@ model Course {
   passingScore      Int           @default(70)
   durationMinutes   Int?
   isActive          Boolean       @default(true)
+  currentRevision   Int           @default(1)
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
   questionBank      QuestionBank?
   exam              Exam?
   plans             TrainingPlan[]
+  revisions         CourseRevision[]
+}
+
+model CourseRevision {
+  id               String       @id @default(cuid())
+  courseId         String
+  course           Course       @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  revisionNumber   Int
+  // Snapshot of the course state at the time the revision was created.
+  title            String
+  description      String?
+  scormPackagePath String?
+  scormEntryPoint  String?
+  scormVersion     ScormVersion
+  passingScore     Int
+  // Admin-provided note describing what changed in this revision.
+  changeNote       String?
+  createdById      String
+  createdBy        User         @relation(fields: [createdById], references: [id])
+  createdAt        DateTime     @default(now())
+
+  @@unique([courseId, revisionNumber])
+  @@index([courseId])
 }
 
 model QuestionBank {
@@ -196,17 +221,20 @@ model TrainingPlan {
 }
 
 model Assignment {
-  id           String           @id @default(cuid())
-  planId       String
-  plan         TrainingPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
-  userId       String
-  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cycleNumber  Int              @default(1)
-  status       AssignmentStatus @default(PENDING)
-  dueDate      DateTime
-  startedAt    DateTime?
-  completedAt  DateTime?
-  createdAt    DateTime         @default(now())
+  id             String           @id @default(cuid())
+  planId         String
+  plan           TrainingPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cycleNumber    Int              @default(1)
+  status         AssignmentStatus @default(PENDING)
+  dueDate        DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  // Revision of the course this assignment was issued against. Lets us show
+  // users which version they completed and detect when a newer revision exists.
+  revisionNumber Int?
+  createdAt      DateTime         @default(now())
 
   attempts     Attempt[]
   examAttempts ExamAttempt[]

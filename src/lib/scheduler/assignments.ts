@@ -25,14 +25,25 @@ export async function resolvePlanTargets(planId: string, explicitUserIds: string
 /** Create cycle-1 assignment for each targeted user if missing. */
 export async function materializeAssignmentsForPlan(planId: string, userIds: string[]) {
   if (!userIds.length) return { created: 0 };
-  const plan = await prisma.trainingPlan.findUniqueOrThrow({ where: { id: planId } });
+  const plan = await prisma.trainingPlan.findUniqueOrThrow({
+    where: { id: planId },
+    include: { course: { select: { currentRevision: true } } },
+  });
   const due = addDays(plan.startDate, plan.dueInDays);
+  const rev = plan.course.currentRevision;
   let created = 0;
   for (const uid of userIds) {
     const res = await prisma.assignment.upsert({
       where: { planId_userId_cycleNumber: { planId, userId: uid, cycleNumber: 1 } },
       update: {},
-      create: { planId, userId: uid, cycleNumber: 1, dueDate: due, status: "PENDING" },
+      create: {
+        planId,
+        userId: uid,
+        cycleNumber: 1,
+        dueDate: due,
+        status: "PENDING",
+        revisionNumber: rev,
+      },
     });
     if (res.createdAt.getTime() === res.createdAt.getTime()) created++;
   }
@@ -52,6 +63,7 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
   const jobTitleIds = links.map((l) => l.jobTitleId);
   const plans = await prisma.trainingPlan.findMany({
     where: { isActive: true, jobTitles: { some: { jobTitleId: { in: jobTitleIds } } } },
+    include: { course: { select: { currentRevision: true } } },
   });
   let enrolled = 0;
   for (const p of plans) {
@@ -59,7 +71,14 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
     const res = await prisma.assignment.upsert({
       where: { planId_userId_cycleNumber: { planId: p.id, userId, cycleNumber: 1 } },
       update: {},
-      create: { planId: p.id, userId, cycleNumber: 1, dueDate: due, status: "PENDING" },
+      create: {
+        planId: p.id,
+        userId,
+        cycleNumber: 1,
+        dueDate: due,
+        status: "PENDING",
+        revisionNumber: p.course.currentRevision,
+      },
     });
     if (res) enrolled++;
   }
@@ -70,7 +89,7 @@ export async function rollForwardRecurringAssignments(now = new Date()) {
   const horizon = addDays(now, 30);
   const completed = await prisma.assignment.findMany({
     where: { status: "COMPLETED", completedAt: { not: null } },
-    include: { plan: true },
+    include: { plan: { include: { course: { select: { currentRevision: true } } } } },
   });
   let created = 0;
   for (const a of completed) {
@@ -93,6 +112,9 @@ export async function rollForwardRecurringAssignments(now = new Date()) {
         cycleNumber: a.cycleNumber + 1,
         dueDate: next,
         status: "PENDING",
+        // A new cycle always picks up the *current* course revision — this is
+        // how periodic retraining picks up content updates automatically.
+        revisionNumber: a.plan.course.currentRevision,
       },
     });
     created++;
