@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { ScormPlayer } from "./ScormPlayer";
 import { notFound } from "next/navigation";
+import { getFile } from "@/lib/scorm/storage";
 
 export default async function CoursePage({
   params,
@@ -24,6 +25,29 @@ export default async function CoursePage({
     return (
       <Shell user={user}>
         <p className="text-slate-500">Bu kurs için henüz SCORM paketi yüklenmemiş.</p>
+      </Shell>
+    );
+  }
+
+  // Verify the entry file actually exists in the configured storage backend.
+  // If the package was uploaded before we moved to Vercel Blob, the ephemeral
+  // serverless filesystem copy is gone and we'd show a blank iframe otherwise.
+  const entryCheck = await getFile(`${course.scormPackagePath}/${course.scormEntryPoint}`);
+  if (!entryCheck) {
+    return (
+      <Shell user={user} title={course.title}>
+        <div className="card p-6 max-w-2xl">
+          <h2 className="font-semibold text-slate-900 mb-2">SCORM paketi bulunamadı</h2>
+          <p className="text-sm text-slate-600 mb-3">
+            Bu kursun SCORM içeriği şu anda depolama alanında değil. Büyük ihtimalle paket,
+            kalıcı bulut depolamaya (Vercel Blob) geçmeden önce yüklendi ve geçici sunucu
+            dosyasıyla birlikte silindi.
+          </p>
+          <p className="text-sm text-slate-600">
+            Yönetici <strong>/admin/courses</strong> sayfasından bu kurs için SCORM paketini
+            yeniden yüklemelidir. Tekrar yüklendiğinde içerik kalıcı olarak saklanacak.
+          </p>
+        </div>
       </Shell>
     );
   }
