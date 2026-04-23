@@ -44,6 +44,21 @@ export async function POST(
     update: {},
     create: { courseId },
   });
+  // Sınav kaydı yoksa varsayılanlarla oluştur — toplu yükleme sonrası kurs
+  // hemen sınava hazır olsun.
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { passingScore: true },
+  });
+  await prisma.exam.upsert({
+    where: { courseId },
+    update: {},
+    create: {
+      courseId,
+      questionCount: 10,
+      passingScore: course?.passingScore ?? 70,
+    },
+  });
 
   const results = { created: 0, skipped: 0, errors: [] as string[] };
 

@@ -46,6 +46,22 @@ async function addQuestion(formData: FormData) {
     update: {},
     create: { courseId },
   });
+  // Exam kaydı hiç oluşturulmamışsa varsayılanlarla üret — böylece admin
+  // sadece soru ekleyip çıkarsa bile sınav ayağa kalkıyor; "Bu kurs için
+  // sınav tanımlı değil" mesajını tetiklemiyor.
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { passingScore: true },
+  });
+  await prisma.exam.upsert({
+    where: { courseId },
+    update: {},
+    create: {
+      courseId,
+      questionCount: 10,
+      passingScore: course?.passingScore ?? 70,
+    },
+  });
   await prisma.question.create({
     data: { bankId: bank.id, text, options: { create: opts } },
   });
