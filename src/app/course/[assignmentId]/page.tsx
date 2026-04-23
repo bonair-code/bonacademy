@@ -4,6 +4,7 @@ import { Shell } from "@/components/Shell";
 import { ScormPlayer } from "./ScormPlayer";
 import { notFound } from "next/navigation";
 import { getFile } from "@/lib/scorm/storage";
+import { AttemptsHistoryDrawer } from "@/components/AttemptsHistoryDrawer";
 
 export default async function CoursePage({
   params,
@@ -119,53 +120,6 @@ export default async function CoursePage({
           ve ardından sınava yeniden girmeniz gerekiyor.
         </div>
       )}
-      {(scormAttempts.length > 0 || examAttempts.length > 0) && (
-        <div className="card p-4 mb-3">
-          <h2 className="font-semibold text-slate-900 mb-2 text-sm">Geçmiş denemeler</h2>
-          {scormAttempts.length > 0 && (
-            <div className="mb-3">
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-                Eğitim içeriği ({scormAttempts.length})
-              </div>
-              <ul className="text-sm space-y-1">
-                {scormAttempts.map((at, i) => (
-                  <li key={at.id} className="flex items-center gap-2 text-slate-700">
-                    <span className="badge-teal text-[10px]">#{scormAttempts.length - i}</span>
-                    <span>
-                      {at.startedAt.toLocaleString("tr-TR")}
-                      {at.finishedAt ? ` → ${at.finishedAt.toLocaleString("tr-TR")}` : " · devam ediyor"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {examAttempts.length > 0 && (
-            <div>
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-1">
-                Sınav denemeleri ({examAttempts.length})
-              </div>
-              <ul className="text-sm space-y-1">
-                {examAttempts.map((e) => (
-                  <li key={e.id} className="flex items-center gap-2">
-                    <span className="badge-teal text-[10px]">#{e.attemptNo}</span>
-                    <span
-                      className={
-                        e.passed ? "text-emerald-700 font-medium" : "text-red-700"
-                      }
-                    >
-                      %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {e.createdAt.toLocaleString("tr-TR")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
       <ScormPlayer
         assignmentId={a.id}
         contentUrl={contentUrl}
@@ -180,6 +134,24 @@ export default async function CoursePage({
           <a href={`/exam/${a.id}`} className="btn-primary">
             Sınava Geç →
           </a>
+        </div>
+      )}
+      {(scormAttempts.length > 0 || examAttempts.length > 0) && (
+        <div className="mt-6">
+          <AttemptsHistoryDrawer
+            scormAttempts={scormAttempts.map((at) => ({
+              id: at.id,
+              startedAt: at.startedAt.toISOString(),
+              finishedAt: at.finishedAt ? at.finishedAt.toISOString() : null,
+            }))}
+            examAttempts={examAttempts.map((e) => ({
+              id: e.id,
+              attemptNo: e.attemptNo,
+              score: e.score,
+              passed: e.passed,
+              createdAt: e.createdAt.toISOString(),
+            }))}
+          />
         </div>
       )}
     </Shell>
