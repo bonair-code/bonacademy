@@ -229,17 +229,30 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {/* Certificates */}
-      <div className="card">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+      {/* Certificates (collapsible) */}
+      <details className="card group" open={recentCerts.length > 0 && recentCerts.length <= 3}>
+        <summary className="flex items-center justify-between px-5 py-4 border-b border-slate-100 cursor-pointer list-none select-none hover:bg-slate-50/60">
           <div className="flex items-center gap-2">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-emerald-600">
               <path d={I.cert} />
             </svg>
             <h3 className="font-semibold text-slate-900">Sertifikalarım</h3>
           </div>
-          <span className="text-xs text-slate-400">{recentCerts.length} kayıt</span>
-        </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">{recentCerts.length} kayıt</span>
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </div>
+        </summary>
         <div className="divide-y divide-slate-100">
           {recentCerts.length === 0 && (
             <p className="p-8 text-center text-slate-400 text-sm">
@@ -271,7 +284,7 @@ export default async function Dashboard() {
             </a>
           ))}
         </div>
-      </div>
+      </details>
     </Shell>
   );
 }
