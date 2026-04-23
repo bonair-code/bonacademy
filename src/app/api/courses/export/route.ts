@@ -5,13 +5,16 @@ import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
 
-// Kursların Excel dışa aktarımı. ADMIN tüm kurs bilgilerini (plan sayısı,
-// atama sayısı, SCORM ayrıntıları dahil) görür; MANAGER da aynı listeyi
-// görür — raporlama amacıyla bu veri hassas kabul edilmiyor.
+// Kursların Excel dışa aktarımı. ADMIN tüm kursları, MANAGER ise yalnızca
+// sorumlu olduğu kursları görür (least-privilege). Bir MANAGER başka
+// yöneticilerin SCORM/sınav ayrıntılarını veya atama sayılarını görmemeli.
 export async function GET() {
-  await requireRole("ADMIN", "MANAGER");
+  const me = await requireRole("ADMIN", "MANAGER");
+  const scopeWhere =
+    me.role === "MANAGER" ? { ownerManagerId: me.id } : undefined;
 
   const courses = await prisma.course.findMany({
+    where: scopeWhere,
     orderBy: [{ isActive: "desc" }, { title: "asc" }],
     include: {
       ownerManager: { select: { name: true, email: true } },

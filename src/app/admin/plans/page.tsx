@@ -266,7 +266,7 @@ export default async function AdminPlans() {
                   <div className="text-xs text-slate-500 mt-0.5">
                     {RECURRENCE_LABEL[p.recurrence] ?? p.recurrence} ·{" "}
                     {p._count.assignments} atama · Başlangıç{" "}
-                    {new Date(p.startDate).toLocaleDateString("tr-TR")}
+                    {new Date(p.startDate).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
                     {p.jobTitles.length > 0 && (
                       <> · {p.jobTitles.map((j) => j.jobTitle.name).join(", ")}</>
                     )}

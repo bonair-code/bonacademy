@@ -132,7 +132,7 @@ export default async function ManagerTeam() {
                           <span
                             className={isOverdue ? "text-red-600 font-medium" : ""}
                           >
-                            {a.dueDate.toLocaleDateString("tr-TR")}
+                            {a.dueDate.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
                           </span>
                         </div>
                       </div>

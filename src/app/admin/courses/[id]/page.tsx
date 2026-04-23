@@ -329,7 +329,7 @@ export default async function CourseDetail({
                   )}
                 </div>
                 <span className="text-[11px] text-slate-500">
-                  {r.createdAt.toLocaleString("tr-TR")} · {r.createdBy.name}
+                  {r.createdAt.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })} · {r.createdBy.name}
                 </span>
               </div>
               {r.changeNote && (

@@ -131,8 +131,18 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
 
 export async function rollForwardRecurringAssignments(now = new Date()) {
   const horizon = addDays(now, 30);
+  // Yalnızca önümüzdeki 30 gün içinde yenilenecek olan tamamlanmış atamaları
+  // tara. Bir sonraki periyodun tarihi = completedAt + recurrence; en sık
+  // tekrar 6 ay (~180 gün) olduğu için, completedAt < now - 150 gün olanlar
+  // zaten horizon'un dışına düşer. DB tarafında kaba bir eleme yapıp hafızaya
+  // daha az satır çekiyoruz — büyük veri setlerinde kritik.
+  const earliestCompletedAt = addDays(now, -365 * 2 - 30); // en uzun recurrence 2 yıl
   const completed = await prisma.assignment.findMany({
-    where: { status: "COMPLETED", completedAt: { not: null } },
+    where: {
+      status: "COMPLETED",
+      completedAt: { gte: earliestCompletedAt, not: null },
+      plan: { recurrence: { not: "NONE" } },
+    },
     include: { plan: { include: { course: { select: { currentRevision: true } } } } },
   });
   let created = 0;

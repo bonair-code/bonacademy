@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { sendMail, appUrl } from "./mailer";
 import { addDays, startOfDay, endOfDay, subDays } from "date-fns";
 import { createEvent } from "ics";
+import { fmtTrDate } from "@/lib/dates";
 
 // Dedup sentinel'leri için saklama süresi. Tekrar eden atamalar, hatırlatmalar
 // ve gecikme bildirimleri için 180 gün fazlasıyla yeterli; çok daha eskisine
@@ -59,7 +60,7 @@ export async function sendAssignmentCreatedMail(assignmentId: string) {
     to: a.user.email,
     subject: `Yeni eğitim atandı: ${a.plan.course.title}`,
     html: `<p>Merhaba ${a.user.name},</p>
-      <p><b>${a.plan.course.title}</b> eğitimi size atandı. Son tarih: <b>${a.dueDate.toLocaleDateString("tr-TR")}</b></p>
+      <p><b>${a.plan.course.title}</b> eğitimi size atandı. Son tarih: <b>${fmtTrDate(a.dueDate)}</b></p>
       <p><a href="${appUrl(`/course/${a.id}`)}">Eğitime başla</a></p>`,
     attachments: ics ? [{ filename: "egitim.ics", content: ics }] : undefined,
   });
@@ -100,7 +101,7 @@ export async function sendDueReminders() {
         subject: `Hatırlatma: ${a.plan.course.title} (${days} gün kaldı)`,
         html: `<p>Merhaba ${a.user.name},</p>
           <p><b>${a.plan.course.title}</b> eğitiminin son tarihine <b>${days} gün</b> kaldı.</p>
-          <p>Son tarih: ${a.dueDate.toLocaleDateString("tr-TR")}</p>
+          <p>Son tarih: ${fmtTrDate(a.dueDate)}</p>
           <p><a href="${appUrl(`/course/${a.id}`)}">Şimdi başla</a></p>`,
       });
     }
@@ -132,7 +133,7 @@ export async function sendOverdueMails() {
         to: a.user.email,
         subject: `Gecikmiş eğitim: ${a.plan.course.title}`,
         html: `<p>Merhaba ${a.user.name},</p>
-          <p><b>${a.plan.course.title}</b> eğitiminin son tarihi <b>${a.dueDate.toLocaleDateString("tr-TR")}</b> olarak belirlenmişti ve henüz tamamlanmadı.</p>
+          <p><b>${a.plan.course.title}</b> eğitiminin son tarihi <b>${fmtTrDate(a.dueDate)}</b> olarak belirlenmişti ve henüz tamamlanmadı.</p>
           <p>Lütfen en kısa sürede tamamlayın:</p>
           <p><a href="${appUrl(`/course/${a.id}`)}">Eğitime git</a></p>`,
       });
@@ -147,7 +148,7 @@ export async function sendOverdueMails() {
           html: `<p>Merhaba ${mgr.name},</p>
             <p>Ekibinizden <b>${a.user.name}</b> (${a.user.email}) için atanan
             <b>${a.plan.course.title}</b> eğitimi gecikti. Son tarih:
-            <b>${a.dueDate.toLocaleDateString("tr-TR")}</b>.</p>
+            <b>${fmtTrDate(a.dueDate)}</b>.</p>
             <p><a href="${appUrl(`/manager/team`)}">Ekibimi görüntüle</a></p>`,
         });
       }

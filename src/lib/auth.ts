@@ -71,6 +71,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   session: { strategy: "jwt" },
   callbacks: {
+    // Azure AD / başka bir provider ile başarılı giriş yapıldığında,
+    // credentials yolunda kilitlenmiş (failedLoginAttempts >= 3, lockedAt set)
+    // bir hesabın sayaçlarını sıfırla. Aksi halde SSO ile giren kullanıcı
+    // arka planda hâlâ kilitli sayılır ve credentials'a düşerse giremez.
+    async signIn({ user, account }) {
+      if (!user?.email) return true;
+      if (account?.provider && account.provider !== "password") {
+        try {
+          await prisma.user.updateMany({
+            where: {
+              email: user.email.toLowerCase(),
+              OR: [{ failedLoginAttempts: { gt: 0 } }, { lockedAt: { not: null } }],
+            },
+            data: { failedLoginAttempts: 0, lockedAt: null },
+          });
+        } catch (err) {
+          console.error("[auth] SSO unlock failed", err);
+        }
+      }
+      return true;
+    },
     async jwt({ token, user }) {
       if (user?.id) token.sub = user.id;
       if (token.sub) {

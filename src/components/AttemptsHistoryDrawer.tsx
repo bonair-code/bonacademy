@@ -83,9 +83,9 @@ export function AttemptsHistoryDrawer({
                       #{scormAttempts.length - i}
                     </span>
                     <span>
-                      {new Date(at.startedAt).toLocaleString("tr-TR")}
+                      {new Date(at.startedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
                       {at.finishedAt
-                        ? ` → ${new Date(at.finishedAt).toLocaleString("tr-TR")}`
+                        ? ` → ${new Date(at.finishedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}`
                         : " · devam ediyor"}
                     </span>
                   </li>
@@ -114,7 +114,7 @@ export function AttemptsHistoryDrawer({
                       %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
                     </span>
                     <span className="text-xs text-slate-500">
-                      {new Date(e.createdAt).toLocaleString("tr-TR")}
+                      {new Date(e.createdAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
                     </span>
                   </li>
                 ))}

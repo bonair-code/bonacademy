@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import ExcelJS from "exceljs";
+import { fmtTrDate } from "@/lib/dates";
 
 export const runtime = "nodejs";
 
@@ -36,8 +37,8 @@ export async function GET() {
       course: r.plan.course.title,
       cycle: r.cycleNumber,
       status: r.status,
-      due: r.dueDate.toLocaleDateString("tr-TR"),
-      completed: r.completedAt?.toLocaleDateString("tr-TR") ?? "",
+      due: fmtTrDate(r.dueDate),
+      completed: r.completedAt ? fmtTrDate(r.completedAt) : "",
       score: r.examAttempts[0]?.score?.toFixed(1) ?? "",
     });
   }

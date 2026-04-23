@@ -131,7 +131,7 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
                       </div>
                       {e.finishedAt && (
                         <div className="text-xs text-slate-500 mt-0.5">
-                          {new Date(e.finishedAt).toLocaleString("tr-TR")}
+                          {new Date(e.finishedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
                         </div>
                       )}
                     </div>

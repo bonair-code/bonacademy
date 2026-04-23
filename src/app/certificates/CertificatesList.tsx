@@ -85,7 +85,7 @@ export function CertificatesList({ items }: { items: Item[] }) {
                 </div>
               </div>
               <span className="text-xs text-slate-500 shrink-0">
-                {new Date(c.issuedAt).toLocaleDateString("tr-TR")}
+                {new Date(c.issuedAt).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
               </span>
             </a>
           ))

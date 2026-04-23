@@ -157,11 +157,11 @@ export type TeamSummaryPdfInput = {
 };
 
 function fmtDate(d: Date) {
-  return d.toLocaleDateString("tr-TR");
+  return d.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
 }
 
 function fmtDateTime(d: Date) {
-  return d.toLocaleString("tr-TR");
+  return d.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" });
 }
 
 function MemberBlock({ m, now }: { m: TeamMemberSummary; now: Date }) {

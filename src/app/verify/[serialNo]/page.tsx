@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { fmtTrDate } from "@/lib/dates";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 // Bu sayfa public — middleware "/verify" prefix'ini auth'tan muaf tutuyor.
 // QR okuyan kişi giriş yapmadan sertifikanın gerçekliğini doğrulayabilsin.
@@ -15,6 +17,27 @@ export default async function VerifyCertificate({
 }) {
   const { serialNo: rawSerial } = await params;
   const serialNo = decodeURIComponent(rawSerial).trim();
+
+  // Seri numarası brute-force koruması: IP başına dakikada 20 doğrulama.
+  // Normal kullanıcı QR'ı okutup tek bir sayfa açar; 20/dk gerçek kullanım
+  // için rahat ama script-enumeration'ı belirgin biçimde yavaşlatır.
+  const h = await headers();
+  const ip = clientIp(h);
+  const rl = rateLimit(`verify:${ip}`, 20, 60_000);
+  if (!rl.ok) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
+          <h1 className="text-xl font-semibold text-slate-900 mb-2">
+            Çok Fazla İstek
+          </h1>
+          <p className="text-sm text-slate-600">
+            Lütfen bir dakika sonra tekrar deneyin.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const cert = serialNo
     ? await prisma.certificate.findUnique({
