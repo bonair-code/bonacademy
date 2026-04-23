@@ -90,8 +90,8 @@ export function AttemptsHistoryDrawer({
         />
       )}
       <aside
-        className={`fixed top-0 right-0 z-50 h-full w-full max-w-md bg-white shadow-2xl border-l border-slate-200 transform transition-transform duration-200 ${
-          open ? "translate-x-0" : "translate-x-full"
+        className={`fixed bottom-0 left-0 right-0 z-50 w-full max-h-[80vh] bg-white shadow-2xl border-t border-slate-200 rounded-t-2xl transform transition-transform duration-200 ${
+          open ? "translate-y-0" : "translate-y-full"
         }`}
         aria-hidden={!open}
       >
@@ -119,7 +119,7 @@ export function AttemptsHistoryDrawer({
             ✕
           </button>
         </div>
-        <div className="overflow-y-auto h-[calc(100%-3.5rem)] p-5 space-y-6">
+        <div className="overflow-y-auto max-h-[calc(80vh-3.5rem)] p-5 space-y-6">
           {scormAttempts.length > 0 && (
             <section>
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
