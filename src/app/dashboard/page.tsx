@@ -147,18 +147,13 @@ export default async function Dashboard() {
         </button>
       </div>
 
-      <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-6">
         <Kpi tone="teal"  icon={I.clipboard} value={active}     label="Aktif Eğitim" />
         <Kpi tone="slate" icon={I.calendar}  value={pending < 0 ? 0 : pending} label="Bekleyen" />
         <Kpi tone="amber" icon={I.refresh}   value={inProgress} label="Devam Eden" />
         <Kpi tone="green" icon={I.check}     value={completed}  label="Tamamlanan" />
         <Kpi tone="red"   icon={I.alarm}     value={overdue}    label="Geciken" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <div className="lg:col-span-1">
-          <Kpi tone="amber" icon={I.clock} value={certs} label="Sertifikalarım" />
-        </div>
+        <Kpi tone="amber" icon={I.clock}     value={certs}      label="Sertifikalarım" />
       </div>
 
       {/* Active trainings card */}
