@@ -8,6 +8,7 @@ import {
 } from "@/lib/scheduler/assignments";
 import type { Recurrence } from "@prisma/client";
 import Link from "next/link";
+import { SubmitButton } from "@/components/SubmitButton";
 
 async function createPlan(formData: FormData) {
   "use server";
@@ -195,7 +196,9 @@ export default async function AdminPlans() {
           Seçilen görev tanımındaki tüm kullanıcılar + ek kullanıcılar birlikte atanır.
           Sonradan görev tanımı atanan yeni kullanıcılara da otomatik atama yapılır.
         </p>
-        <button className="btn-primary">Plan Oluştur</button>
+        <SubmitButton pendingText="Oluşturuluyor..." savedText="Oluşturuldu ✓">
+          Plan Oluştur
+        </SubmitButton>
       </form>
 
       <h2 className="font-semibold mb-2">Mevcut Planlar</h2>
@@ -300,9 +303,7 @@ export default async function AdminPlans() {
                   devam ederler. Görev tanımını çıkarmak mevcut atamaları silmez.
                 </p>
                 <div className="flex items-center gap-2">
-                  <button type="submit" className="btn-primary">
-                    Değişiklikleri Kaydet
-                  </button>
+                  <SubmitButton>Değişiklikleri Kaydet</SubmitButton>
                   <button
                     type="submit"
                     formAction={deletePlan}
