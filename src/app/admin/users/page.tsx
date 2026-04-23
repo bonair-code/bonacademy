@@ -14,6 +14,9 @@ async function upsertUser(formData: FormData) {
   const name = String(formData.get("name")).trim();
   const role = String(formData.get("role")) as Role;
   const departmentId = String(formData.get("departmentId") || "") || null;
+  const managerIdRaw = String(formData.get("managerId") || "") || null;
+  // Kendini yönetici olarak atamaya izin verme.
+  const managerId = managerIdRaw && managerIdRaw !== id ? managerIdRaw : null;
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
   const password = String(formData.get("password") || "");
 
@@ -32,13 +35,14 @@ async function upsertUser(formData: FormData) {
           name,
           role,
           departmentId,
+          managerId,
           ...(passwordHash
             ? { passwordHash, failedLoginAttempts: 0, lockedAt: null }
             : {}),
         },
       })
     : await prisma.user.create({
-        data: { email, name, role, departmentId, ...(passwordHash ? { passwordHash } : {}) },
+        data: { email, name, role, departmentId, managerId, ...(passwordHash ? { passwordHash } : {}) },
       });
 
   await prisma.userJobTitle.deleteMany({ where: { userId: user.id } });
@@ -88,16 +92,22 @@ async function createDepartment(formData: FormData) {
 
 export default async function AdminUsers() {
   const user = await requireRole("ADMIN");
-  const [users, departments, jobTitles] = await Promise.all([
+  const [users, departments, jobTitles, managers] = await Promise.all([
     prisma.user.findMany({
       include: {
         department: true,
+        manager: true,
         jobTitles: { include: { jobTitle: true } },
       },
       orderBy: { name: "asc" },
     }),
     prisma.department.findMany({ orderBy: { name: "asc" } }),
     prisma.jobTitle.findMany({ orderBy: { name: "asc" } }),
+    prisma.user.findMany({
+      where: { role: { in: ["MANAGER", "ADMIN"] } },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
 
   return (
@@ -132,6 +142,14 @@ export default async function AdminUsers() {
               </option>
             ))}
           </select>
+          <select name="managerId" className="input" defaultValue="">
+            <option value="">Yönetici (yok)</option>
+            {managers.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name} ({m.email})
+              </option>
+            ))}
+          </select>
           <input
             name="password"
             type="password"
@@ -139,7 +157,6 @@ export default async function AdminUsers() {
             className="input"
             autoComplete="new-password"
           />
-          <div />
           <label className="col-span-2 block text-xs text-slate-600">
             Görev tanımları (Ctrl / Cmd ile çoklu seçim)
             <select
@@ -168,7 +185,7 @@ export default async function AdminUsers() {
                   <span className="text-slate-500 font-normal">· {u.email}</span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  {u.role} · {u.department?.name ?? "Departman yok"}
+                  {u.role} · {u.department?.name ?? "Departman yok"} · Yönetici: {u.manager?.name ?? "—"}
                   {u.jobTitles.length > 0 && (
                     <> · {u.jobTitles.map((jt) => jt.jobTitle.name).join(", ")}</>
                   )}
@@ -226,6 +243,20 @@ export default async function AdminUsers() {
                         {d.name}
                       </option>
                     ))}
+                  </select>
+                  <select
+                    name="managerId"
+                    defaultValue={u.managerId ?? ""}
+                    className="input col-span-2"
+                  >
+                    <option value="">Yönetici (yok)</option>
+                    {managers
+                      .filter((m) => m.id !== u.id)
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.email})
+                        </option>
+                      ))}
                   </select>
                   <label className="col-span-2 text-xs text-slate-600">
                     Görev tanımları (çoklu seçim için Ctrl/Cmd)
