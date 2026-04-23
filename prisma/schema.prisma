@@ -86,6 +86,7 @@ model User {
   passwordTokens PasswordToken[]
   revisionsCreated CourseRevision[]
   notifications Notification[]
+  ownedCourses  Course[]     @relation("CourseOwner")
 
   @@index([departmentId])
   @@index([role])
@@ -141,10 +142,18 @@ model Course {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
+  // Bu kurstan sorumlu yönetici. Yeni kurs oluştururken zorunlu; sertifika
+  // PDF'inde "Sorumlu" olarak basılır. Yönetici silinemesin / kurs yetim
+  // kalmasın diye Restrict — önce Course owner değiştirilmeli.
+  ownerManagerId    String?
+  ownerManager      User?         @relation("CourseOwner", fields: [ownerManagerId], references: [id], onDelete: Restrict)
+
   questionBank      QuestionBank?
   exam              Exam?
   plans             TrainingPlan[]
   revisions         CourseRevision[]
+
+  @@index([ownerManagerId])
 }
 
 model CourseRevision {

@@ -67,7 +67,18 @@ async function saveCourseMeta(formData: FormData) {
   const passingScore = Number(formData.get("passingScore") || 70);
   const questionCount = Number(formData.get("questionCount") || 10);
   const changeNote = String(formData.get("changeNote") || "").trim() || undefined;
+  const ownerManagerId = String(formData.get("ownerManagerId") || "").trim();
   if (!title) return;
+  if (!ownerManagerId) {
+    throw new Error("Kurstan sorumlu yönetici seçilmelidir.");
+  }
+  const owner = await prisma.user.findUnique({
+    where: { id: ownerManagerId },
+    select: { id: true, role: true, isActive: true },
+  });
+  if (!owner || owner.role !== "MANAGER" || !owner.isActive) {
+    throw new Error("Geçersiz sorumlu yönetici seçimi.");
+  }
 
   const existing = await prisma.course.findUniqueOrThrow({ where: { id: courseId } });
 
@@ -88,7 +99,8 @@ async function saveCourseMeta(formData: FormData) {
   const metaChanged =
     existing.title !== title ||
     (existing.description ?? "") !== description ||
-    existing.passingScore !== passingScore;
+    existing.passingScore !== passingScore ||
+    existing.ownerManagerId !== ownerManagerId;
 
   if (metaChanged) {
     await ensureBaselineRevision(existing, admin.id);
@@ -96,7 +108,7 @@ async function saveCourseMeta(formData: FormData) {
 
   await prisma.course.update({
     where: { id: courseId },
-    data: { title, description: description || null, passingScore },
+    data: { title, description: description || null, passingScore, ownerManagerId },
   });
 
   // Sınav ayarı da aynı formda: kurs kaydı yoksa varsayılanla oluştur, varsa güncelle.
@@ -141,18 +153,32 @@ export default async function CourseDetail({
 }) {
   const user = await requireRole("ADMIN");
   const { id } = await params;
-  const course = await prisma.course.findUnique({
-    where: { id },
-    include: {
-      exam: true,
-      questionBank: { include: { questions: { include: { options: true } } } },
-      revisions: {
-        orderBy: { revisionNumber: "desc" },
-        include: { createdBy: { select: { name: true, email: true } } },
+  const [course, managers] = await Promise.all([
+    prisma.course.findUnique({
+      where: { id },
+      include: {
+        exam: true,
+        questionBank: { include: { questions: { include: { options: true } } } },
+        ownerManager: { select: { id: true, name: true, email: true } },
+        revisions: {
+          orderBy: { revisionNumber: "desc" },
+          include: { createdBy: { select: { name: true, email: true } } },
+        },
       },
-    },
-  });
+    }),
+    prisma.user.findMany({
+      where: { role: "MANAGER", isActive: true },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   if (!course) notFound();
+  // Pasifleştirilmiş mevcut sorumluyu dropdown'a elle ekle ki kurs düzenlenirken
+  // boşa düşmesin — admin yeni bir aktif yönetici seçene kadar mevcut değer korunur.
+  const managerOptions =
+    course.ownerManager && !managers.some((m) => m.id === course.ownerManager!.id)
+      ? [course.ownerManager, ...managers]
+      : managers;
 
   return (
     <Shell
@@ -173,6 +199,26 @@ export default async function CourseDetail({
               maxLength={255}
               className="input mt-1 w-full"
             />
+          </label>
+          <label className="text-sm block">
+            Sorumlu yönetici <span className="text-red-600">*</span>
+            <select
+              name="ownerManagerId"
+              required
+              defaultValue={course.ownerManagerId ?? ""}
+              className="input mt-1 w-full"
+            >
+              <option value="" disabled>
+                {managerOptions.length === 0
+                  ? "Önce bir MANAGER kullanıcı tanımlayın"
+                  : "Yönetici seçin..."}
+              </option>
+              {managerOptions.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} ({m.email})
+                </option>
+              ))}
+            </select>
           </label>
           <label className="text-sm block">
             Açıklama

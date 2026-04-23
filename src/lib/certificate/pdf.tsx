@@ -101,6 +101,31 @@ const styles = StyleSheet.create({
     color: "#475569",
   },
   brandFooter: { textAlign: "center", fontSize: 10, color: "#64748b", marginTop: 40 },
+  // Sertifikanın sağ alt köşesi: "Sorumlu" bloğu. footerRow'un (Tarih / Seri No)
+  // hemen üstüne, sağa hizalı olarak basılır.
+  ownerRow: {
+    position: "absolute",
+    bottom: 70,
+    right: 40,
+    alignItems: "flex-end",
+  },
+  ownerLabel: {
+    fontSize: 8,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 2,
+  },
+  ownerName: {
+    fontSize: 12,
+    fontFamily: "Roboto",
+    fontWeight: "bold",
+    color: "#0f172a",
+    marginTop: 2,
+    borderTop: "1pt solid #0f172a",
+    paddingTop: 4,
+    minWidth: 150,
+    textAlign: "center",
+  },
 });
 
 function Logo() {
@@ -125,6 +150,7 @@ export async function renderCertificatePdf(opts: {
   issuedAt: Date;
   serialNo: string;
   kind?: CertificateKind;
+  ownerManagerName?: string | null;
 }): Promise<Buffer> {
   registerFonts();
   const kind = opts.kind ?? "achievement";
@@ -158,6 +184,12 @@ export async function renderCertificatePdf(opts: {
             <Text>Tarih: {opts.issuedAt.toLocaleDateString("tr-TR")}</Text>
             <Text>Seri No: {opts.serialNo}</Text>
           </View>
+          {opts.ownerManagerName ? (
+            <View style={styles.ownerRow}>
+              <Text style={styles.ownerLabel}>Sorumlu</Text>
+              <Text style={styles.ownerName}>{opts.ownerManagerName}</Text>
+            </View>
+          ) : null}
         </View>
       </Page>
     </Document>

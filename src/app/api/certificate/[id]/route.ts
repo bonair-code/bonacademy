@@ -26,6 +26,7 @@ export async function GET(
                     include: { _count: { select: { questions: true } } },
                   },
                   exam: true,
+                  ownerManager: { select: { name: true } },
                 },
               },
             },
@@ -51,6 +52,7 @@ export async function GET(
     issuedAt: cert.issuedAt,
     serialNo: cert.serialNo,
     kind,
+    ownerManagerName: cert.assignment.plan.course.ownerManager?.name ?? null,
   });
   return new NextResponse(new Uint8Array(pdf as unknown as ArrayBuffer), {
     headers: {
