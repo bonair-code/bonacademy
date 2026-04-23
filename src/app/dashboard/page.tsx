@@ -3,7 +3,6 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import Link from "next/link";
 import { formatDate } from "@/lib/format";
-import { CertificatesDrawer } from "@/components/CertificatesDrawer";
 
 type Tone = "teal" | "amber" | "green" | "red" | "slate";
 
@@ -115,13 +114,6 @@ export default async function Dashboard() {
 
   const pending = active - inProgress;
 
-  const recentCerts = await prisma.certificate.findMany({
-    where: { userId: user.id },
-    include: { assignment: { include: { plan: { include: { course: true } } } } },
-    orderBy: { issuedAt: "desc" },
-    take: 5,
-  });
-
   const statusLabel: Record<string, { text: string; cls: string }> = {
     PENDING: { text: "Bekliyor", cls: "badge-slate" },
     IN_PROGRESS: { text: "Devam Ediyor", cls: "badge-amber" },
@@ -225,15 +217,6 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {/* Certificates: side drawer (closed by default) */}
-      <CertificatesDrawer
-        certs={recentCerts.map((c) => ({
-          id: c.id,
-          serialNo: c.serialNo,
-          issuedAt: c.issuedAt.toISOString(),
-          courseTitle: c.assignment.plan.course.title,
-        }))}
-      />
     </Shell>
   );
 }
