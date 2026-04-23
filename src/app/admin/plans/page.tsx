@@ -20,6 +20,19 @@ async function createPlan(formData: FormData) {
   const userIds = formData.getAll("userIds").map(String).filter(Boolean);
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
 
+  // Aynı kurs için birden fazla plan oluşturulamasın — aynı isimde eğitim
+  // iki kere planlanırsa atamalar ve tekrar döngüleri birbirine karışır.
+  const existingPlan = await prisma.trainingPlan.findFirst({
+    where: { courseId },
+    select: { id: true, course: { select: { title: true } } },
+  });
+  if (existingPlan) {
+    throw new Error(
+      `Bu kurs için zaten bir plan var: "${existingPlan.course.title}". ` +
+        `Mevcut planı düzenleyin veya önce silin.`
+    );
+  }
+
   const plan = await prisma.trainingPlan.create({
     data: {
       courseId,
@@ -105,6 +118,11 @@ export default async function AdminPlans() {
     }),
   ]);
 
+  // Zaten planı olan kurslar yeni plan dropdown'ında görünmesin — aynı
+  // isimde iki kez planlanmayı engelliyoruz.
+  const plannedCourseIds = new Set(plans.map((p) => p.courseId));
+  const availableCourses = courses.filter((c) => !plannedCourseIds.has(c.id));
+
   return (
     <Shell user={user} title="Eğitim Planları">
       <form action={createPlan} className="card p-4 mb-6 space-y-3">
@@ -121,12 +139,14 @@ export default async function AdminPlans() {
               </Link>
             </div>
             <select name="courseId" required className="input block w-full">
-              {courses.length === 0 && (
+              {availableCourses.length === 0 && (
                 <option value="" disabled>
-                  Henüz kurs yok — önce kurs ekleyin
+                  {courses.length === 0
+                    ? "Henüz kurs yok — önce kurs ekleyin"
+                    : "Tüm kursların planı zaten var"}
                 </option>
               )}
-              {courses.map((c) => (
+              {availableCourses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.title}
                 </option>
