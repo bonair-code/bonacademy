@@ -104,7 +104,7 @@ export default async function AdminUsers() {
     prisma.department.findMany({ orderBy: { name: "asc" } }),
     prisma.jobTitle.findMany({ orderBy: { name: "asc" } }),
     prisma.user.findMany({
-      where: { role: { in: ["MANAGER", "ADMIN"] } },
+      where: { role: "MANAGER" },
       select: { id: true, name: true, email: true },
       orderBy: { name: "asc" },
     }),
