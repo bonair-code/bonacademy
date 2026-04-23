@@ -85,99 +85,102 @@ export function AttemptsHistoryDrawer({
 
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
           onClick={() => setOpen(false)}
-        />
-      )}
-      <aside
-        className={`fixed bottom-0 left-0 right-0 z-50 w-full max-h-[80vh] bg-white shadow-2xl border-t border-slate-200 rounded-t-2xl transform transition-transform duration-200 ${
-          open ? "translate-y-0" : "translate-y-full"
-        }`}
-        aria-hidden={!open}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5 text-teal-600"
-            >
-              <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
-            </svg>
-            <h3 className="font-semibold text-slate-900">Geçmiş Denemeler</h3>
-            <span className="text-xs text-slate-400">({total})</span>
-          </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
-            aria-label="Kapat"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg max-h-[85vh] bg-white shadow-2xl border border-slate-200 rounded-2xl overflow-hidden flex flex-col"
           >
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto max-h-[calc(80vh-3.5rem)] p-5 space-y-6">
-          {scormAttempts.length > 0 && (
-            <section>
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                Eğitim içeriği ({scormAttempts.length})
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5 text-teal-600"
+                >
+                  <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
+                </svg>
+                <h3 className="font-semibold text-slate-900">Geçmiş Denemeler</h3>
+                <span className="text-xs text-slate-400">({total})</span>
               </div>
-              <ul className="text-sm space-y-2">
-                {scormAttempts.map((at, i) => (
-                  <li
-                    key={at.id}
-                    className="flex items-center gap-2 text-slate-700"
-                  >
-                    <span className="badge-teal text-[10px] shrink-0">
-                      #{scormAttempts.length - i}
-                    </span>
-                    <span>
-                      {new Date(at.startedAt).toLocaleString("tr-TR")}
-                      {at.finishedAt
-                        ? ` → ${new Date(at.finishedAt).toLocaleString("tr-TR")}`
-                        : " · devam ediyor"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {examAttempts.length > 0 && (
-            <section>
-              <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                Sınav denemeleri ({examAttempts.length})
-              </div>
-              <ul className="text-sm space-y-2">
-                {examAttempts.map((e) => (
-                  <li key={e.id} className="flex items-center gap-2">
-                    <span className="badge-teal text-[10px] shrink-0">
-                      #{e.attemptNo}
-                    </span>
-                    <span
-                      className={
-                        e.passed ? "text-emerald-700 font-medium" : "text-red-700"
-                      }
-                    >
-                      %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(e.createdAt).toLocaleString("tr-TR")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {total === 0 && (
-            <p className="p-8 text-center text-slate-400 text-sm">
-              Henüz deneme yok.
-            </p>
-          )}
+              <button
+                onClick={() => setOpen(false)}
+                className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
+                aria-label="Kapat"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-5 space-y-6">
+              {scormAttempts.length > 0 && (
+                <section>
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                    Eğitim içeriği ({scormAttempts.length})
+                  </div>
+                  <ul className="text-sm space-y-2">
+                    {scormAttempts.map((at, i) => (
+                      <li
+                        key={at.id}
+                        className="flex items-center gap-2 text-slate-700"
+                      >
+                        <span className="badge-teal text-[10px] shrink-0">
+                          #{scormAttempts.length - i}
+                        </span>
+                        <span>
+                          {new Date(at.startedAt).toLocaleString("tr-TR")}
+                          {at.finishedAt
+                            ? ` → ${new Date(at.finishedAt).toLocaleString("tr-TR")}`
+                            : " · devam ediyor"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {examAttempts.length > 0 && (
+                <section>
+                  <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                    Sınav denemeleri ({examAttempts.length})
+                  </div>
+                  <ul className="text-sm space-y-2">
+                    {examAttempts.map((e) => (
+                      <li key={e.id} className="flex items-center gap-2">
+                        <span className="badge-teal text-[10px] shrink-0">
+                          #{e.attemptNo}
+                        </span>
+                        <span
+                          className={
+                            e.passed
+                              ? "text-emerald-700 font-medium"
+                              : "text-red-700"
+                          }
+                        >
+                          %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {new Date(e.createdAt).toLocaleString("tr-TR")}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {total === 0 && (
+                <p className="p-8 text-center text-slate-400 text-sm">
+                  Henüz deneme yok.
+                </p>
+              )}
+            </div>
+          </div>
         </div>
-      </aside>
+      )}
     </>
   );
 }

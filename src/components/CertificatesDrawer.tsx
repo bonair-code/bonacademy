@@ -74,16 +74,15 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
       {/* Overlay + Drawer */}
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
           onClick={() => setOpen(false)}
-        />
-      )}
-      <aside
-        className={`fixed bottom-0 left-0 right-0 z-50 w-full max-h-[80vh] bg-white shadow-2xl border-t border-slate-200 rounded-t-2xl transform transition-transform duration-200 ${
-          open ? "translate-y-0" : "translate-y-full"
-        }`}
-        aria-hidden={!open}
-      >
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg max-h-[85vh] bg-white shadow-2xl border border-slate-200 rounded-2xl overflow-hidden flex flex-col"
+          >
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <svg
@@ -108,7 +107,7 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
             ✕
           </button>
         </div>
-        <div className="overflow-y-auto max-h-[calc(80vh-3.5rem)] divide-y divide-slate-100">
+        <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
           {certs.length === 0 && (
             <p className="p-8 text-center text-slate-400 text-sm">
               Henüz sertifikanız yok.
@@ -134,7 +133,9 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
             </a>
           ))}
         </div>
-      </aside>
+          </div>
+        </div>
+      )}
     </>
   );
 }

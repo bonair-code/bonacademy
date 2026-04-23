@@ -73,74 +73,75 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
 
       {open && (
         <div
-          className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-[1px] flex items-center justify-center p-4"
           onClick={() => setOpen(false)}
-        />
-      )}
-      <aside
-        className={`fixed bottom-0 left-0 right-0 z-50 w-full max-h-[80vh] bg-white shadow-2xl border-t border-slate-200 rounded-t-2xl transform transition-transform duration-200 ${
-          open ? "translate-y-0" : "translate-y-full"
-        }`}
-        aria-hidden={!open}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div className="flex items-center gap-2">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-5 w-5 text-teal-600"
-            >
-              <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
-            </svg>
-            <h3 className="font-semibold text-slate-900">Önceki Denemeler</h3>
-            <span className="text-xs text-slate-400">({attempts.length})</span>
-          </div>
-          <button
-            onClick={() => setOpen(false)}
-            className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
-            aria-label="Kapat"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg max-h-[85vh] bg-white shadow-2xl border border-slate-200 rounded-2xl overflow-hidden flex flex-col"
           >
-            ✕
-          </button>
-        </div>
-        <div className="overflow-y-auto max-h-[calc(80vh-3.5rem)] divide-y divide-slate-100">
-          {sorted.length === 0 && (
-            <p className="p-8 text-center text-slate-400 text-sm">
-              Henüz deneme yok.
-            </p>
-          )}
-          {sorted.map((e) => (
-            <div
-              key={e.id}
-              className="flex items-center justify-between gap-4 px-5 py-4"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="badge-teal text-[10px] shrink-0">
-                  #{e.attemptNo}
-                </span>
-                <div className="min-w-0">
-                  <div
-                    className={`font-medium ${
-                      e.passed ? "text-emerald-700" : "text-red-700"
-                    }`}
-                  >
-                    %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
-                  </div>
-                  {e.finishedAt && (
-                    <div className="text-xs text-slate-500 mt-0.5">
-                      {new Date(e.finishedAt).toLocaleString("tr-TR")}
-                    </div>
-                  )}
-                </div>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5 text-teal-600"
+                >
+                  <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
+                </svg>
+                <h3 className="font-semibold text-slate-900">Önceki Denemeler</h3>
+                <span className="text-xs text-slate-400">({attempts.length})</span>
               </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
+                aria-label="Kapat"
+              >
+                ✕
+              </button>
             </div>
-          ))}
+            <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
+              {sorted.length === 0 && (
+                <p className="p-8 text-center text-slate-400 text-sm">
+                  Henüz deneme yok.
+                </p>
+              )}
+              {sorted.map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-4 px-5 py-4"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="badge-teal text-[10px] shrink-0">
+                      #{e.attemptNo}
+                    </span>
+                    <div className="min-w-0">
+                      <div
+                        className={`font-medium ${
+                          e.passed ? "text-emerald-700" : "text-red-700"
+                        }`}
+                      >
+                        %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                      </div>
+                      {e.finishedAt && (
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {new Date(e.finishedAt).toLocaleString("tr-TR")}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-      </aside>
+      )}
     </>
   );
 }
