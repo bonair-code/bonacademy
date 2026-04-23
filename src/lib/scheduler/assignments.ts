@@ -153,6 +153,3 @@ export async function markOverdue(now = new Date()) {
   });
   return { overdue: count };
 }
-
-/** Back-compat alias. */
-export const materializeInitialAssignments = materializeAssignmentsForPlan;
