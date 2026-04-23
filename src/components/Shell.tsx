@@ -102,6 +102,7 @@ export function Shell({
     org.push(
       { href: "/admin/users", label: "Kullanıcılar", icon: "users", iconTone: "sky" },
       { href: "/admin/reports", label: "Raporlar", icon: "report", iconTone: "red" },
+      { href: "/admin/audit", label: "Denetim Kayıtları", icon: "report", iconTone: "slate" },
       { href: "/admin/settings", label: "Ayarlar", icon: "cog", iconTone: "slate" }
     );
   }

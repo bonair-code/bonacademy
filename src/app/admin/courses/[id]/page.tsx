@@ -206,6 +206,14 @@ export default async function CourseDetail({
       title={course.title}
       subtitle={`Mevcut sürüm: v${course.currentRevision}`}
     >
+      <div className="mb-4">
+        <a
+          href={`/admin/audit?entity=Course&entityId=${course.id}`}
+          className="text-xs text-sky-700 hover:underline"
+        >
+          Bu kurs için denetim geçmişini göster →
+        </a>
+      </div>
       <section className="card p-4 mb-6">
         <h2 className="font-semibold mb-3">Kurs Bilgileri ve Sınav Ayarları</h2>
         <form action={saveCourseMeta} className="space-y-3">

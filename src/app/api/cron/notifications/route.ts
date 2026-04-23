@@ -6,6 +6,7 @@ import {
   cleanupOldNotifications,
 } from "@/lib/notifications/dispatcher";
 import { markOverdue } from "@/lib/scheduler/assignments";
+import { cleanupOldAuditLogs } from "@/lib/audit-retention";
 
 export const runtime = "nodejs";
 // Vercel Cron / harici scheduler tarafından tetiklenir. Secret header ile korunur.
@@ -41,10 +42,12 @@ async function handle(req: NextRequest) {
   await sendOverdueMails();
   // Eski dedup kayıtlarını temizle — tablo zamanla şişmesin.
   const cleanup = await cleanupOldNotifications();
+  const auditCleanup = await cleanupOldAuditLogs();
   return NextResponse.json({
     ok: true,
     ms: Date.now() - started,
     ...overdueResult,
     ...cleanup,
+    ...auditCleanup,
   });
 }

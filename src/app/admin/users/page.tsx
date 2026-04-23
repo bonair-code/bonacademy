@@ -253,12 +253,20 @@ export default async function AdminUsers() {
                   )}
                 </div>
               </div>
-              {u.lockedAt && (
-                <form action={unlockUser}>
-                  <input type="hidden" name="userId" value={u.id} />
-                  <button className="btn-secondary text-xs py-1.5">Kilidi Kaldır</button>
-                </form>
-              )}
+              <div className="flex items-center gap-2 shrink-0">
+                <a
+                  href={`/admin/audit?entity=User&entityId=${u.id}`}
+                  className="text-xs text-sky-700 hover:underline whitespace-nowrap"
+                >
+                  Denetim geçmişi →
+                </a>
+                {u.lockedAt && (
+                  <form action={unlockUser}>
+                    <input type="hidden" name="userId" value={u.id} />
+                    <button className="btn-secondary text-xs py-1.5">Kilidi Kaldır</button>
+                  </form>
+                )}
+              </div>
             </div>
 
             <details className="text-sm">
