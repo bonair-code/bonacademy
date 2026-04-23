@@ -225,7 +225,7 @@ export default async function Dashboard() {
       </div>
 
       {/* Certificates (collapsible) */}
-      <details className="card group" open={recentCerts.length > 0 && recentCerts.length <= 3}>
+      <details className="card group">
         <summary className="flex items-center justify-between px-5 py-4 border-b border-slate-100 cursor-pointer list-none select-none hover:bg-slate-50/60">
           <div className="flex items-center gap-2">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-emerald-600">
