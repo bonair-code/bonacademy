@@ -12,11 +12,29 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Yeni deploy sonrası eski sekme artık olmayan chunk'ı ister → "Loading chunk
+  // X failed". Bu durumda tek mantıklı çözüm tam sayfa yenileme: yeni HTML yeni
+  // chunk hash'lerini çeker. reset() işe yaramaz çünkü client bundle hâlâ eski.
+  const isChunkLoadError =
+    /Loading chunk [\w\d]+ failed|ChunkLoadError|Failed to fetch dynamically imported module/i.test(
+      `${error?.name} ${error?.message}`
+    );
+
   useEffect(() => {
     console.error("[app-error]", error);
-  }, [error]);
+    if (isChunkLoadError && typeof window !== "undefined") {
+      // Sonsuz döngüyü önlemek için sessionStorage bayrağı.
+      const key = "bonacademy:chunk-reload";
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, String(Date.now()));
+        window.location.reload();
+      }
+    }
+  }, [error, isChunkLoadError]);
 
-  const friendly = error.message || "Beklenmeyen bir hata oluştu.";
+  const friendly = isChunkLoadError
+    ? "Uygulama güncellendi. Sayfa yenileniyor…"
+    : error.message || "Beklenmeyen bir hata oluştu.";
 
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
