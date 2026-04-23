@@ -300,8 +300,11 @@ export default async function AdminPlans() {
                   devam ederler. Görev tanımını çıkarmak mevcut atamaları silmez.
                 </p>
                 <div className="flex items-center gap-2">
-                  <button className="btn-primary">Değişiklikleri Kaydet</button>
+                  <button type="submit" className="btn-primary">
+                    Değişiklikleri Kaydet
+                  </button>
                   <button
+                    type="submit"
                     formAction={deletePlan}
                     className="text-xs text-red-600 hover:underline px-2 py-1 ml-auto"
                     formNoValidate
