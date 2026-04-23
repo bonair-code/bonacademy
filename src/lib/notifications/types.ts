@@ -20,12 +20,12 @@ export function assignmentNotifyType(
   return `assignment:${assignmentId}:${kind}`;
 }
 
-/** Yöneticiye "ekibimden biri gecikti" bildirimi — manager başına tekil. */
-export function assignmentOverdueManagerType(
+/** Yöneticiye "ekibimden birinin son tarihi yaklaşıyor" bildirimi (7 gün kala). */
+export function assignmentManagerReminder7Type(
   assignmentId: string,
   managerId: string
 ): string {
-  return `assignment:${assignmentId}:overdue-manager:${managerId}`;
+  return `assignment:${assignmentId}:manager-reminder-7:${managerId}`;
 }
 
 /** Kalan-gün değerinden doğru reminder kind'ını üretir. */

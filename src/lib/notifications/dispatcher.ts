@@ -5,7 +5,7 @@ import { createEvent } from "ics";
 import { fmtTrDate } from "@/lib/dates";
 import {
   assignmentNotifyType,
-  assignmentOverdueManagerType,
+  assignmentManagerReminder7Type,
   reminderKind,
 } from "./types";
 
@@ -85,7 +85,11 @@ export async function sendNewAssignmentMails() {
   }
 }
 
-/** Son tarihe 7 ve 1 gün kalanlara uyarı. */
+/**
+ * Son tarihe 7 ve 1 gün kalanlara uyarı. Ek olarak 7 gün kala yönetici de
+ * bilgilendirilir — böylece ekip üyesi gecikmeden önce yönetici haberdar
+ * olur ve gerekirse takip eder.
+ */
 export async function sendDueReminders() {
   const now = new Date();
   for (const days of [7, 1] as const) {
@@ -95,27 +99,49 @@ export async function sendDueReminders() {
         status: { in: ["PENDING", "IN_PROGRESS", "EXAM_FAILED", "RETAKE_REQUIRED"] },
         dueDate: { gte: startOfDay(target), lte: endOfDay(target) },
       },
-      include: { user: true, plan: { include: { course: true } } },
+      include: {
+        user: { include: { manager: true } },
+        plan: { include: { course: true } },
+      },
     });
     for (const a of list) {
       const type = assignmentNotifyType(a.id, reminderKind(days));
       const claimed = await claimOnce(a.userId, type);
-      if (!claimed) continue;
-      await sendMail({
-        to: a.user.email,
-        subject: `Hatırlatma: ${a.plan.course.title} (${days} gün kaldı)`,
-        html: `<p>Merhaba ${a.user.name},</p>
-          <p><b>${a.plan.course.title}</b> eğitiminin son tarihine <b>${days} gün</b> kaldı.</p>
-          <p>Son tarih: ${fmtTrDate(a.dueDate)}</p>
-          <p><a href="${appUrl(`/course/${a.id}`)}">Şimdi başla</a></p>`,
-      });
+      if (claimed) {
+        await sendMail({
+          to: a.user.email,
+          subject: `Hatırlatma: ${a.plan.course.title} (${days} gün kaldı)`,
+          html: `<p>Merhaba ${a.user.name},</p>
+            <p><b>${a.plan.course.title}</b> eğitiminin son tarihine <b>${days} gün</b> kaldı.</p>
+            <p>Son tarih: ${fmtTrDate(a.dueDate)}</p>
+            <p><a href="${appUrl(`/course/${a.id}`)}">Şimdi başla</a></p>`,
+        });
+      }
+
+      // Sadece 7 gün kala yöneticiyi de bilgilendir.
+      if (days === 7 && a.user.manager) {
+        const mgr = a.user.manager;
+        const mgrType = assignmentManagerReminder7Type(a.id, mgr.id);
+        if (await claimOnce(mgr.id, mgrType)) {
+          await sendMail({
+            to: mgr.email,
+            subject: `Ekibinizde yaklaşan eğitim: ${a.user.name} — ${a.plan.course.title}`,
+            html: `<p>Merhaba ${mgr.name},</p>
+              <p>Ekibinizden <b>${a.user.name}</b> (${a.user.email}) için atanan
+              <b>${a.plan.course.title}</b> eğitiminin son tarihine <b>7 gün</b> kaldı.</p>
+              <p>Son tarih: <b>${fmtTrDate(a.dueDate)}</b></p>
+              <p><a href="${appUrl(`/manager/team`)}">Ekibimi görüntüle</a></p>`,
+          });
+        }
+      }
     }
   }
 }
 
 /**
- * Son tarihi geçmiş ve hâlâ tamamlanmamış atamalar: kullanıcıya ve (varsa)
- * yöneticisine mail gönderilir.
+ * Son tarihi geçmiş ve hâlâ tamamlanmamış atamalar: sadece kullanıcıya mail
+ * gönderilir. Yönetici zaten 7 gün kala haberdar edildi; gecikme durumunda
+ * tekrar mail atmıyoruz.
  */
 export async function sendOverdueMails() {
   const now = new Date();
@@ -127,7 +153,7 @@ export async function sendOverdueMails() {
       },
     },
     include: {
-      user: { include: { manager: true } },
+      user: true,
       plan: { include: { course: true } },
     },
   });
@@ -142,21 +168,6 @@ export async function sendOverdueMails() {
           <p>Lütfen en kısa sürede tamamlayın:</p>
           <p><a href="${appUrl(`/course/${a.id}`)}">Eğitime git</a></p>`,
       });
-    }
-    const mgr = a.user.manager;
-    if (mgr) {
-      const mgrType = assignmentOverdueManagerType(a.id, mgr.id);
-      if (await claimOnce(mgr.id, mgrType)) {
-        await sendMail({
-          to: mgr.email,
-          subject: `Ekibinizden gecikmiş eğitim: ${a.user.name} — ${a.plan.course.title}`,
-          html: `<p>Merhaba ${mgr.name},</p>
-            <p>Ekibinizden <b>${a.user.name}</b> (${a.user.email}) için atanan
-            <b>${a.plan.course.title}</b> eğitimi gecikti. Son tarih:
-            <b>${fmtTrDate(a.dueDate)}</b>.</p>
-            <p><a href="${appUrl(`/manager/team`)}">Ekibimi görüntüle</a></p>`,
-        });
-      }
     }
   }
 }
