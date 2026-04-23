@@ -38,8 +38,20 @@ export default async function ExamPage({
   }
 
   const bank = a.plan.course.questionBank;
-  const exam = a.plan.course.exam;
-  if (!bank || !exam) {
+  let exam = a.plan.course.exam;
+  // Soru bankası dolu ama Exam kaydı daha önce oluşturulmamış olabilir
+  // (eski kurslarda bu durum vardı). Bankada soru varsa varsayılan bir
+  // sınav kaydı üret; yoksa gerçekten tanımlı değil.
+  if (bank && bank.questions.length > 0 && !exam) {
+    exam = await prisma.exam.create({
+      data: {
+        courseId: a.plan.course.id,
+        questionCount: Math.min(10, bank.questions.length),
+        passingScore: a.plan.course.passingScore ?? 70,
+      },
+    });
+  }
+  if (!bank || bank.questions.length === 0 || !exam) {
     return (
       <Shell user={user}>
         <p>Bu kurs için sınav tanımlı değil.</p>
