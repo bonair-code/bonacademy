@@ -44,6 +44,7 @@ async function updatePlan(formData: FormData) {
   const recurrence = String(formData.get("recurrence")) as Recurrence;
   const dueInDays = Number(formData.get("dueInDays") || 30);
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
+  const extraUserIds = formData.getAll("userIds").map(String).filter(Boolean);
 
   // Plan meta güncelle.
   await prisma.trainingPlan.update({
@@ -63,7 +64,7 @@ async function updatePlan(formData: FormData) {
   // Yeni kapsama giren kullanıcılar için eksik atamaları oluştur. Mevcut
   // kullanıcıların atamaları upsert (update: {}) sayesinde değişmeden kalır —
   // status, attempts, cmiData hepsi korunur, kaldıkları yerden devam ederler.
-  const targets = await resolvePlanTargets(planId, []);
+  const targets = await resolvePlanTargets(planId, extraUserIds);
   await materializeAssignmentsForPlan(planId, targets);
 
   revalidatePath("/admin/plans");
@@ -261,21 +262,37 @@ export default async function AdminPlans() {
                     />
                   </label>
                 </div>
-                <label className="text-sm block">
-                  Görev tanımları
-                  <select
-                    name="jobTitleIds"
-                    multiple
-                    defaultValue={Array.from(currentJt)}
-                    className="input block w-full h-32"
-                  >
-                    {jobTitles.map((j) => (
-                      <option key={j.id} value={j.id}>
-                        {j.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="text-sm block">
+                    Görev tanımları
+                    <select
+                      name="jobTitleIds"
+                      multiple
+                      defaultValue={Array.from(currentJt)}
+                      className="input block w-full h-32"
+                    >
+                      {jobTitles.map((j) => (
+                        <option key={j.id} value={j.id}>
+                          {j.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="text-sm block">
+                    Ek kullanıcılar (opsiyonel)
+                    <select
+                      name="userIds"
+                      multiple
+                      className="input block w-full h-32"
+                    >
+                      {users.map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.name} ({u.email})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <p className="text-xs text-slate-600">
                   <strong>Not:</strong> Yeni görev tanımı eklediğinde sadece henüz
                   ataması olmayan kullanıcılara atama üretilir. Eski kullanıcıların
