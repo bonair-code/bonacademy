@@ -1,6 +1,16 @@
 import { prisma } from "@/lib/db";
 import { nextDueDate } from "./recurrence";
 import { addDays } from "date-fns";
+import { sendAssignmentCreatedMail } from "@/lib/notifications/dispatcher";
+
+// Mail gönderimi DB hatasına dönüşmesin diye izole et.
+async function safeNotify(assignmentId: string) {
+  try {
+    await sendAssignmentCreatedMail(assignmentId);
+  } catch (err) {
+    console.error("[notify] assignment created mail failed", assignmentId, err);
+  }
+}
 
 /**
  * Resolves the final target user set for a plan =
@@ -36,10 +46,13 @@ export async function materializeAssignmentsForPlan(planId: string, userIds: str
   const rev = plan.course.currentRevision;
   let created = 0;
   for (const uid of userIds) {
-    const res = await prisma.assignment.upsert({
+    // Önce var mı bak: yoksa yarat ve mail at; varsa hiç mail atma.
+    const existing = await prisma.assignment.findUnique({
       where: { planId_userId_cycleNumber: { planId, userId: uid, cycleNumber: 1 } },
-      update: {},
-      create: {
+    });
+    if (existing) continue;
+    const res = await prisma.assignment.create({
+      data: {
         planId,
         userId: uid,
         cycleNumber: 1,
@@ -48,7 +61,8 @@ export async function materializeAssignmentsForPlan(planId: string, userIds: str
         revisionNumber: rev,
       },
     });
-    if (res.createdAt.getTime() === res.createdAt.getTime()) created++;
+    created++;
+    await safeNotify(res.id);
   }
   return { created };
 }
@@ -72,10 +86,12 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
   for (const p of plans) {
     // Kullanıcı plana ne zaman girdiyse sayaç o anda başlar: bugün + dueInDays.
     const due = addDays(new Date(), p.dueInDays);
-    const res = await prisma.assignment.upsert({
+    const existing = await prisma.assignment.findUnique({
       where: { planId_userId_cycleNumber: { planId: p.id, userId, cycleNumber: 1 } },
-      update: {},
-      create: {
+    });
+    if (existing) continue;
+    const res = await prisma.assignment.create({
+      data: {
         planId: p.id,
         userId,
         cycleNumber: 1,
@@ -84,7 +100,8 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
         revisionNumber: p.course.currentRevision,
       },
     });
-    if (res) enrolled++;
+    enrolled++;
+    await safeNotify(res.id);
   }
   return { enrolled };
 }
