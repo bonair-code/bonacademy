@@ -6,6 +6,13 @@ const nextConfig = {
   eslint: { ignoreDuringBuilds: true },
   experimental: { serverActions: { bodySizeLimit: "500mb" } },
   serverExternalPackages: ["unzipper"],
+  // Vercel serverless fonksiyonlarına TTF font dosyalarını ve Logo.png'yi
+  // bundle et — @react-pdf/renderer runtime'da process.cwd()/public/fonts
+  // altından okuyor; aksi hâlde Türkçe karakterler (ş, ğ, İ vb.) bozuk çıkıyor.
+  outputFileTracingIncludes: {
+    "/api/certificate/**": ["./public/fonts/**", "./public/Logo.png"],
+    "/api/manager/team/pdf": ["./public/fonts/**", "./public/Logo.png"],
+  },
   images: {
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",

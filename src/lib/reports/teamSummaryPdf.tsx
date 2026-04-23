@@ -8,8 +8,29 @@ import {
   View,
   StyleSheet,
   Image,
+  Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
+
+let fontsRegistered = false;
+function registerFonts() {
+  if (fontsRegistered) return;
+  try {
+    const regular = path.join(process.cwd(), "public", "fonts", "Roboto-Regular.ttf");
+    const bold = path.join(process.cwd(), "public", "fonts", "Roboto-Bold.ttf");
+    Font.register({
+      family: "Roboto",
+      fonts: [
+        { src: regular },
+        { src: bold, fontWeight: "bold" },
+      ],
+    });
+    Font.registerHyphenationCallback((word) => [word]);
+    fontsRegistered = true;
+  } catch (err) {
+    console.error("[pdf] font register failed", err);
+  }
+}
 
 // Logoyu her istekte tekrar okumayalım.
 let cachedLogo: Buffer | null = null;
@@ -39,7 +60,7 @@ const styles = StyleSheet.create({
   page: {
     padding: 32,
     fontSize: 9,
-    fontFamily: "Helvetica",
+    fontFamily: "Roboto",
     backgroundColor: "#ffffff",
     color: "#0f172a",
   },
@@ -53,7 +74,7 @@ const styles = StyleSheet.create({
   },
   headerLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   logo: { height: 32 },
-  title: { fontSize: 14, fontFamily: "Helvetica-Bold" },
+  title: { fontSize: 14, fontFamily: "Roboto", fontWeight: "bold" },
   subtitle: { fontSize: 9, color: "#475569" },
   meta: { fontSize: 8, color: "#64748b", textAlign: "right" },
 
@@ -69,7 +90,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   kpiLabel: { fontSize: 7, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 },
-  kpiValue: { fontSize: 16, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  kpiValue: { fontSize: 16, fontFamily: "Roboto", fontWeight: "bold", marginTop: 2 },
 
   memberBlock: {
     marginBottom: 10,
@@ -85,7 +106,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     borderBottom: "1pt solid #e2e8f0",
   },
-  memberName: { fontSize: 11, fontFamily: "Helvetica-Bold" },
+  memberName: { fontSize: 11, fontFamily: "Roboto", fontWeight: "bold" },
   memberMeta: { fontSize: 8, color: "#64748b", marginTop: 1 },
   memberStats: { fontSize: 8, color: "#334155" },
 
@@ -101,7 +122,7 @@ const styles = StyleSheet.create({
   colStatus: { width: 80, textAlign: "right" },
   th: { fontSize: 7, color: "#64748b", textTransform: "uppercase", letterSpacing: 0.5 },
 
-  overdue: { color: "#b91c1c", fontFamily: "Helvetica-Bold" },
+  overdue: { color: "#b91c1c", fontFamily: "Roboto", fontWeight: "bold" },
   footer: {
     position: "absolute",
     bottom: 20,
@@ -200,6 +221,7 @@ function MemberBlock({ m, now }: { m: TeamMemberSummary; now: Date }) {
 }
 
 export async function renderTeamSummaryPdf(input: TeamSummaryPdfInput): Promise<Buffer> {
+  registerFonts();
   const logo = loadLogo();
   const now = input.generatedAt;
 

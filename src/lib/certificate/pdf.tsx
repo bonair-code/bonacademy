@@ -8,8 +8,36 @@ import {
   View,
   StyleSheet,
   Image,
+  Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
+
+// Türkçe karakterler (ş, ğ, ı, İ, Ş, Ğ, ü, ö, ç) Helvetica built-in fontunda
+// yoktu ve PDF'te bozuk/üst üste görünüyordu. public/fonts içine Roboto'nun
+// latin-ext destekli TTF dosyalarını koyduk ve burada "Roboto" ailesi olarak
+// register ediyoruz. Register idempotent çalışsın diye modül yüklemesinde
+// tek sefer yapıyoruz.
+let fontsRegistered = false;
+function registerFonts() {
+  if (fontsRegistered) return;
+  try {
+    const regular = path.join(process.cwd(), "public", "fonts", "Roboto-Regular.ttf");
+    const bold = path.join(process.cwd(), "public", "fonts", "Roboto-Bold.ttf");
+    Font.register({
+      family: "Roboto",
+      fonts: [
+        { src: regular },
+        { src: bold, fontWeight: "bold" },
+      ],
+    });
+    // fontkit'in kelime kesme algoritmasını kapat — Türkçe'de yanlış yerlerden
+    // bölebiliyor; zaten sertifika metinleri kısa.
+    Font.registerHyphenationCallback((word) => [word]);
+    fontsRegistered = true;
+  } catch (err) {
+    console.error("[pdf] font register failed", err);
+  }
+}
 
 // Logoyu bir kere okuyup bellekte tut; her sertifikada diskten okumaya gerek yok.
 let cachedLogo: Buffer | null = null;
@@ -25,7 +53,7 @@ function loadLogo(): Buffer | null {
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 40, fontSize: 12, fontFamily: "Helvetica", backgroundColor: "#ffffff" },
+  page: { padding: 40, fontSize: 12, fontFamily: "Roboto", backgroundColor: "#ffffff" },
   border: {
     border: "2pt solid #0f172a",
     borderRadius: 6,
@@ -42,13 +70,13 @@ const styles = StyleSheet.create({
     backgroundColor: "#e30613",
   },
   logoRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 6, marginBottom: 18 },
-  logoText: { fontSize: 32, fontFamily: "Helvetica-Bold", color: "#1a1a1a", letterSpacing: 2 },
+  logoText: { fontSize: 32, fontFamily: "Roboto", fontWeight: "bold", color: "#1a1a1a", letterSpacing: 2 },
   title: {
     fontSize: 30,
     textAlign: "center",
     marginTop: 20,
     marginBottom: 10,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Roboto", fontWeight: "bold",
     color: "#0f172a",
     letterSpacing: 4,
   },
@@ -58,10 +86,10 @@ const styles = StyleSheet.create({
     fontSize: 26,
     textAlign: "center",
     marginVertical: 18,
-    fontFamily: "Helvetica-Bold",
+    fontFamily: "Roboto", fontWeight: "bold",
     color: "#b91c1c",
   },
-  course: { fontFamily: "Helvetica-Bold", color: "#0f172a" },
+  course: { fontFamily: "Roboto", fontWeight: "bold", color: "#0f172a" },
   footerRow: {
     position: "absolute",
     bottom: 40,
@@ -98,6 +126,7 @@ export async function renderCertificatePdf(opts: {
   serialNo: string;
   kind?: CertificateKind;
 }): Promise<Buffer> {
+  registerFonts();
   const kind = opts.kind ?? "achievement";
   const title =
     kind === "participation" ? "KATILIM SERTİFİKASI" : "BAŞARI SERTİFİKASI";
