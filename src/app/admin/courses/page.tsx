@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { deletePackage } from "@/lib/scorm/storage";
 import { ConfirmButton } from "@/components/ConfirmButton";
@@ -15,8 +16,11 @@ async function createCourse(formData: FormData) {
   await requireRole("ADMIN");
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
-  await prisma.course.create({ data: { title } });
+  const course = await prisma.course.create({ data: { title } });
   revalidatePath("/admin/courses");
+  // Yeni oluşturulan kursun detay sayfasına yönlendir ki admin hemen
+  // SCORM paketi yükleyip soru bankası ekleyebilsin.
+  redirect(`/admin/courses/${course.id}`);
 }
 
 async function quickUpdateCourse(formData: FormData) {
