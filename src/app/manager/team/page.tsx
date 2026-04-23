@@ -15,7 +15,9 @@ const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
 
 export default async function ManagerTeam() {
   const user = await requireRole("MANAGER", "ADMIN");
-  const where = user.role === "ADMIN" ? {} : { departmentId: user.departmentId ?? "__none__" };
+  // Manager için "ekibim" = managerId'si kendisine bağlı olan kullanıcılar.
+  // Admin tüm kullanıcıları görür.
+  const where = user.role === "ADMIN" ? {} : { managerId: user.id };
   const members = await prisma.user.findMany({
     where,
     include: {
@@ -29,6 +31,27 @@ export default async function ManagerTeam() {
 
   return (
     <Shell user={user} title="Ekibim" subtitle={`${members.length} kişi`}>
+      <div className="flex justify-end mb-3">
+        <a
+          href="/api/manager/team/pdf"
+          target="_blank"
+          rel="noopener"
+          className="btn-secondary text-xs py-1.5 inline-flex items-center gap-1.5"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 11h6" />
+          </svg>
+          PDF Olarak Al
+        </a>
+      </div>
       <div className="space-y-2">
         {members.length === 0 && (
           <p className="text-sm text-slate-500">Ekibinde kayıtlı kullanıcı yok.</p>
