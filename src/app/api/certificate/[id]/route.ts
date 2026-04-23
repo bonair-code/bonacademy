@@ -53,6 +53,7 @@ export async function GET(
     serialNo: cert.serialNo,
     kind,
     ownerManagerName: cert.assignment.plan.course.ownerManager?.name ?? null,
+    verifyUrl: `${process.env.APP_URL || "http://localhost:3000"}/verify/${cert.serialNo}`,
   });
   return new NextResponse(new Uint8Array(pdf as unknown as ArrayBuffer), {
     headers: {

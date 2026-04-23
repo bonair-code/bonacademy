@@ -11,6 +11,7 @@ import {
   Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
+import QRCode from "qrcode";
 
 // Türkçe karakterler (ş, ğ, ı, İ, Ş, Ğ, ü, ö, ç) Helvetica built-in fontunda
 // yoktu ve PDF'te bozuk/üst üste görünüyordu. public/fonts içine Roboto'nun
@@ -115,6 +116,23 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 2,
   },
+  // Sol alt: QR kod bloğu. footerRow'un (Tarih) üzerine hizalı.
+  qrRow: {
+    position: "absolute",
+    bottom: 70,
+    left: 40,
+    alignItems: "flex-start",
+    maxWidth: 200,
+  },
+  qrImage: { width: 70, height: 70 },
+  qrLabel: {
+    fontSize: 8,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+  qrHint: { fontSize: 7, color: "#94a3b8", marginTop: 1 },
   ownerName: {
     fontSize: 12,
     fontFamily: "Roboto",
@@ -151,8 +169,26 @@ export async function renderCertificatePdf(opts: {
   serialNo: string;
   kind?: CertificateKind;
   ownerManagerName?: string | null;
+  verifyUrl?: string;
 }): Promise<Buffer> {
   registerFonts();
+  // QR kodu: doğrulama sayfasına işaret eder. PNG data URL üretiyoruz;
+  // @react-pdf/renderer <Image src="data:image/png;base64,..."> destekler.
+  // Hata toleransı H → QR'ın ~%30'u hasar görse bile okunabilir (logo
+  // bindirmeleri, yazıcı artefaktları için güvenli seçim).
+  let qrDataUrl: string | null = null;
+  if (opts.verifyUrl) {
+    try {
+      qrDataUrl = await QRCode.toDataURL(opts.verifyUrl, {
+        errorCorrectionLevel: "H",
+        margin: 1,
+        width: 256,
+        color: { dark: "#0f172a", light: "#ffffff" },
+      });
+    } catch (err) {
+      console.error("[pdf] qr generation failed", err);
+    }
+  }
   const kind = opts.kind ?? "achievement";
   const title =
     kind === "participation" ? "KATILIM SERTİFİKASI" : "BAŞARI SERTİFİKASI";
@@ -184,6 +220,15 @@ export async function renderCertificatePdf(opts: {
             <Text>Tarih: {opts.issuedAt.toLocaleDateString("tr-TR")}</Text>
             <Text>Seri No: {opts.serialNo}</Text>
           </View>
+          {qrDataUrl ? (
+            <View style={styles.qrRow}>
+              <Image src={qrDataUrl} style={styles.qrImage} />
+              <Text style={styles.qrLabel}>Doğrulama</Text>
+              <Text style={styles.qrHint}>
+                QR'ı okutun veya adresi ziyaret edin
+              </Text>
+            </View>
+          ) : null}
           {opts.ownerManagerName ? (
             <View style={styles.ownerRow}>
               <Text style={styles.ownerLabel}>Sorumlu</Text>
