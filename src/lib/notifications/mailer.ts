@@ -32,6 +32,21 @@ export async function sendMail(opts: {
   });
 }
 
+/**
+ * E-posta HTML şablonlarında kullanıcı-kontrollü metinleri (isim, e-posta,
+ * kurs başlığı) inline etmeden önce HTML-escape etmek şart. Aksi hâlde
+ * kötü niyetli bir kullanıcı `name = "<script>..."` yazarak admin/yönetici
+ * inbox'ında HTML render ettirebilir.
+ */
+export function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export function appUrl(path = "/"): string {
   const base = process.env.APP_URL || "http://localhost:3000";
   return base.replace(/\/$/, "") + path;

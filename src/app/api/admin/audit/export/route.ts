@@ -9,6 +9,8 @@ import {
   ALL_AUDIT_ACTIONS,
   ALL_AUDIT_ENTITIES,
 } from "@/lib/auditLabels";
+import { rateLimit } from "@/lib/rateLimit";
+import { parseFilterDate } from "@/lib/audit-filters";
 import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
@@ -17,7 +19,35 @@ export const runtime = "nodejs";
 // filtreler aynen query'den alınır, böylece admin ekranda filtrelediğini
 // indirebilir. ISO/iç denetim için "kanıt dosyası" olarak istenir.
 export async function GET(req: NextRequest) {
-  await requireRole("ADMIN");
+  const user = await requireRole("ADMIN");
+
+  // CSRF sertleştirme: tarayıcıdan gelen cross-site GET'i engelle. Aynı
+  // origin'den tetiklendiğinden emin olmak için Origin/Referer kontrolü
+  // yapıyoruz; curl/Postman gibi header göndermeyen istekler serverside
+  // yine çalışır ama kullanıcı oturumu da gerekmeyeceği için risk yok.
+  const origin = req.headers.get("origin") ?? req.headers.get("referer");
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host;
+      if (originHost !== req.nextUrl.host) {
+        return NextResponse.json({ error: "Yetkisiz kaynak" }, { status: 403 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Geçersiz kaynak" }, { status: 403 });
+    }
+  }
+
+  // Admin başına 5 dk'da 10 export. Bellek-yoğun bir endpoint — hatalı
+  // script veya kötü niyetli bir oturumun tekrar tekrar 10k satır çekmesini
+  // engeller.
+  const rl = rateLimit(`audit-export:${user.id}`, 10, 5 * 60 * 1000);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Çok fazla istek, lütfen daha sonra tekrar deneyin." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
+
   const sp = new URL(req.url).searchParams;
 
   const where: Prisma.AuditLogWhereInput = {};
@@ -31,14 +61,12 @@ export async function GET(req: NextRequest) {
   if (entityId) where.entityId = entityId;
   if (action && ALL_AUDIT_ACTIONS.includes(action)) where.action = action;
   if (actorId) where.actorId = actorId;
-  if (from || to) {
+  const fromDate = parseFilterDate(from, "start");
+  const toDate = parseFilterDate(to, "end");
+  if (fromDate || toDate) {
     where.createdAt = {};
-    if (from) where.createdAt.gte = new Date(from);
-    if (to) {
-      const end = new Date(to);
-      end.setHours(23, 59, 59, 999);
-      where.createdAt.lte = end;
-    }
+    if (fromDate) where.createdAt.gte = fromDate;
+    if (toDate) where.createdAt.lte = toDate;
   }
 
   // Üst sınır: 10k satır. Daha fazlası denetim ekranında gerekirse tarih

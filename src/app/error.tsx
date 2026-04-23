@@ -23,10 +23,15 @@ export default function Error({
   useEffect(() => {
     console.error("[app-error]", error);
     if (isChunkLoadError && typeof window !== "undefined") {
-      // Sonsuz döngüyü önlemek için sessionStorage bayrağı.
-      const key = "bonacademy:chunk-reload";
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, String(Date.now()));
+      // Sonsuz döngüyü önlemek için zaman damgalı bayrak: son 30 sn içinde
+      // zaten bir kez yenilediyseysek tekrar yenileme (reload loop riski).
+      // 30 sn'den eskiyse sıfırla — aynı sekmede ikinci, ilgisiz chunk
+      // hatası olursa o da yenilenebilsin.
+      const key = "bonacademy:chunk-reload-at";
+      const last = Number(sessionStorage.getItem(key) || "0");
+      const now = Date.now();
+      if (now - last > 30_000) {
+        sessionStorage.setItem(key, String(now));
         window.location.reload();
       }
     }

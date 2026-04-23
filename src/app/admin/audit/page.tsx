@@ -8,6 +8,7 @@ import {
   ALL_AUDIT_ACTIONS,
   ALL_AUDIT_ENTITIES,
 } from "@/lib/auditLabels";
+import { parseFilterDate } from "@/lib/audit-filters";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -39,15 +40,12 @@ export default async function AuditPage({
   if (sp.entityId) where.entityId = sp.entityId;
   if (sp.action && ALL_AUDIT_ACTIONS.includes(sp.action)) where.action = sp.action;
   if (sp.actorId) where.actorId = sp.actorId;
-  if (sp.from || sp.to) {
+  const fromDate = parseFilterDate(sp.from, "start");
+  const toDate = parseFilterDate(sp.to, "end");
+  if (fromDate || toDate) {
     where.createdAt = {};
-    if (sp.from) where.createdAt.gte = new Date(sp.from);
-    if (sp.to) {
-      // "to" tarihini dahil et — o günün sonuna kadar.
-      const end = new Date(sp.to);
-      end.setHours(23, 59, 59, 999);
-      where.createdAt.lte = end;
-    }
+    if (fromDate) where.createdAt.gte = fromDate;
+    if (toDate) where.createdAt.lte = toDate;
   }
 
   const [rows, total, actors] = await Promise.all([
