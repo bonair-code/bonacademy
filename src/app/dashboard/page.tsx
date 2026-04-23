@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import Link from "next/link";
 import { formatDate } from "@/lib/format";
+import { CertificatesDrawer } from "@/components/CertificatesDrawer";
 
 type Tone = "teal" | "amber" | "green" | "red" | "slate";
 
@@ -224,62 +225,15 @@ export default async function Dashboard() {
         </div>
       </div>
 
-      {/* Certificates (collapsible) */}
-      <details className="card group">
-        <summary className="flex items-center justify-between px-5 py-4 border-b border-slate-100 cursor-pointer list-none select-none hover:bg-slate-50/60">
-          <div className="flex items-center gap-2">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-emerald-600">
-              <path d={I.cert} />
-            </svg>
-            <h3 className="font-semibold text-slate-900">Sertifikalarım</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">{recentCerts.length} kayıt</span>
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180"
-            >
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </div>
-        </summary>
-        <div className="divide-y divide-slate-100">
-          {recentCerts.length === 0 && (
-            <p className="p-8 text-center text-slate-400 text-sm">
-              Henüz sertifikanız yok.
-            </p>
-          )}
-          {recentCerts.map((c) => (
-            <a
-              key={c.id}
-              href={`/api/certificate/${c.id}`}
-              className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/70 transition"
-            >
-              <div className="flex items-center gap-4 min-w-0">
-                <div className="tile-icon tile-green !mb-0 !h-10 !w-10">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <path d={I.cert} />
-                  </svg>
-                </div>
-                <div className="min-w-0">
-                  <div className="font-medium text-slate-900 truncate">
-                    {c.assignment.plan.course.title}
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5">
-                    Seri No: {c.serialNo}
-                  </div>
-                </div>
-              </div>
-              <span className="text-xs text-slate-500">{formatDate(c.issuedAt)}</span>
-            </a>
-          ))}
-        </div>
-      </details>
+      {/* Certificates: side drawer (closed by default) */}
+      <CertificatesDrawer
+        certs={recentCerts.map((c) => ({
+          id: c.id,
+          serialNo: c.serialNo,
+          issuedAt: c.issuedAt.toISOString(),
+          courseTitle: c.assignment.plan.course.title,
+        }))}
+      />
     </Shell>
   );
 }
