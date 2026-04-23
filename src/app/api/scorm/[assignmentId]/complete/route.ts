@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
+import { finalizeScormCompletion } from "@/lib/scorm/finalizeCompletion";
 
 export async function POST(
   _req: NextRequest,
@@ -12,13 +13,6 @@ export async function POST(
   if (!a || a.userId !== user.id) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
   }
-  await prisma.attempt.updateMany({
-    where: { assignmentId: a.id, type: "SCORM", finishedAt: null },
-    data: { finishedAt: new Date() },
-  });
-  await prisma.assignment.update({
-    where: { id: a.id },
-    data: { status: "SCORM_COMPLETED" },
-  });
-  return NextResponse.json({ ok: true });
+  const result = await finalizeScormCompletion(a.id);
+  return NextResponse.json({ ok: true, ...result });
 }

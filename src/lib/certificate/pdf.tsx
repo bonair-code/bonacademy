@@ -89,25 +89,39 @@ function Logo() {
   );
 }
 
+export type CertificateKind = "achievement" | "participation";
+
 export async function renderCertificatePdf(opts: {
   name: string;
   courseTitle: string;
   issuedAt: Date;
   serialNo: string;
+  kind?: CertificateKind;
 }): Promise<Buffer> {
+  const kind = opts.kind ?? "achievement";
+  const title =
+    kind === "participation" ? "KATILIM SERTİFİKASI" : "BAŞARI SERTİFİKASI";
+  const subtitle =
+    kind === "participation"
+      ? "CERTIFICATE OF PARTICIPATION"
+      : "CERTIFICATE OF ACHIEVEMENT";
+  const bodySuffix =
+    kind === "participation"
+      ? "eğitimine katıldığını belgelemek üzere düzenlenmiştir."
+      : "eğitimini başarıyla tamamladığını belgelemek üzere düzenlenmiştir.";
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         <View style={styles.border}>
           <View style={styles.accent} />
           <Logo />
-          <Text style={styles.title}>BAŞARI SERTİFİKASI</Text>
-          <Text style={styles.subtitle}>CERTIFICATE OF ACHIEVEMENT</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
           <Text style={styles.body}>Bu sertifika</Text>
           <Text style={styles.name}>{opts.name}</Text>
           <Text style={styles.body}>
-            adlı kişinin <Text style={styles.course}>{opts.courseTitle}</Text> eğitimini
-            başarıyla tamamladığını belgelemek üzere düzenlenmiştir.
+            adlı kişinin <Text style={styles.course}>{opts.courseTitle}</Text>{" "}
+            {bodySuffix}
           </Text>
           <Text style={styles.brandFooter}>Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy</Text>
 

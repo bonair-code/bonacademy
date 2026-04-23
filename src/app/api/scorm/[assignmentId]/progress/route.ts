@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
+import { finalizeScormCompletion } from "@/lib/scorm/finalizeCompletion";
 
 /**
  * Inspect the SCORM CMI payload for any completion signal.
@@ -55,15 +56,8 @@ export async function POST(
     (a.status === "PENDING" || a.status === "IN_PROGRESS") &&
     cmiIndicatesCompletion(body.cmi)
   ) {
-    await prisma.assignment.update({
-      where: { id: a.id },
-      data: { status: "SCORM_COMPLETED" },
-    });
-    await prisma.attempt.updateMany({
-      where: { assignmentId: a.id, type: "SCORM", finishedAt: null },
-      data: { finishedAt: new Date() },
-    });
-    return NextResponse.json({ ok: true, completed: true });
+    const result = await finalizeScormCompletion(a.id);
+    return NextResponse.json({ ok: true, completed: true, ...result });
   }
 
   return NextResponse.json({ ok: true });

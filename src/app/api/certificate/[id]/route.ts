@@ -15,18 +15,42 @@ export async function GET(
     where: { id },
     include: {
       user: true,
-      assignment: { include: { plan: { include: { course: true } } } },
+      assignment: {
+        include: {
+          examAttempts: { where: { passed: true }, take: 1 },
+          plan: {
+            include: {
+              course: {
+                include: {
+                  questionBank: {
+                    include: { _count: { select: { questions: true } } },
+                  },
+                  exam: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   });
   if (!cert) return new NextResponse("Not found", { status: 404 });
   if (viewer.role !== "ADMIN" && cert.userId !== viewer.id) {
     return new NextResponse("Forbidden", { status: 403 });
   }
+  // Sınav geçtiyse → başarı; sınav hiç tanımlı değilse → katılım.
+  const hasExam =
+    !!cert.assignment.plan.course.exam &&
+    (cert.assignment.plan.course.questionBank?._count.questions ?? 0) > 0;
+  const passedExam = cert.assignment.examAttempts.length > 0;
+  const kind: "achievement" | "participation" =
+    hasExam && passedExam ? "achievement" : "participation";
   const pdf = await renderCertificatePdf({
     name: cert.user.name,
     courseTitle: cert.assignment.plan.course.title,
     issuedAt: cert.issuedAt,
     serialNo: cert.serialNo,
+    kind,
   });
   return new NextResponse(new Uint8Array(pdf as unknown as ArrayBuffer), {
     headers: {
