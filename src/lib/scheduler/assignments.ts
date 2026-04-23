@@ -29,13 +29,10 @@ export async function materializeAssignmentsForPlan(planId: string, userIds: str
     where: { id: planId },
     include: { course: { select: { currentRevision: true } } },
   });
-  // İlk döngü için planın orijinal son tarihini kullan. Ama plan geçmişte
-  // başladı ve son tarih çoktan geçtiyse (sonradan eklenen/ geriye dönük
-  // yetişen kullanıcılar), onlara bugünden itibaren dueInDays gün tanı —
-  // aksi halde atama anında "gecikmiş" olarak düşer.
-  const now = new Date();
-  const planDue = addDays(plan.startDate, plan.dueInDays);
-  const due = planDue < now ? addDays(now, plan.dueInDays) : planDue;
+  // Yeni atanan kullanıcıya her zaman bugünden itibaren dueInDays gün tanınır.
+  // Plan'ın orijinal startDate'i rapor/geçmiş amaçlı kalır; atamanın sayacı
+  // kullanıcıya o planın kapsamına girdiği anda başlar.
+  const due = addDays(new Date(), plan.dueInDays);
   const rev = plan.course.currentRevision;
   let created = 0;
   for (const uid of userIds) {
@@ -72,12 +69,9 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
     include: { course: { select: { currentRevision: true } } },
   });
   let enrolled = 0;
-  const now = new Date();
   for (const p of plans) {
-    // Aynı kural: planın son tarihi geçmişteyse yeni kullanıcıya bugünden
-    // itibaren dueInDays gün tanı.
-    const planDue = addDays(p.startDate, p.dueInDays);
-    const due = planDue < now ? addDays(now, p.dueInDays) : planDue;
+    // Kullanıcı plana ne zaman girdiyse sayaç o anda başlar: bugün + dueInDays.
+    const due = addDays(new Date(), p.dueInDays);
     const res = await prisma.assignment.upsert({
       where: { planId_userId_cycleNumber: { planId: p.id, userId, cycleNumber: 1 } },
       update: {},
