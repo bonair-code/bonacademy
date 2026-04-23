@@ -309,6 +309,27 @@ model Certificate {
   pdfPath      String
   issuedAt     DateTime   @default(now())
   serialNo     String     @unique
+  // Veriliş anındaki şablon ayarlarının kopyası. Şablon sonradan değişse
+  // bile sertifika PDF'i orijinal haliyle yeniden üretilir — uyum/yasal
+  // bir gereklilik, "bu tarihte sertifika şu şekildeydi" kanıtı.
+  templateSnapshot Json?
+}
+
+// Kurum genelinde tek satırlı ayar tablosu (id="singleton"). Şu an yalnızca
+// sertifika şablonu tutuluyor; ileride başka kurumsal görünüm ayarları da
+// buraya eklenebilir. Tek satır garantisi uygulama kodunda (upsert) sağlanır.
+model OrganizationSettings {
+  id                         String   @id @default("singleton")
+  certAccentColor            String   @default("#e30613")
+  certTitleAchievement       String   @default("BAŞARI SERTİFİKASI")
+  certTitleParticipation     String   @default("KATILIM SERTİFİKASI")
+  certSubtitleAchievement    String   @default("CERTIFICATE OF ACHIEVEMENT")
+  certSubtitleParticipation  String   @default("CERTIFICATE OF PARTICIPATION")
+  certBodyAchievement        String   @default("eğitimini başarıyla tamamladığını belgelemek üzere düzenlenmiştir.")
+  certBodyParticipation      String   @default("eğitimine katıldığını belgelemek üzere düzenlenmiştir.")
+  certFooterLine             String   @default("Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy")
+  updatedAt                  DateTime @updatedAt
+  updatedById                String?
 }
 
 model AppOption {

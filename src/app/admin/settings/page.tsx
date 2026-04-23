@@ -2,6 +2,13 @@ import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { revalidatePath } from "next/cache";
+import { audit } from "@/lib/audit";
+import {
+  DEFAULT_CERTIFICATE_TEMPLATE,
+  TEMPLATE_FIELD_LIMITS,
+  isValidHexColor,
+  loadCurrentCertificateTemplate,
+} from "@/lib/certificate/template";
 
 const OPTION_CATEGORIES: { key: string; title: string; placeholder: string; defaults: string[] }[] = [
   {
@@ -130,11 +137,87 @@ async function deleteAppOption(formData: FormData) {
   revalidatePath("/admin/settings");
 }
 
+async function saveCertificateTemplate(formData: FormData) {
+  "use server";
+  const admin = await requireRole("ADMIN");
+
+  const get = (k: string, fallback: string, max: number) => {
+    const v = String(formData.get(k) ?? "").trim();
+    if (!v) return fallback;
+    return v.slice(0, max);
+  };
+
+  const accent = String(formData.get("certAccentColor") ?? "").trim();
+  const certAccentColor = isValidHexColor(accent)
+    ? accent
+    : DEFAULT_CERTIFICATE_TEMPLATE.accentColor;
+
+  const data = {
+    certAccentColor,
+    certTitleAchievement: get(
+      "certTitleAchievement",
+      DEFAULT_CERTIFICATE_TEMPLATE.titleAchievement,
+      TEMPLATE_FIELD_LIMITS.title
+    ),
+    certTitleParticipation: get(
+      "certTitleParticipation",
+      DEFAULT_CERTIFICATE_TEMPLATE.titleParticipation,
+      TEMPLATE_FIELD_LIMITS.title
+    ),
+    certSubtitleAchievement: get(
+      "certSubtitleAchievement",
+      DEFAULT_CERTIFICATE_TEMPLATE.subtitleAchievement,
+      TEMPLATE_FIELD_LIMITS.subtitle
+    ),
+    certSubtitleParticipation: get(
+      "certSubtitleParticipation",
+      DEFAULT_CERTIFICATE_TEMPLATE.subtitleParticipation,
+      TEMPLATE_FIELD_LIMITS.subtitle
+    ),
+    certBodyAchievement: get(
+      "certBodyAchievement",
+      DEFAULT_CERTIFICATE_TEMPLATE.bodyAchievement,
+      TEMPLATE_FIELD_LIMITS.body
+    ),
+    certBodyParticipation: get(
+      "certBodyParticipation",
+      DEFAULT_CERTIFICATE_TEMPLATE.bodyParticipation,
+      TEMPLATE_FIELD_LIMITS.body
+    ),
+    certFooterLine: get(
+      "certFooterLine",
+      DEFAULT_CERTIFICATE_TEMPLATE.footerLine,
+      TEMPLATE_FIELD_LIMITS.footer
+    ),
+    updatedById: admin.id,
+  };
+
+  // Before snapshot (audit için).
+  const before = await prisma.organizationSettings.findUnique({
+    where: { id: "singleton" },
+  });
+
+  await prisma.organizationSettings.upsert({
+    where: { id: "singleton" },
+    update: data,
+    create: { id: "singleton", ...data },
+  });
+
+  await audit({
+    actorId: admin.id,
+    action: "certificate.template.update",
+    entity: "OrganizationSettings",
+    entityId: "singleton",
+    metadata: { before: before ?? null, after: data },
+  });
+  revalidatePath("/admin/settings");
+}
+
 export default async function SettingsPage() {
   const user = await requireRole("ADMIN");
   await ensureDefaults();
 
-  const [departments, jobTitles, options] = await Promise.all([
+  const [departments, jobTitles, options, certTemplate] = await Promise.all([
     prisma.department.findMany({
       include: { _count: { select: { users: true } } },
       orderBy: { name: "asc" },
@@ -144,6 +227,7 @@ export default async function SettingsPage() {
       orderBy: { name: "asc" },
     }),
     prisma.appOption.findMany({ orderBy: [{ category: "asc" }, { sortOrder: "asc" }] }),
+    loadCurrentCertificateTemplate(),
   ]);
 
   const grouped = new Map<string, typeof options>();
@@ -262,6 +346,128 @@ export default async function SettingsPage() {
         buradaki etiketler açılır menülerde görünecek ad/sıra düzenlemesi içindir. Yeni bir rol veya
         tekrar aralığı türü eklenmek istenirse yazılım güncellemesi gerekir.
       </p>
+
+      {/* Sertifika şablonu */}
+      <section className="card p-5 mt-8">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+          <h2 className="font-semibold">Sertifika Şablonu</h2>
+          <div className="flex gap-2">
+            <a
+              href="/api/admin/certificate-template/preview"
+              target="_blank"
+              rel="noopener"
+              className="btn-secondary text-xs"
+            >
+              Mevcut şablonu önizle (PDF)
+            </a>
+          </div>
+        </div>
+        <p className="text-xs text-slate-500 mb-4">
+          Buradan değiştirilen başlık, renk ve metinler <b>bundan sonra üretilecek</b>{" "}
+          sertifikalarda görünür. Daha önce verilmiş sertifikalar, veriliş anındaki
+          şablonla dondurulur ve yeniden üretildiğinde orijinal haliyle çıkar (yasal
+          kanıt bütünlüğü). Sadece ADMIN bu alanı düzenleyebilir.
+        </p>
+
+        <form action={saveCertificateTemplate} className="grid md:grid-cols-2 gap-4">
+          <label className="block text-sm md:col-span-2">
+            <span className="block text-slate-600 mb-1">Aksen Rengi (HEX)</span>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                name="certAccentColor"
+                defaultValue={certTemplate.accentColor}
+                className="h-10 w-16 rounded border border-slate-300 cursor-pointer"
+              />
+              <span className="text-xs text-slate-500">
+                Sertifikanın üstündeki ince şerit rengi. Varsayılan: {DEFAULT_CERTIFICATE_TEMPLATE.accentColor}
+              </span>
+            </div>
+          </label>
+
+          <label className="block text-sm">
+            <span className="block text-slate-600 mb-1">Başarı Başlığı (TR)</span>
+            <input
+              name="certTitleAchievement"
+              defaultValue={certTemplate.titleAchievement}
+              maxLength={TEMPLATE_FIELD_LIMITS.title}
+              className="input w-full"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="block text-slate-600 mb-1">Katılım Başlığı (TR)</span>
+            <input
+              name="certTitleParticipation"
+              defaultValue={certTemplate.titleParticipation}
+              maxLength={TEMPLATE_FIELD_LIMITS.title}
+              className="input w-full"
+            />
+          </label>
+
+          <label className="block text-sm">
+            <span className="block text-slate-600 mb-1">Başarı Alt Başlığı (EN)</span>
+            <input
+              name="certSubtitleAchievement"
+              defaultValue={certTemplate.subtitleAchievement}
+              maxLength={TEMPLATE_FIELD_LIMITS.subtitle}
+              className="input w-full"
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="block text-slate-600 mb-1">Katılım Alt Başlığı (EN)</span>
+            <input
+              name="certSubtitleParticipation"
+              defaultValue={certTemplate.subtitleParticipation}
+              maxLength={TEMPLATE_FIELD_LIMITS.subtitle}
+              className="input w-full"
+            />
+          </label>
+
+          <label className="block text-sm md:col-span-2">
+            <span className="block text-slate-600 mb-1">
+              Başarı Gövde Metni (&ldquo;… [KURS ADI]&rdquo; sonrası)
+            </span>
+            <textarea
+              name="certBodyAchievement"
+              defaultValue={certTemplate.bodyAchievement}
+              maxLength={TEMPLATE_FIELD_LIMITS.body}
+              rows={2}
+              className="input w-full"
+            />
+          </label>
+          <label className="block text-sm md:col-span-2">
+            <span className="block text-slate-600 mb-1">
+              Katılım Gövde Metni (&ldquo;… [KURS ADI]&rdquo; sonrası)
+            </span>
+            <textarea
+              name="certBodyParticipation"
+              defaultValue={certTemplate.bodyParticipation}
+              maxLength={TEMPLATE_FIELD_LIMITS.body}
+              rows={2}
+              className="input w-full"
+            />
+          </label>
+
+          <label className="block text-sm md:col-span-2">
+            <span className="block text-slate-600 mb-1">Alt Bilgi Satırı</span>
+            <input
+              name="certFooterLine"
+              defaultValue={certTemplate.footerLine}
+              maxLength={TEMPLATE_FIELD_LIMITS.footer}
+              className="input w-full"
+            />
+          </label>
+
+          <div className="md:col-span-2 flex items-center gap-3">
+            <button type="submit" className="btn-primary">
+              Kaydet
+            </button>
+            <span className="text-xs text-slate-500">
+              Kaydettikten sonra &quot;Önizle&quot; butonu yeni şablonu gösterir.
+            </span>
+          </div>
+        </form>
+      </section>
     </Shell>
   );
 }

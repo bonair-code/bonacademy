@@ -21,7 +21,8 @@ export type AuditAction =
   | "question.bulk.import"
   | "question.create"
   | "question.delete"
-  | "revision.create";
+  | "revision.create"
+  | "certificate.template.update";
 
 // Audit yazımı silent fail — kritik işin sonrasında çağrılır, hata çalışmayı
 // durdurmamalı. Yine de console'a düşer ki izlensin.

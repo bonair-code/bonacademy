@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { renderCertificatePdf } from "@/lib/certificate/pdf";
+import {
+  loadTemplateFromSnapshot,
+  loadCurrentCertificateTemplate,
+} from "@/lib/certificate/template";
 
 export const runtime = "nodejs";
 
@@ -46,6 +50,12 @@ export async function GET(
   const passedExam = cert.assignment.examAttempts.length > 0;
   const kind: "achievement" | "participation" =
     hasExam && passedExam ? "achievement" : "participation";
+  // Şablonu ne diye seçiyoruz: veriliş anındaki snapshot varsa onu — sertifika
+  // gelecekteki şablon değişiminden etkilenmemeli. Snapshot yoksa (eski kayıt)
+  // canlı ayarlara düş.
+  const template = cert.templateSnapshot
+    ? loadTemplateFromSnapshot(cert.templateSnapshot)
+    : await loadCurrentCertificateTemplate();
   const pdf = await renderCertificatePdf({
     name: cert.user.name,
     courseTitle: cert.assignment.plan.course.title,
@@ -54,6 +64,7 @@ export async function GET(
     kind,
     ownerManagerName: cert.assignment.plan.course.ownerManager?.name ?? null,
     verifyUrl: `${process.env.APP_URL || "http://localhost:3000"}/verify/${cert.serialNo}`,
+    template,
   });
   return new NextResponse(new Uint8Array(pdf as unknown as ArrayBuffer), {
     headers: {

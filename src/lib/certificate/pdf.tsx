@@ -13,6 +13,10 @@ import {
 } from "@react-pdf/renderer";
 import QRCode from "qrcode";
 import { fmtTrDate } from "@/lib/dates";
+import {
+  DEFAULT_CERTIFICATE_TEMPLATE,
+  type CertificateTemplate,
+} from "./template";
 
 // Türkçe karakterler (ş, ğ, ı, İ, Ş, Ğ, ü, ö, ç) Helvetica built-in fontunda
 // yoktu ve PDF'te bozuk/üst üste görünüyordu. public/fonts içine Roboto'nun
@@ -69,7 +73,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 8,
-    backgroundColor: "#e30613",
+    // Aksen rengi render anında template.accentColor ile override edilir.
+    backgroundColor: DEFAULT_CERTIFICATE_TEMPLATE.accentColor,
   },
   logoRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginTop: 6, marginBottom: 18 },
   logoText: { fontSize: 32, fontFamily: "Roboto", fontWeight: "bold", color: "#1a1a1a", letterSpacing: 2 },
@@ -171,7 +176,11 @@ export async function renderCertificatePdf(opts: {
   kind?: CertificateKind;
   ownerManagerName?: string | null;
   verifyUrl?: string;
+  // Opsiyonel: verilmezse fabrika default'u kullanılır. Çağıran taraf (API
+  // route) ya Certificate.templateSnapshot'tan ya da canlı ayarlardan okur.
+  template?: CertificateTemplate;
 }): Promise<Buffer> {
+  const tpl = opts.template ?? DEFAULT_CERTIFICATE_TEMPLATE;
   registerFonts();
   // QR kodu: doğrulama sayfasına işaret eder. PNG data URL üretiyoruz;
   // @react-pdf/renderer <Image src="data:image/png;base64,..."> destekler.
@@ -192,20 +201,18 @@ export async function renderCertificatePdf(opts: {
   }
   const kind = opts.kind ?? "achievement";
   const title =
-    kind === "participation" ? "KATILIM SERTİFİKASI" : "BAŞARI SERTİFİKASI";
+    kind === "participation" ? tpl.titleParticipation : tpl.titleAchievement;
   const subtitle =
     kind === "participation"
-      ? "CERTIFICATE OF PARTICIPATION"
-      : "CERTIFICATE OF ACHIEVEMENT";
+      ? tpl.subtitleParticipation
+      : tpl.subtitleAchievement;
   const bodySuffix =
-    kind === "participation"
-      ? "eğitimine katıldığını belgelemek üzere düzenlenmiştir."
-      : "eğitimini başarıyla tamamladığını belgelemek üzere düzenlenmiştir.";
+    kind === "participation" ? tpl.bodyParticipation : tpl.bodyAchievement;
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         <View style={styles.border}>
-          <View style={styles.accent} />
+          <View style={[styles.accent, { backgroundColor: tpl.accentColor }]} />
           <Logo />
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
@@ -215,7 +222,7 @@ export async function renderCertificatePdf(opts: {
             adlı kişinin <Text style={styles.course}>{opts.courseTitle}</Text>{" "}
             {bodySuffix}
           </Text>
-          <Text style={styles.brandFooter}>Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy</Text>
+          <Text style={styles.brandFooter}>{tpl.footerLine}</Text>
 
           <View style={styles.footerRow}>
             <Text>Tarih: {fmtTrDate(opts.issuedAt)}</Text>
