@@ -70,6 +70,21 @@ async function saveCourseMeta(formData: FormData) {
   if (!title) return;
 
   const existing = await prisma.course.findUniqueOrThrow({ where: { id: courseId } });
+
+  // Başlık başka bir kursla çakışmasın (büyük/küçük harf duyarsız).
+  if (existing.title.toLowerCase() !== title.toLowerCase()) {
+    const duplicate = await prisma.course.findFirst({
+      where: {
+        id: { not: courseId },
+        title: { equals: title, mode: "insensitive" },
+      },
+      select: { title: true },
+    });
+    if (duplicate) {
+      throw new Error(`Bu isimde bir eğitim zaten var: "${duplicate.title}"`);
+    }
+  }
+
   const metaChanged =
     existing.title !== title ||
     (existing.description ?? "") !== description ||

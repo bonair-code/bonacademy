@@ -12,6 +12,16 @@ async function createCourse(formData: FormData) {
   await requireRole("ADMIN");
   const title = String(formData.get("title") || "").trim();
   if (!title) return;
+  // Aynı isimde ikinci bir eğitim oluşturulmasın (büyük/küçük harf
+  // duyarsız). Böylece sonradan plan oluştururken aynı ada sahip iki
+  // kurs arasında karışıklık yaşanmaz.
+  const duplicate = await prisma.course.findFirst({
+    where: { title: { equals: title, mode: "insensitive" } },
+    select: { id: true, title: true },
+  });
+  if (duplicate) {
+    throw new Error(`Bu isimde bir eğitim zaten var: "${duplicate.title}"`);
+  }
   const course = await prisma.course.create({ data: { title } });
   revalidatePath("/admin/courses");
   // Yeni oluşturulan kursun detay sayfasına yönlendir ki admin hemen
