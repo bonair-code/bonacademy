@@ -7,6 +7,7 @@ import {
   resolvePlanTargets,
 } from "@/lib/scheduler/assignments";
 import type { Recurrence } from "@prisma/client";
+import Link from "next/link";
 
 async function createPlan(formData: FormData) {
   "use server";
@@ -108,8 +109,21 @@ export default async function AdminPlans() {
         <h2 className="font-semibold text-slate-900">Yeni Plan</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
-            Kurs
+            <div className="flex items-center justify-between">
+              <span>Kurs</span>
+              <Link
+                href="/admin/courses"
+                className="text-[11px] text-teal-700 hover:underline"
+              >
+                + Yeni kurs oluştur
+              </Link>
+            </div>
             <select name="courseId" required className="input block w-full">
+              {courses.length === 0 && (
+                <option value="" disabled>
+                  Henüz kurs yok — önce kurs ekleyin
+                </option>
+              )}
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.title}
