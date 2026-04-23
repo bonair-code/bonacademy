@@ -6,10 +6,6 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { deletePackage } from "@/lib/scorm/storage";
 import { ConfirmButton } from "@/components/ConfirmButton";
-import {
-  createCourseRevision,
-  ensureBaselineRevision,
-} from "@/lib/courseRevisions";
 
 async function createCourse(formData: FormData) {
   "use server";
@@ -21,39 +17,6 @@ async function createCourse(formData: FormData) {
   // Yeni oluşturulan kursun detay sayfasına yönlendir ki admin hemen
   // SCORM paketi yükleyip soru bankası ekleyebilsin.
   redirect(`/admin/courses/${course.id}`);
-}
-
-async function quickUpdateCourse(formData: FormData) {
-  "use server";
-  const admin = await requireRole("ADMIN");
-  const courseId = String(formData.get("id"));
-  const title = String(formData.get("title") || "").trim();
-  const description = String(formData.get("description") || "").trim();
-  const passingScore = Number(formData.get("passingScore") || 70);
-  if (!title) return;
-
-  const existing = await prisma.course.findUniqueOrThrow({
-    where: { id: courseId },
-  });
-  const changed =
-    existing.title !== title ||
-    (existing.description ?? "") !== description ||
-    existing.passingScore !== passingScore;
-
-  if (!changed) return;
-
-  // Eski sürümü revision tablosuna düşür — geçmiş atamalar "Atama: v{N}"
-  // rozetiyle hangi içeriği almış olduğunu görmeye devam eder.
-  await ensureBaselineRevision(existing, admin.id);
-
-  await prisma.course.update({
-    where: { id: courseId },
-    data: { title, description: description || null, passingScore },
-  });
-
-  await createCourseRevision(courseId, admin.id, "Meta güncellendi (liste)");
-  revalidatePath("/admin/courses");
-  revalidatePath(`/admin/courses/${courseId}`);
 }
 
 async function deleteCourse(formData: FormData) {
@@ -109,85 +72,35 @@ export default async function AdminCourses() {
           <p className="text-sm text-slate-500">Henüz kurs yok.</p>
         )}
         {courses.map((c) => (
-          <details key={c.id} className="card group">
-            <summary className="flex items-center justify-between gap-3 p-4 cursor-pointer list-none select-none hover:bg-slate-50/70 rounded-xl">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <div className="font-medium text-slate-900 truncate">
-                    {c.title}
-                  </div>
-                  <span className="badge-teal text-[10px] shrink-0">
-                    v{c.currentRevision}
-                  </span>
+          <div
+            key={c.id}
+            className="card flex items-center justify-between gap-3 p-4 hover:bg-slate-50/70 transition"
+          >
+            <Link
+              href={`/admin/courses/${c.id}`}
+              className="flex-1 min-w-0"
+            >
+              <div className="flex items-center gap-2">
+                <div className="font-medium text-slate-900 truncate">
+                  {c.title}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">
-                  {c.scormPackagePath ? "SCORM yüklü" : "SCORM bekleniyor"}
-                  {c._count.plans > 0 && ` · ${c._count.plans} plan`}
-                </div>
+                <span className="badge-teal text-[10px] shrink-0">
+                  v{c.currentRevision}
+                </span>
               </div>
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180 shrink-0"
+              <div className="text-xs text-slate-500 mt-0.5">
+                {c.scormPackagePath ? "SCORM yüklü" : "SCORM bekleniyor"}
+                {c._count.plans > 0 && ` · ${c._count.plans} plan`}
+              </div>
+            </Link>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href={`/admin/courses/${c.id}`}
+                className="btn-secondary text-xs"
               >
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </summary>
-            <div className="border-t border-slate-100 p-4 bg-slate-50/50 space-y-3">
-              <form action={quickUpdateCourse} className="space-y-3">
-                <input type="hidden" name="id" value={c.id} />
-                <label className="text-sm block">
-                  Başlık
-                  <input
-                    name="title"
-                    defaultValue={c.title}
-                    className="input block w-full"
-                    required
-                  />
-                </label>
-                <label className="text-sm block">
-                  Açıklama
-                  <textarea
-                    name="description"
-                    defaultValue={c.description ?? ""}
-                    rows={2}
-                    className="input block w-full"
-                  />
-                </label>
-                <label className="text-sm block w-40">
-                  Geçme notu (%)
-                  <input
-                    name="passingScore"
-                    type="number"
-                    min={0}
-                    max={100}
-                    defaultValue={c.passingScore}
-                    className="input block w-full"
-                  />
-                </label>
-                <p className="text-xs text-slate-600">
-                  <strong>Not:</strong> Kaydettiğinde yeni bir sürüm (revision)
-                  oluşur; geçmiş atamalar, sertifikalar ve sınav denemeleri hangi
-                  sürümde yapıldıysa o sürümle işaretli kalır. Aktif öğrenciler
-                  kaldıkları yerden devam eder. SCORM paketi yüklemek, soru
-                  eklemek veya revizyon geçmişini görmek için
-                  <strong> detay sayfasını</strong> kullanın.
-                </p>
-                <div className="flex items-center gap-2">
-                  <button className="btn-primary">Değişiklikleri Kaydet</button>
-                  <Link
-                    href={`/admin/courses/${c.id}`}
-                    className="btn-secondary text-xs"
-                  >
-                    Detay Sayfası →
-                  </Link>
-                </div>
-              </form>
-              <form action={deleteCourse} className="pt-2 border-t border-slate-200">
+                Düzenle →
+              </Link>
+              <form action={deleteCourse}>
                 <input type="hidden" name="id" value={c.id} />
                 <ConfirmButton
                   className="text-xs text-red-600 hover:text-red-700 hover:underline px-2 py-1"
@@ -197,11 +110,11 @@ export default async function AdminCourses() {
                       : `"${c.title}" kursu silinsin mi?`
                   }
                 >
-                  Kursu sil
+                  Sil
                 </ConfirmButton>
               </form>
             </div>
-          </details>
+          </div>
         ))}
       </div>
     </Shell>
