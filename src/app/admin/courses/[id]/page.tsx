@@ -7,25 +7,6 @@ import { UploadScormForm } from "./UploadScormForm";
 import { BulkQuestionImport } from "./BulkQuestionImport";
 import { createCourseRevision, ensureBaselineRevision } from "@/lib/courseRevisions";
 
-async function saveExam(formData: FormData) {
-  "use server";
-  await requireRole("ADMIN");
-  const courseId = String(formData.get("courseId"));
-  const questionCount = Number(formData.get("questionCount") || 10);
-  const passingScore = Number(formData.get("passingScore") || 70);
-  await prisma.exam.upsert({
-    where: { courseId },
-    update: { questionCount, passingScore },
-    create: { courseId, questionCount, passingScore },
-  });
-  await prisma.questionBank.upsert({
-    where: { courseId },
-    update: {},
-    create: { courseId },
-  });
-  revalidatePath(`/admin/courses/${courseId}`);
-}
-
 async function addQuestion(formData: FormData) {
   "use server";
   await requireRole("ADMIN");
@@ -84,16 +65,17 @@ async function saveCourseMeta(formData: FormData) {
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
   const passingScore = Number(formData.get("passingScore") || 70);
+  const questionCount = Number(formData.get("questionCount") || 10);
   const changeNote = String(formData.get("changeNote") || "").trim() || undefined;
   if (!title) return;
 
   const existing = await prisma.course.findUniqueOrThrow({ where: { id: courseId } });
-  const changed =
+  const metaChanged =
     existing.title !== title ||
     (existing.description ?? "") !== description ||
     existing.passingScore !== passingScore;
 
-  if (changed) {
+  if (metaChanged) {
     await ensureBaselineRevision(existing, admin.id);
   }
 
@@ -102,7 +84,19 @@ async function saveCourseMeta(formData: FormData) {
     data: { title, description: description || null, passingScore },
   });
 
-  if (changed) {
+  // Sınav ayarı da aynı formda: kurs kaydı yoksa varsayılanla oluştur, varsa güncelle.
+  await prisma.questionBank.upsert({
+    where: { courseId },
+    update: {},
+    create: { courseId },
+  });
+  await prisma.exam.upsert({
+    where: { courseId },
+    update: { questionCount, passingScore },
+    create: { courseId, questionCount, passingScore },
+  });
+
+  if (metaChanged) {
     await createCourseRevision(
       courseId,
       admin.id,
@@ -152,31 +146,18 @@ export default async function CourseDetail({
       subtitle={`Mevcut sürüm: v${course.currentRevision}`}
     >
       <section className="card p-4 mb-6">
-        <h2 className="font-semibold mb-2">Kurs Bilgileri</h2>
+        <h2 className="font-semibold mb-3">Kurs Bilgileri ve Sınav Ayarları</h2>
         <form action={saveCourseMeta} className="space-y-3">
           <input type="hidden" name="courseId" value={course.id} />
-          <div className="grid md:grid-cols-2 gap-3">
-            <label className="text-sm">
-              Başlık
-              <input
-                name="title"
-                defaultValue={course.title}
-                required
-                className="input mt-1"
-              />
-            </label>
-            <label className="text-sm">
-              Geçme Skoru (%)
-              <input
-                name="passingScore"
-                type="number"
-                defaultValue={course.passingScore}
-                min={0}
-                max={100}
-                className="input mt-1"
-              />
-            </label>
-          </div>
+          <label className="text-sm block">
+            Başlık
+            <input
+              name="title"
+              defaultValue={course.title}
+              required
+              className="input mt-1 w-full"
+            />
+          </label>
           <label className="text-sm block">
             Açıklama
             <textarea
@@ -186,8 +167,31 @@ export default async function CourseDetail({
               className="input mt-1 w-full"
             />
           </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="text-sm">
+              Geçme Skoru (%)
+              <input
+                name="passingScore"
+                type="number"
+                defaultValue={course.exam?.passingScore ?? course.passingScore}
+                min={0}
+                max={100}
+                className="input mt-1 w-full"
+              />
+            </label>
+            <label className="text-sm">
+              Sınav soru sayısı
+              <input
+                name="questionCount"
+                type="number"
+                defaultValue={course.exam?.questionCount ?? 10}
+                min={1}
+                className="input mt-1 w-full"
+              />
+            </label>
+          </div>
           <label className="text-sm block">
-            Revizyon Notu (değişiklik varsa oluşturulur) — isteğe bağlı
+            Revizyon notu (değişiklik varsa oluşturulur) — isteğe bağlı
             <input
               name="changeNote"
               placeholder="örn. 'Başlık güncellendi'"
@@ -207,32 +211,6 @@ export default async function CourseDetail({
             : "Yok"}
         </p>
         <UploadScormForm courseId={course.id} />
-      </section>
-
-      <section className="card p-4 mb-6">
-        <h2 className="font-semibold mb-2">Sınav Ayarları</h2>
-        <form action={saveExam} className="flex gap-2 items-end">
-          <input type="hidden" name="courseId" value={course.id} />
-          <label className="text-sm">
-            Soru sayısı
-            <input
-              name="questionCount"
-              type="number"
-              defaultValue={course.exam?.questionCount ?? 10}
-              className="input block mt-1"
-            />
-          </label>
-          <label className="text-sm">
-            Geçme %
-            <input
-              name="passingScore"
-              type="number"
-              defaultValue={course.exam?.passingScore ?? 70}
-              className="input block mt-1"
-            />
-          </label>
-          <button className="btn-primary">Kaydet</button>
-        </form>
       </section>
 
       {/* Revision History */}
