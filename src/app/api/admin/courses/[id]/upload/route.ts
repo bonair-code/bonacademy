@@ -7,6 +7,7 @@ import {
   ensureBaselineRevision,
 } from "@/lib/courseRevisions";
 import { deletePackage } from "@/lib/scorm/storage";
+import { audit } from "@/lib/audit";
 
 export const runtime = "nodejs";
 
@@ -69,6 +70,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await deletePackage(previousPackagePath);
     } catch {}
   }
+
+  await audit({
+    actorId: admin.id,
+    action: "course.scorm.upload",
+    entity: "Course",
+    entityId: id,
+    metadata: {
+      fileName: file.name,
+      sizeBytes: file.size,
+      version: result.version,
+      packagePath: result.packagePath,
+      previousPackagePath,
+    },
+  });
 
   return NextResponse.json(course);
 }

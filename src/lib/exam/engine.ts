@@ -34,13 +34,63 @@ export function scoreExam(
 }
 
 /**
+ * Sınav başlangıcında (GET /exam/[assignmentId]) o anki attemptNo için aktif
+ * bir ExamSession var mı bak; yoksa rastgele soru kümesini seçip snapshot'la.
+ *
+ * Bu fonksiyon idempotenttir: aynı attemptNo için tekrar çağrılırsa mevcut
+ * questionIds'ı döndürür — yani kullanıcı sayfayı yenilerse aynı soru
+ * setini görür. Farklı soru seti için yeni attemptNo (yeni ExamAttempt)
+ * gerekir.
+ */
+export async function ensureExamSession(opts: {
+  assignmentId: string;
+  attemptNo: number; // 1 tabanlı; examAttempts.length + 1
+  bankQuestionIds: string[];
+  questionCount: number;
+  shuffle: boolean;
+}): Promise<{ id: string; questionIds: string[] }> {
+  const existing = await prisma.examSession.findUnique({
+    where: {
+      assignmentId_attemptNo: {
+        assignmentId: opts.assignmentId,
+        attemptNo: opts.attemptNo,
+      },
+    },
+  });
+  if (existing && !existing.submittedAt) {
+    return { id: existing.id, questionIds: existing.questionIds };
+  }
+  // Yeni sorular seç. questionCount bankadan büyükse hepsini kullan.
+  const picked = pickQuestions(
+    opts.bankQuestionIds,
+    Math.min(opts.questionCount, opts.bankQuestionIds.length),
+    opts.shuffle
+  );
+  // submittedAt dolu olan eski kayıt varsa üzerine yazma — başka attemptNo'dur.
+  // attemptNo zaten bu deneme için benzersiz olduğundan create çalışır.
+  const created = await prisma.examSession.create({
+    data: {
+      assignmentId: opts.assignmentId,
+      attemptNo: opts.attemptNo,
+      questionIds: picked,
+    },
+  });
+  return { id: created.id, questionIds: created.questionIds };
+}
+
+/**
  * After submitting an exam, decide assignment outcome:
  * - Passed → EXAM_PASSED → issue cert elsewhere
  * - Failed: if attemptNo >= MAX → RETAKE_REQUIRED (user must redo SCORM)
  * - Failed otherwise → EXAM_FAILED (can retry exam)
+ *
+ * Güvenlik notu: Puanlama istemciden gelen `answers` yapısına değil, server'da
+ * saklanan ExamSession.questionIds snapshot'ına göre yapılır. Gönderilmeyen
+ * sorular `scoreExam`'de 0 puan alır (picked.size === 0 ≠ correctIds.size).
  */
 export async function submitExam(opts: {
   assignmentId: string;
+  sessionId?: string;
   answers: Record<string, string[]>;
 }) {
   const a = await prisma.assignment.findUnique({
@@ -64,10 +114,36 @@ export async function submitExam(opts: {
   const bank = a.plan.course.questionBank;
   if (!exam || !bank) throw new Error("Sınav tanımlı değil");
 
-  const asked = bank.questions.filter((q) => opts.answers[q.id] !== undefined);
+  const attemptNo = a.examAttempts.length + 1;
+
+  // Bu attempt için aktif session'ı bul. sessionId verildiyse onunla teyit et.
+  const session = await prisma.examSession.findUnique({
+    where: {
+      assignmentId_attemptNo: {
+        assignmentId: a.id,
+        attemptNo,
+      },
+    },
+  });
+  if (!session) {
+    throw new Error(
+      "Sınav oturumu bulunamadı — sayfayı yenileyip sınavı tekrar başlatın."
+    );
+  }
+  if (opts.sessionId && opts.sessionId !== session.id) {
+    throw new Error("Sınav oturumu uyuşmuyor.");
+  }
+  if (session.submittedAt) {
+    throw new Error("Bu sınav zaten gönderilmiş.");
+  }
+
+  // `asked` SERVER snapshot'ından geliyor — istemciye güvenmiyoruz.
+  const askedSet = new Set(session.questionIds);
+  const asked = bank.questions.filter((q) => askedSet.has(q.id));
+
   // Gelen cevapları sanitize et: yalnızca bu sınavda sorulan sorulara ait
   // cevaplar, ve yalnızca o soruya ait gerçek option ID'leri saklanır.
-  // Böylece uydurma/fazla anahtarlar DB'ye sızamaz.
+  // Sorulmayan sorulara gelen cevaplar yok sayılır.
   const sanitized: Record<string, string[]> = {};
   for (const q of asked) {
     const validOptionIds = new Set(q.options.map((o) => o.id));
@@ -77,19 +153,37 @@ export async function submitExam(opts: {
       : [];
     sanitized[q.id] = [...new Set(picked)];
   }
+
   const { score } = scoreExam(asked, sanitized);
   const passed = score >= exam.passingScore;
-  const attemptNo = a.examAttempts.length + 1;
 
-  await prisma.examAttempt.create({
-    data: {
-      assignmentId: a.id,
-      attemptNo,
-      score,
-      passed,
-      answers: sanitized,
-    },
-  });
+  // Session'ı kilitle ve ExamAttempt'i aynı transaction'da oluştur — double
+  // submit yarışına karşı güvence: submittedAt NULL koşullu updateMany + attempt
+  // yaratma. İlk kazanan yazdığı için ikinci submit "zaten gönderilmiş" hatası
+  // alır.
+  try {
+    await prisma.$transaction(async (tx) => {
+      const lock = await tx.examSession.updateMany({
+        where: { id: session.id, submittedAt: null },
+        data: { submittedAt: new Date() },
+      });
+      if (lock.count === 0) {
+        throw new Error("Bu sınav zaten gönderilmiş.");
+      }
+      await tx.examAttempt.create({
+        data: {
+          assignmentId: a.id,
+          attemptNo,
+          score,
+          passed,
+          answers: sanitized,
+        },
+      });
+    });
+  } catch (err) {
+    // attemptNo @@unique ihlali de burada yakalanır.
+    throw err;
+  }
 
   let newStatus: typeof a.status;
   if (passed) newStatus = "EXAM_PASSED";

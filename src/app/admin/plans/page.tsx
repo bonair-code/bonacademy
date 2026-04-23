@@ -9,6 +9,7 @@ import {
 import type { Recurrence } from "@prisma/client";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
+import { audit } from "@/lib/audit";
 
 async function createPlan(formData: FormData) {
   "use server";
@@ -48,12 +49,26 @@ async function createPlan(formData: FormData) {
 
   const targets = await resolvePlanTargets(plan.id, userIds);
   await materializeAssignmentsForPlan(plan.id, targets);
+  await audit({
+    actorId: me.id,
+    action: "plan.create",
+    entity: "TrainingPlan",
+    entityId: plan.id,
+    metadata: {
+      courseId,
+      recurrence,
+      dueInDays,
+      jobTitleIds,
+      explicitUserIds: userIds,
+      targetCount: targets.length,
+    },
+  });
   revalidatePath("/admin/plans");
 }
 
 async function updatePlan(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  const me = await requireRole("ADMIN");
   const planId = String(formData.get("planId"));
   const recurrence = String(formData.get("recurrence")) as Recurrence;
   const dueInDays = Number(formData.get("dueInDays") || 30);
@@ -81,17 +96,30 @@ async function updatePlan(formData: FormData) {
   const targets = await resolvePlanTargets(planId, extraUserIds);
   await materializeAssignmentsForPlan(planId, targets);
 
+  await audit({
+    actorId: me.id,
+    action: "plan.update",
+    entity: "TrainingPlan",
+    entityId: planId,
+    metadata: { recurrence, dueInDays, jobTitleIds, extraUserIds },
+  });
   revalidatePath("/admin/plans");
 }
 
 async function deletePlan(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  const me = await requireRole("ADMIN");
   const planId = String(formData.get("planId"));
   // Cascade sırası: atamalar → TrainingPlanJobTitle → plan.
   await prisma.assignment.deleteMany({ where: { planId } });
   await prisma.trainingPlanJobTitle.deleteMany({ where: { planId } });
   await prisma.trainingPlan.delete({ where: { id: planId } });
+  await audit({
+    actorId: me.id,
+    action: "plan.delete",
+    entity: "TrainingPlan",
+    entityId: planId,
+  });
   revalidatePath("/admin/plans");
 }
 

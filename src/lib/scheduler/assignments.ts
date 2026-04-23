@@ -49,9 +49,16 @@ export async function resolvePlanTargets(planId: string, explicitUserIds: string
     include: { jobTitles: true },
   });
   const jobTitleIds = plan.jobTitles.map((j) => j.jobTitleId);
+  // JobTitle ile otomatik atanan kullanıcılar: yalnızca aktif USER rolü.
+  // MANAGER/ADMIN rolündeki kişiler otomatik kapsama girmez — kurs sahibi
+  // veya yönetici olan kişilere aynı eğitimi otomatik atamak istemiyoruz.
+  // Explicit userIds yine de kabul edilir (admin bilinçli olarak eklemişse).
   const fromJobs = jobTitleIds.length
     ? await prisma.userJobTitle.findMany({
-        where: { jobTitleId: { in: jobTitleIds } },
+        where: {
+          jobTitleId: { in: jobTitleIds },
+          user: { role: "USER", isActive: true },
+        },
         select: { userId: true },
       })
     : [];

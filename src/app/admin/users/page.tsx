@@ -5,10 +5,11 @@ import { revalidatePath } from "next/cache";
 import type { Role } from "@prisma/client";
 import { enrollUserIntoJobTitlePlans } from "@/lib/scheduler/assignments";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
+import { audit } from "@/lib/audit";
 
 async function upsertUser(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN");
   const id = String(formData.get("id") || "");
   const email = String(formData.get("email")).trim().toLowerCase();
   const name = String(formData.get("name")).trim();
@@ -26,6 +27,14 @@ async function upsertUser(formData: FormData) {
     if (err) throw new Error(err);
     passwordHash = await hashPassword(password);
   }
+
+  // Mevcut durumu audit meta için yakala (rol/manager değişimlerini izleyebilmek üzere).
+  const before = id
+    ? await prisma.user.findUnique({
+        where: { id },
+        select: { role: true, managerId: true, departmentId: true, email: true },
+      })
+    : null;
 
   const user = id
     ? await prisma.user.update({
@@ -53,6 +62,50 @@ async function upsertUser(formData: FormData) {
   }
 
   await enrollUserIntoJobTitlePlans(user.id);
+
+  // Rol ve yönetici değişiklikleri hassas: ayrı audit action'larıyla izlenir.
+  if (id && before) {
+    if (before.role !== role) {
+      await audit({
+        actorId: admin.id,
+        action: "user.role.change",
+        entity: "User",
+        entityId: user.id,
+        metadata: { from: before.role, to: role, email },
+      });
+    }
+    if ((before.managerId ?? null) !== (managerId ?? null)) {
+      await audit({
+        actorId: admin.id,
+        action: "user.manager.change",
+        entity: "User",
+        entityId: user.id,
+        metadata: { from: before.managerId, to: managerId, email },
+      });
+    }
+    await audit({
+      actorId: admin.id,
+      action: "user.update",
+      entity: "User",
+      entityId: user.id,
+      metadata: {
+        emailBefore: before.email,
+        emailAfter: email,
+        departmentIdBefore: before.departmentId,
+        departmentIdAfter: departmentId,
+        jobTitleIds,
+        passwordChanged: !!passwordHash,
+      },
+    });
+  } else {
+    await audit({
+      actorId: admin.id,
+      action: "user.create",
+      entity: "User",
+      entityId: user.id,
+      metadata: { email, role, departmentId, managerId, jobTitleIds },
+    });
+  }
   revalidatePath("/admin/users");
 }
 

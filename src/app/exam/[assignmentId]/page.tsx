@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { notFound, redirect } from "next/navigation";
 import { Shell } from "@/components/Shell";
-import { pickQuestions } from "@/lib/exam/engine";
+import { ensureExamSession } from "@/lib/exam/engine";
 import { ExamForm } from "./ExamForm";
 import { ExamAttemptsDrawer } from "@/components/ExamAttemptsDrawer";
 
@@ -60,11 +60,26 @@ export default async function ExamPage({
     );
   }
 
-  const picked = pickQuestions(bank.questions, exam.questionCount, exam.shuffle).map((q) => ({
-    id: q.id,
-    text: q.text,
-    options: q.options.map((o) => ({ id: o.id, text: o.text })),
-  }));
+  // Server-side snapshot: bu denemeye ait soru kümesini ExamSession'a yaz.
+  // Sayfa yenilense de aynı sorular gelir; submit ise bu snapshot'a göre
+  // puanlanır — istemci hiçbir soruyu "atlayarak" puan manipüle edemez.
+  const attemptNo = a.examAttempts.length + 1;
+  const session = await ensureExamSession({
+    assignmentId: a.id,
+    attemptNo,
+    bankQuestionIds: bank.questions.map((q) => q.id),
+    questionCount: exam.questionCount,
+    shuffle: exam.shuffle,
+  });
+  const qById = new Map(bank.questions.map((q) => [q.id, q]));
+  const picked = session.questionIds
+    .map((id) => qById.get(id))
+    .filter((q): q is (typeof bank.questions)[number] => !!q)
+    .map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: q.options.map((o) => ({ id: o.id, text: o.text })),
+    }));
 
   return (
     <Shell user={user}>
@@ -72,7 +87,7 @@ export default async function ExamPage({
       <p className="text-sm text-slate-500 mb-4">
         Geçme notu: %{exam.passingScore}. Deneme: {a.examAttempts.length + 1}/2
       </p>
-      <ExamForm assignmentId={a.id} questions={picked} />
+      <ExamForm assignmentId={a.id} sessionId={session.id} questions={picked} />
       {a.examAttempts.length > 0 && (
         <div className="mt-6">
           <ExamAttemptsDrawer

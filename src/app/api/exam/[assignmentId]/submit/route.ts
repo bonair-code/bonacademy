@@ -15,8 +15,21 @@ export async function POST(
   if (!a || a.userId !== user.id) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 403 });
   }
-  const body = (await req.json()) as { answers: Record<string, string[]> };
-  const result = await submitExam({ assignmentId, answers: body.answers });
+  const body = (await req.json()) as {
+    answers: Record<string, string[]>;
+    sessionId?: string;
+  };
+  let result;
+  try {
+    result = await submitExam({
+      assignmentId,
+      sessionId: body.sessionId,
+      answers: body.answers,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Sınav gönderilemedi";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
   if (result.passed) {
     await issueCertificate(assignmentId);
     await prisma.assignment.update({

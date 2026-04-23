@@ -6,10 +6,11 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { deletePackage } from "@/lib/scorm/storage";
 import { ConfirmButton } from "@/components/ConfirmButton";
+import { audit } from "@/lib/audit";
 
 async function createCourse(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN");
   const title = String(formData.get("title") || "").trim();
   const ownerManagerId = String(formData.get("ownerManagerId") || "").trim();
   if (!title) return;
@@ -36,7 +37,15 @@ async function createCourse(formData: FormData) {
     throw new Error(`Bu isimde bir eğitim zaten var: "${duplicate.title}"`);
   }
   const course = await prisma.course.create({ data: { title, ownerManagerId } });
+  await audit({
+    actorId: admin.id,
+    action: "course.create",
+    entity: "Course",
+    entityId: course.id,
+    metadata: { title, ownerManagerId },
+  });
   revalidatePath("/admin/courses");
+  revalidatePath("/courses");
   // Yeni oluşturulan kursun detay sayfasına yönlendir ki admin hemen
   // SCORM paketi yükleyip soru bankası ekleyebilsin.
   redirect(`/admin/courses/${course.id}`);
@@ -44,11 +53,11 @@ async function createCourse(formData: FormData) {
 
 async function deleteCourse(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN");
   const id = String(formData.get("id"));
   const course = await prisma.course.findUnique({
     where: { id },
-    select: { scormPackagePath: true },
+    select: { scormPackagePath: true, title: true },
   });
   if (!course) return;
   const plans = await prisma.trainingPlan.findMany({
@@ -67,9 +76,19 @@ async function deleteCourse(formData: FormData) {
   if (course.scormPackagePath) {
     try {
       await deletePackage(course.scormPackagePath);
-    } catch {}
+    } catch (err) {
+      console.error("[course.delete] blob cleanup failed", id, err);
+    }
   }
+  await audit({
+    actorId: admin.id,
+    action: "course.delete",
+    entity: "Course",
+    entityId: id,
+    metadata: { title: course.title, planCount: planIds.length },
+  });
   revalidatePath("/admin/courses");
+  revalidatePath("/courses");
 }
 
 export default async function AdminCourses() {

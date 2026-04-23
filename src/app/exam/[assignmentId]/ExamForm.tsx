@@ -7,9 +7,11 @@ type Q = { id: string; text: string; options: { id: string; text: string }[] };
 
 export function ExamForm({
   assignmentId,
+  sessionId,
   questions,
 }: {
   assignmentId: string;
+  sessionId: string;
   questions: Q[];
 }) {
   const router = useRouter();
@@ -33,7 +35,7 @@ export function ExamForm({
     const res = await fetch(`/api/exam/${assignmentId}/submit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ answers: payload }),
+      body: JSON.stringify({ sessionId, answers: payload }),
     });
     const data = await res.json();
     setBusy(false);

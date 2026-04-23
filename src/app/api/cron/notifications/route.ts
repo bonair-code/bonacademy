@@ -18,14 +18,21 @@ export async function POST(req: NextRequest) {
 }
 
 async function handle(req: NextRequest) {
+  // CRON_SECRET ZORUNLU. Env tanımlı değilse endpoint kapalı — aksi hâlde
+  // herkes cron tetikleyip mail/DB yükü yaratabilir.
   const expected = process.env.CRON_SECRET;
-  if (expected) {
-    const auth = req.headers.get("authorization");
-    // Vercel cron: "Bearer <CRON_SECRET>"
-    const provided = auth?.replace(/^Bearer\s+/i, "").trim();
-    if (provided !== expected) {
-      return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
-    }
+  if (!expected) {
+    console.error("[cron] CRON_SECRET tanımlı değil, istek reddedildi");
+    return NextResponse.json(
+      { error: "Cron yapılandırılmamış" },
+      { status: 500 }
+    );
+  }
+  const auth = req.headers.get("authorization");
+  // Vercel cron: "Bearer <CRON_SECRET>"
+  const provided = auth?.replace(/^Bearer\s+/i, "").trim();
+  if (provided !== expected) {
+    return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const started = Date.now();
   const overdueResult = await markOverdue();

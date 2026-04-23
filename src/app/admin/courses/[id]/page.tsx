@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { UploadScormForm } from "./UploadScormForm";
 import { BulkQuestionImport } from "./BulkQuestionImport";
 import { createCourseRevision, ensureBaselineRevision } from "@/lib/courseRevisions";
+import { audit } from "@/lib/audit";
 
 async function addQuestion(formData: FormData) {
   "use server";
@@ -129,9 +130,28 @@ async function saveCourseMeta(formData: FormData) {
       admin.id,
       changeNote ?? "Kurs bilgileri güncellendi"
     );
+    await audit({
+      actorId: admin.id,
+      action:
+        existing.ownerManagerId !== ownerManagerId
+          ? "course.owner.change"
+          : "course.update",
+      entity: "Course",
+      entityId: courseId,
+      metadata: {
+        titleBefore: existing.title,
+        titleAfter: title,
+        passingScoreBefore: existing.passingScore,
+        passingScoreAfter: passingScore,
+        ownerManagerIdBefore: existing.ownerManagerId,
+        ownerManagerIdAfter: ownerManagerId,
+      },
+    });
   }
 
   revalidatePath(`/admin/courses/${courseId}`);
+  revalidatePath("/admin/courses");
+  revalidatePath("/courses");
 }
 
 async function createManualRevision(formData: FormData) {

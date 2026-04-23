@@ -12,6 +12,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import QRCode from "qrcode";
+import { fmtTrDate } from "@/lib/dates";
 
 // Türkçe karakterler (ş, ğ, ı, İ, Ş, Ğ, ü, ö, ç) Helvetica built-in fontunda
 // yoktu ve PDF'te bozuk/üst üste görünüyordu. public/fonts içine Roboto'nun
@@ -217,7 +218,7 @@ export async function renderCertificatePdf(opts: {
           <Text style={styles.brandFooter}>Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy</Text>
 
           <View style={styles.footerRow}>
-            <Text>Tarih: {opts.issuedAt.toLocaleDateString("tr-TR")}</Text>
+            <Text>Tarih: {fmtTrDate(opts.issuedAt)}</Text>
             <Text>Seri No: {opts.serialNo}</Text>
           </View>
           {qrDataUrl ? (

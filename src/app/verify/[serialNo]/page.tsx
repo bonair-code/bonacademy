@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import Link from "next/link";
+import { fmtTrDate } from "@/lib/dates";
 
 // Bu sayfa public — middleware "/verify" prefix'ini auth'tan muaf tutuyor.
 // QR okuyan kişi giriş yapmadan sertifikanın gerçekliğini doğrulayabilsin.
@@ -101,7 +102,7 @@ export default async function VerifyCertificate({
           <div className="py-3 flex justify-between gap-4">
             <dt className="text-slate-500">Veriliş Tarihi</dt>
             <dd className="text-slate-900 text-right">
-              {cert.issuedAt.toLocaleDateString("tr-TR")}
+              {fmtTrDate(cert.issuedAt)}
             </dd>
           </div>
           <div className="py-3 flex justify-between gap-4">

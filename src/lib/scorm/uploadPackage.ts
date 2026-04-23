@@ -11,9 +11,38 @@ export type ScormUploadResult = {
   version: ScormVersion;
 };
 
+// ZIP bombası koruması: tek tek dosyalar veya toplam açılmış paket aşırı
+// büyük olamaz; çok fazla entry içeren paketler de reddedilir. Bu sınırlar
+// makul SCORM paketleri için bolca yer bırakır.
+const MAX_ENTRY_BYTES = 200 * 1024 * 1024; // tek dosya 200MB
+const MAX_TOTAL_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024; // toplam 1GB
+const MAX_ENTRIES = 5000;
+
 export async function uploadScormZip(zipBuffer: Buffer): Promise<ScormUploadResult> {
   const packageId = randomUUID();
   const directory = await unzipper.Open.buffer(zipBuffer);
+
+  // Entry sayısı ve beyan edilen toplam boyut erkenden reddedilsin.
+  if (directory.files.length > MAX_ENTRIES) {
+    throw new Error(
+      `Zip çok fazla dosya içeriyor (${directory.files.length} > ${MAX_ENTRIES})`
+    );
+  }
+  let totalDeclared = 0;
+  for (const f of directory.files) {
+    const size = Number(f.uncompressedSize ?? 0);
+    if (size > MAX_ENTRY_BYTES) {
+      throw new Error(
+        `Paket içindeki bir dosya çok büyük: ${f.path} (${size} bayt)`
+      );
+    }
+    totalDeclared += size;
+  }
+  if (totalDeclared > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+    throw new Error(
+      `Açılmış toplam boyut çok yüksek (${totalDeclared} > ${MAX_TOTAL_UNCOMPRESSED_BYTES})`
+    );
+  }
 
   let manifestXml: string | null = null;
   for (const file of directory.files) {
@@ -25,11 +54,26 @@ export async function uploadScormZip(zipBuffer: Buffer): Promise<ScormUploadResu
   if (!manifestXml) throw new Error("imsmanifest.xml bulunamadı — geçersiz SCORM paketi");
   const { entryPoint, version } = parseManifest(manifestXml);
 
+  // Beyan edilen boyutlar güvenilmez olabilir — açarken de canlı sayaç tut.
+  let totalActual = 0;
   for (const file of directory.files) {
     if (file.type !== "File") continue;
     const safe = path.posix.normalize(file.path).replace(/^([/\\])+/, "");
-    if (safe.startsWith("..")) throw new Error("Zip-slip tespit edildi");
+    if (safe.startsWith("..") || safe.includes("\0")) {
+      throw new Error("Zip-slip veya geçersiz yol tespit edildi");
+    }
     const buf = await file.buffer();
+    if (buf.length > MAX_ENTRY_BYTES) {
+      throw new Error(
+        `Paket içindeki dosya çok büyük (açıldığında): ${safe}`
+      );
+    }
+    totalActual += buf.length;
+    if (totalActual > MAX_TOTAL_UNCOMPRESSED_BYTES) {
+      throw new Error(
+        "Açılmış toplam boyut limiti aşıldı (olası ZIP bombası)"
+      );
+    }
     await putFile(`${packageId}/${safe}`, buf, contentTypeOf(safe));
   }
 

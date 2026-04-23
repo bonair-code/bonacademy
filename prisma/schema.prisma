@@ -248,6 +248,7 @@ model Assignment {
 
   attempts     Attempt[]
   examAttempts ExamAttempt[]
+  examSessions ExamSession[]
   certificate  Certificate?
 
   @@unique([planId, userId, cycleNumber])
@@ -278,6 +279,25 @@ model ExamAttempt {
   createdAt    DateTime   @default(now())
 
   @@unique([assignmentId, attemptNo])
+}
+
+// Bir kullanıcının bir atamadaki bir deneme için server tarafında snapshot'lanan
+// soru kümesi. Sınav başlangıcında (GET /exam/[assignmentId]) oluşur; submit
+// zamanında sunucu bu snapshot'a göre puanlar — cevap gönderilmemiş sorular
+// yanlış sayılır. Böylece istemci "sadece bildiklerimi gönderdim → %100" hilesi
+// yapamaz. submittedAt NOT NULL olduğunda tekrar kullanılamaz; yeni attemptNo
+// için yeni bir satır oluşturulur.
+model ExamSession {
+  id           String     @id @default(cuid())
+  assignmentId String
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  attemptNo    Int
+  questionIds  String[]
+  createdAt    DateTime   @default(now())
+  submittedAt  DateTime?
+
+  @@unique([assignmentId, attemptNo])
+  @@index([assignmentId])
 }
 
 model Certificate {
