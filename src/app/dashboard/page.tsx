@@ -18,7 +18,7 @@ function TileIcon({ tone, d }: { tone: Tone; d: string }) {
       ? "tile-icon tile-red"
       : "tile-icon tile-slate";
   return (
-    <div className={cls}>
+    <div className={`${cls} !h-8 !w-8 !mb-1.5`}>
       <svg
         viewBox="0 0 24 24"
         fill="none"
@@ -26,7 +26,7 @@ function TileIcon({ tone, d }: { tone: Tone; d: string }) {
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="h-5 w-5"
+        className="h-4 w-4"
       >
         <path d={d} />
       </svg>
@@ -56,10 +56,10 @@ function Kpi({
       ? "text-red-500"
       : "text-slate-700";
   return (
-    <div className="kpi">
+    <div className="kpi !p-3">
       <TileIcon tone={tone} d={icon} />
-      <div className={`text-4xl font-bold leading-none ${numCls}`}>{value}</div>
-      <div className="mt-3 text-[11px] font-semibold tracking-[0.12em] uppercase text-slate-400">
+      <div className={`text-2xl font-bold leading-none ${numCls}`}>{value}</div>
+      <div className="mt-1.5 text-[10px] font-semibold tracking-[0.1em] uppercase text-slate-400">
         {label}
       </div>
     </div>
@@ -147,7 +147,7 @@ export default async function Dashboard() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-3 md:grid-cols-5 gap-3 mb-5">
         <Kpi tone="teal"  icon={I.clipboard} value={active}     label="Aktif Eğitim" />
         <Kpi tone="slate" icon={I.calendar}  value={pending < 0 ? 0 : pending} label="Bekleyen" />
         <Kpi tone="amber" icon={I.refresh}   value={inProgress} label="Devam Eden" />
