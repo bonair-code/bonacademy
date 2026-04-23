@@ -90,6 +90,15 @@ export default async function AdminCourses() {
   ]);
   return (
     <Shell user={user} title="Kurslar" subtitle="SCORM paketleri ve soru bankaları">
+      <div className="flex justify-end mb-3">
+        <a
+          href="/api/courses/export"
+          className="btn-secondary text-xs inline-flex items-center gap-1.5"
+          download
+        >
+          <span>📊</span> Excel Olarak İndir
+        </a>
+      </div>
       <form action={createCourse} className="card p-4 mb-6 space-y-3">
         <h2 className="font-semibold text-slate-900">Yeni Kurs</h2>
         <label className="text-sm block">
