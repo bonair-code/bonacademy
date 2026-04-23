@@ -3,6 +3,11 @@ import { sendMail, appUrl } from "./mailer";
 import { addDays, startOfDay, endOfDay, subDays } from "date-fns";
 import { createEvent } from "ics";
 import { fmtTrDate } from "@/lib/dates";
+import {
+  assignmentNotifyType,
+  assignmentOverdueManagerType,
+  reminderKind,
+} from "./types";
 
 // Dedup sentinel'leri için saklama süresi. Tekrar eden atamalar, hatırlatmalar
 // ve gecikme bildirimleri için 180 gün fazlasıyla yeterli; çok daha eskisine
@@ -52,7 +57,7 @@ export async function sendAssignmentCreatedMail(assignmentId: string) {
     include: { user: true, plan: { include: { course: true } } },
   });
   if (!a) return;
-  const type = `assignment:${a.id}:new`;
+  const type = assignmentNotifyType(a.id, "new");
   const claimed = await claimOnce(a.userId, type);
   if (!claimed) return;
   const ics = buildIcs(a.plan.course.title, a.dueDate);
@@ -83,7 +88,7 @@ export async function sendNewAssignmentMails() {
 /** Son tarihe 7 ve 1 gün kalanlara uyarı. */
 export async function sendDueReminders() {
   const now = new Date();
-  for (const days of [7, 1]) {
+  for (const days of [7, 1] as const) {
     const target = addDays(now, days);
     const list = await prisma.assignment.findMany({
       where: {
@@ -93,7 +98,7 @@ export async function sendDueReminders() {
       include: { user: true, plan: { include: { course: true } } },
     });
     for (const a of list) {
-      const type = `assignment:${a.id}:reminder:${days}`;
+      const type = assignmentNotifyType(a.id, reminderKind(days));
       const claimed = await claimOnce(a.userId, type);
       if (!claimed) continue;
       await sendMail({
@@ -127,7 +132,7 @@ export async function sendOverdueMails() {
     },
   });
   for (const a of list) {
-    const userType = `assignment:${a.id}:overdue:user`;
+    const userType = assignmentNotifyType(a.id, "overdue-user");
     if (await claimOnce(a.userId, userType)) {
       await sendMail({
         to: a.user.email,
@@ -140,7 +145,7 @@ export async function sendOverdueMails() {
     }
     const mgr = a.user.manager;
     if (mgr) {
-      const mgrType = `assignment:${a.id}:overdue:manager:${mgr.id}`;
+      const mgrType = assignmentOverdueManagerType(a.id, mgr.id);
       if (await claimOnce(mgr.id, mgrType)) {
         await sendMail({
           to: mgr.email,
