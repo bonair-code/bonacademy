@@ -190,10 +190,7 @@ export default async function Dashboard() {
                 key={a.id}
                 className="flex items-center justify-between gap-4 px-5 py-4 hover:bg-slate-50/70 transition"
               >
-                <Link
-                  href={`/course/${a.id}`}
-                  className="flex items-center gap-4 min-w-0 flex-1"
-                >
+                <div className="flex items-center gap-4 min-w-0 flex-1">
                   <div className="tile-icon tile-teal !mb-0 !h-10 !w-10">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
                       <path d={I.clipboard} />
@@ -210,7 +207,7 @@ export default async function Dashboard() {
                       </span>
                     </div>
                   </div>
-                </Link>
+                </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className={s.cls}>{s.text}</span>
                   {examReady ? (
