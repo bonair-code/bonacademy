@@ -59,14 +59,7 @@ export default async function CoursePage({
 
   const contentUrl = `/api/scorm-content/${course.scormPackagePath}/${course.scormEntryPoint}`;
   const scormAttempts = a.attempts.filter((x) => x.type === "SCORM");
-  const latest = scormAttempts[0];
   const retakeRequired = a.status === "RETAKE_REQUIRED";
-  // On a forced retake we deliberately do NOT restore prior CMI — the learner
-  // has to actually re-watch the content, not jump to the end of a cached run.
-  const initialCmi = retakeRequired
-    ? undefined
-    : ((latest?.cmiData as Record<string, unknown> | null) ?? undefined);
-  const examAttempts = a.examAttempts; // already desc
 
   if (a.status === "PENDING") {
     await prisma.assignment.update({
@@ -74,13 +67,32 @@ export default async function CoursePage({
       data: { status: "IN_PROGRESS", startedAt: new Date() },
     });
   } else if (a.status === "RETAKE_REQUIRED") {
-    // Learner coming back after a forced retake: flip to IN_PROGRESS so the
-    // progress route's completion auto-promotion can fire again.
+    // Forced retake: kapanmamış eski SCORM denemelerini finalize et ve
+    // temiz bir yeni deneme başlat. Aksi halde 'latest' eski tamamlanmış
+    // cmiData'yı taşır ve scorm-again içeriği "zaten bitti" diye geri
+    // yükler — bu yüzden tekrar alanlar eğitimi baştan görmüyor.
+    await prisma.attempt.updateMany({
+      where: { assignmentId: a.id, type: "SCORM", finishedAt: null },
+      data: { finishedAt: new Date() },
+    });
+    await prisma.attempt.create({
+      data: { assignmentId: a.id, type: "SCORM", cmiData: {} as any },
+    });
     await prisma.assignment.update({
       where: { id: a.id },
       data: { status: "IN_PROGRESS" },
     });
   }
+
+  // Sadece henüz bitmemiş (finishedAt == null) en son SCORM denemesinin
+  // CMI verisini geri yükle. Bitirilmiş denemelerin cmiData'sı resume için
+  // kullanılmamalı — zaten kapanmış bir oturum.
+  const resumeAttempt = retakeRequired
+    ? undefined
+    : scormAttempts.find((x) => x.finishedAt == null);
+  const initialCmi =
+    (resumeAttempt?.cmiData as Record<string, unknown> | null) ?? undefined;
+  const examAttempts = a.examAttempts; // already desc
 
   const stampedRev = a.revisionNumber;
   const liveRev = course.currentRevision;
