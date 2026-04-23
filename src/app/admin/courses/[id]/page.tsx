@@ -155,6 +155,7 @@ export default async function CourseDetail({
               name="title"
               defaultValue={course.title}
               required
+              maxLength={255}
               className="input mt-1 w-full"
             />
           </label>
@@ -164,6 +165,7 @@ export default async function CourseDetail({
               name="description"
               defaultValue={course.description ?? ""}
               rows={2}
+              maxLength={2000}
               className="input mt-1 w-full"
             />
           </label>
@@ -195,6 +197,7 @@ export default async function CourseDetail({
             <input
               name="changeNote"
               placeholder="örn. 'Başlık güncellendi'"
+              maxLength={1000}
               className="input mt-1 w-full"
             />
           </label>
@@ -226,6 +229,7 @@ export default async function CourseDetail({
             name="changeNote"
             placeholder="Manuel revizyon notu (zorunlu)"
             required
+            maxLength={1000}
             className="input flex-1"
           />
           <button className="btn-secondary text-sm">Revizyon Oluştur</button>

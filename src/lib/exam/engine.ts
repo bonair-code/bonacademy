@@ -65,7 +65,19 @@ export async function submitExam(opts: {
   if (!exam || !bank) throw new Error("Sınav tanımlı değil");
 
   const asked = bank.questions.filter((q) => opts.answers[q.id] !== undefined);
-  const { score } = scoreExam(asked, opts.answers);
+  // Gelen cevapları sanitize et: yalnızca bu sınavda sorulan sorulara ait
+  // cevaplar, ve yalnızca o soruya ait gerçek option ID'leri saklanır.
+  // Böylece uydurma/fazla anahtarlar DB'ye sızamaz.
+  const sanitized: Record<string, string[]> = {};
+  for (const q of asked) {
+    const validOptionIds = new Set(q.options.map((o) => o.id));
+    const submitted = opts.answers[q.id];
+    const picked = Array.isArray(submitted)
+      ? submitted.filter((id) => typeof id === "string" && validOptionIds.has(id))
+      : [];
+    sanitized[q.id] = [...new Set(picked)];
+  }
+  const { score } = scoreExam(asked, sanitized);
   const passed = score >= exam.passingScore;
   const attemptNo = a.examAttempts.length + 1;
 
@@ -75,7 +87,7 @@ export async function submitExam(opts: {
       attemptNo,
       score,
       passed,
-      answers: opts.answers,
+      answers: sanitized,
     },
   });
 

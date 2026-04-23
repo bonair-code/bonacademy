@@ -304,6 +304,7 @@ model Notification {
 
   @@unique([userId, type])
   @@index([userId])
+  @@index([sentAt])
 }
 
 model AuditLog {

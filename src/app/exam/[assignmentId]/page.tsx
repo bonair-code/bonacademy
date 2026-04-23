@@ -81,7 +81,7 @@ export default async function ExamPage({
               attemptNo: e.attemptNo,
               score: e.score,
               passed: e.passed,
-              finishedAt: e.finishedAt ? e.finishedAt.toISOString() : null,
+              finishedAt: e.createdAt ? e.createdAt.toISOString() : null,
             }))}
           />
         </div>

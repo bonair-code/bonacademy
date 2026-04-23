@@ -3,6 +3,7 @@ import {
   sendNewAssignmentMails,
   sendDueReminders,
   sendOverdueMails,
+  cleanupOldNotifications,
 } from "@/lib/notifications/dispatcher";
 import { markOverdue } from "@/lib/scheduler/assignments";
 
@@ -31,9 +32,12 @@ async function handle(req: NextRequest) {
   await sendNewAssignmentMails();
   await sendDueReminders();
   await sendOverdueMails();
+  // Eski dedup kayıtlarını temizle — tablo zamanla şişmesin.
+  const cleanup = await cleanupOldNotifications();
   return NextResponse.json({
     ok: true,
     ms: Date.now() - started,
     ...overdueResult,
+    ...cleanup,
   });
 }

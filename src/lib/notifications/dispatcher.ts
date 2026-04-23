@@ -1,7 +1,21 @@
 import { prisma } from "@/lib/db";
 import { sendMail, appUrl } from "./mailer";
-import { addDays, startOfDay, endOfDay } from "date-fns";
+import { addDays, startOfDay, endOfDay, subDays } from "date-fns";
 import { createEvent } from "ics";
+
+// Dedup sentinel'leri için saklama süresi. Tekrar eden atamalar, hatırlatmalar
+// ve gecikme bildirimleri için 180 gün fazlasıyla yeterli; çok daha eskisine
+// ihtiyaç duymuyoruz çünkü tipik bir atama en geç 30-90 gün içinde kapanır.
+const NOTIFICATION_RETENTION_DAYS = 180;
+
+/** Eski dedup kayıtlarını siler; tabloyu sınırlı tutar. Cron'dan çağrılır. */
+export async function cleanupOldNotifications(now = new Date()) {
+  const cutoff = subDays(now, NOTIFICATION_RETENTION_DAYS);
+  const { count } = await prisma.notification.deleteMany({
+    where: { sentAt: { lt: cutoff } },
+  });
+  return { purgedNotifications: count };
+}
 
 function buildIcs(title: string, due: Date): string | null {
   const { error, value } = createEvent({

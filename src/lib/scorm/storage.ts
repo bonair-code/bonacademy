@@ -96,21 +96,39 @@ export async function getFile(
 export async function deletePackage(packagePath: string) {
   if (useVercel) {
     // Vercel Blob has no "delete by prefix" in a single call; we use list().
+    // Her sayfayı bağımsız try/catch ile sarıyoruz ki geçici bir hata tüm
+    // temizliği bozmasın. Güvenlik için sayfa sayısına üst sınır koyuyoruz.
     const { list } = await import("@vercel/blob");
     let cursor: string | undefined;
+    let pageCount = 0;
+    const MAX_PAGES = 50;
     do {
-      const page = await list({
-        prefix: `${packagePath}/`,
-        cursor,
-        token: process.env.BLOB_READ_WRITE_TOKEN,
-      });
-      if (page.blobs.length) {
-        await vercelDel(
-          page.blobs.map((b) => b.url),
-          { token: process.env.BLOB_READ_WRITE_TOKEN }
-        );
+      pageCount++;
+      if (pageCount > MAX_PAGES) {
+        console.warn("[storage] deletePackage: MAX_PAGES aşıldı", packagePath);
+        break;
       }
-      cursor = page.cursor;
+      try {
+        const page = await list({
+          prefix: `${packagePath}/`,
+          cursor,
+          token: process.env.BLOB_READ_WRITE_TOKEN,
+        });
+        if (page.blobs.length) {
+          try {
+            await vercelDel(
+              page.blobs.map((b) => b.url),
+              { token: process.env.BLOB_READ_WRITE_TOKEN }
+            );
+          } catch (err) {
+            console.error("[storage] deletePackage: batch delete failed", err);
+          }
+        }
+        cursor = page.cursor;
+      } catch (err) {
+        console.error("[storage] deletePackage: list failed", err);
+        break;
+      }
     } while (cursor);
     return;
   }

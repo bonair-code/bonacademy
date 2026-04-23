@@ -115,7 +115,7 @@ export default async function AdminUsers() {
       <section className="card p-5 mb-6">
         <h2 className="font-semibold mb-3">Yeni Departman</h2>
         <form action={createDepartment} className="flex gap-2">
-          <input name="name" placeholder="Departman adı" className="input flex-1" />
+          <input name="name" placeholder="Departman adı" required maxLength={100} className="input flex-1" />
           <button className="btn-primary">Ekle</button>
         </form>
       </section>
@@ -127,8 +127,8 @@ export default async function AdminUsers() {
           bırakırsanız mevcut şifre korunur. Şifre en az 8 karakter olmalı ve harf + rakam içermelidir.
         </p>
         <form action={upsertUser} className="grid grid-cols-2 gap-3 items-end text-sm">
-          <input name="email" placeholder="E-posta" required className="input" />
-          <input name="name" placeholder="Ad Soyad" required className="input" />
+          <input name="email" type="email" placeholder="E-posta" required maxLength={255} className="input" />
+          <input name="name" placeholder="Ad Soyad" required maxLength={150} className="input" />
           <select name="role" className="input">
             <option value="USER">Kullanıcı</option>
             <option value="MANAGER">Yönetici</option>
@@ -217,14 +217,17 @@ export default async function AdminUsers() {
                   <input type="hidden" name="id" value={u.id} />
                   <input
                     name="email"
+                    type="email"
                     defaultValue={u.email}
                     required
+                    maxLength={255}
                     className="input"
                   />
                   <input
                     name="name"
                     defaultValue={u.name}
                     required
+                    maxLength={150}
                     className="input"
                   />
                   <select name="role" defaultValue={u.role} className="input">

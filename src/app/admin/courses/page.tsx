@@ -63,6 +63,8 @@ export default async function AdminCourses() {
         <input
           name="title"
           placeholder="Yeni kurs başlığı"
+          required
+          maxLength={255}
           className="input flex-1"
         />
         <button className="btn-primary">Ekle</button>

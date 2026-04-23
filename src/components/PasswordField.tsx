@@ -36,6 +36,8 @@ export function PasswordField({
         onClick={() => setShow((s) => !s)}
         className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500 hover:text-teal-700 px-2 py-1 rounded"
         tabIndex={-1}
+        aria-label={show ? "Şifreyi gizle" : "Şifreyi göster"}
+        aria-pressed={show}
       >
         {show ? "Gizle" : "Göster"}
       </button>

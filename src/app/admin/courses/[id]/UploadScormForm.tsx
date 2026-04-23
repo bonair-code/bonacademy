@@ -45,6 +45,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
       <input
         name="changeNote"
         type="text"
+        maxLength={1000}
         placeholder="Revizyon notu (örn. 'FAA kural güncellemesi 2026-Q1') — isteğe bağlı"
         className="input w-full text-sm"
       />

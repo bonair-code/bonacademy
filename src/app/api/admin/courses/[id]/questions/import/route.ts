@@ -5,6 +5,10 @@ import ExcelJS from "exceljs";
 
 export const runtime = "nodejs";
 
+const MAX_EXCEL_BYTES = 10 * 1024 * 1024; // 10 MB
+const MAX_QUESTION_TEXT = 2000;
+const MAX_OPTION_TEXT = 500;
+
 function isTrue(v: unknown): boolean {
   if (v === null || v === undefined) return false;
   const s = String(v).trim().toLowerCase();
@@ -32,6 +36,12 @@ export async function POST(
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Dosya gerekli" }, { status: 400 });
+  }
+  if (file.size > MAX_EXCEL_BYTES) {
+    return NextResponse.json(
+      { error: `Dosya çok büyük (maks ${Math.round(MAX_EXCEL_BYTES / 1024 / 1024)} MB)` },
+      { status: 413 }
+    );
   }
   const buf = Buffer.from(await file.arrayBuffer());
   const wb = new ExcelJS.Workbook();
@@ -65,18 +75,24 @@ export async function POST(
   const rowCount = ws.rowCount;
   for (let i = 2; i <= rowCount; i++) {
     const row = ws.getRow(i);
-    const text = cellText(row.getCell(1).value);
-    if (!text) {
+    const rawText = cellText(row.getCell(1).value);
+    if (!rawText) {
       results.skipped++;
       continue;
     }
-    const points = Number(row.getCell(2).value) || 1;
+    const text = rawText.slice(0, MAX_QUESTION_TEXT);
+    const rawPoints = Number(row.getCell(2).value);
+    const points = Number.isFinite(rawPoints) && rawPoints > 0
+      ? Math.min(Math.floor(rawPoints), 100)
+      : 1;
     const options = [
       { text: cellText(row.getCell(3).value), isCorrect: isTrue(row.getCell(4).value) },
       { text: cellText(row.getCell(5).value), isCorrect: isTrue(row.getCell(6).value) },
       { text: cellText(row.getCell(7).value), isCorrect: isTrue(row.getCell(8).value) },
       { text: cellText(row.getCell(9).value), isCorrect: isTrue(row.getCell(10).value) },
-    ].filter((o) => o.text);
+    ]
+      .map((o) => ({ text: o.text.slice(0, MAX_OPTION_TEXT), isCorrect: o.isCorrect }))
+      .filter((o) => o.text);
 
     if (options.length < 2) {
       results.errors.push(`Satır ${i}: en az 2 şık gerekli`);

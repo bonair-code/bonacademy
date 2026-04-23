@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { nextDueDate } from "./recurrence";
 import { addDays } from "date-fns";
 import { sendAssignmentCreatedMail } from "@/lib/notifications/dispatcher";
@@ -9,6 +10,32 @@ async function safeNotify(assignmentId: string) {
     await sendAssignmentCreatedMail(assignmentId);
   } catch (err) {
     console.error("[notify] assignment created mail failed", assignmentId, err);
+  }
+}
+
+/**
+ * Idempotent create: @@unique(planId,userId,cycleNumber) ihlali yakalanırsa
+ * başka bir istek aynı atamayı yarattı demektir — sessizce geç. Bu, findUnique
+ * + create arasındaki yarış penceresini kapatır.
+ */
+async function createAssignmentIfAbsent(data: {
+  planId: string;
+  userId: string;
+  cycleNumber: number;
+  dueDate: Date;
+  status: "PENDING";
+  revisionNumber: number;
+}): Promise<{ id: string } | null> {
+  try {
+    return await prisma.assignment.create({ data, select: { id: true } });
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      return null; // zaten var
+    }
+    throw err;
   }
 }
 
@@ -46,21 +73,15 @@ export async function materializeAssignmentsForPlan(planId: string, userIds: str
   const rev = plan.course.currentRevision;
   let created = 0;
   for (const uid of userIds) {
-    // Önce var mı bak: yoksa yarat ve mail at; varsa hiç mail atma.
-    const existing = await prisma.assignment.findUnique({
-      where: { planId_userId_cycleNumber: { planId, userId: uid, cycleNumber: 1 } },
+    const res = await createAssignmentIfAbsent({
+      planId,
+      userId: uid,
+      cycleNumber: 1,
+      dueDate: due,
+      status: "PENDING",
+      revisionNumber: rev,
     });
-    if (existing) continue;
-    const res = await prisma.assignment.create({
-      data: {
-        planId,
-        userId: uid,
-        cycleNumber: 1,
-        dueDate: due,
-        status: "PENDING",
-        revisionNumber: rev,
-      },
-    });
+    if (!res) continue; // zaten vardı
     created++;
     await safeNotify(res.id);
   }
@@ -86,20 +107,15 @@ export async function enrollUserIntoJobTitlePlans(userId: string) {
   for (const p of plans) {
     // Kullanıcı plana ne zaman girdiyse sayaç o anda başlar: bugün + dueInDays.
     const due = addDays(new Date(), p.dueInDays);
-    const existing = await prisma.assignment.findUnique({
-      where: { planId_userId_cycleNumber: { planId: p.id, userId, cycleNumber: 1 } },
+    const res = await createAssignmentIfAbsent({
+      planId: p.id,
+      userId,
+      cycleNumber: 1,
+      dueDate: due,
+      status: "PENDING",
+      revisionNumber: p.course.currentRevision,
     });
-    if (existing) continue;
-    const res = await prisma.assignment.create({
-      data: {
-        planId: p.id,
-        userId,
-        cycleNumber: 1,
-        dueDate: due,
-        status: "PENDING",
-        revisionNumber: p.course.currentRevision,
-      },
-    });
+    if (!res) continue;
     enrolled++;
     await safeNotify(res.id);
   }
@@ -116,29 +132,17 @@ export async function rollForwardRecurringAssignments(now = new Date()) {
   for (const a of completed) {
     const next = nextDueDate(a.completedAt!, a.plan.recurrence, a.plan.dueInDays);
     if (!next || next > horizon) continue;
-    const exists = await prisma.assignment.findUnique({
-      where: {
-        planId_userId_cycleNumber: {
-          planId: a.planId,
-          userId: a.userId,
-          cycleNumber: a.cycleNumber + 1,
-        },
-      },
+    const res = await createAssignmentIfAbsent({
+      planId: a.planId,
+      userId: a.userId,
+      cycleNumber: a.cycleNumber + 1,
+      dueDate: next,
+      status: "PENDING",
+      // A new cycle always picks up the *current* course revision — this is
+      // how periodic retraining picks up content updates automatically.
+      revisionNumber: a.plan.course.currentRevision,
     });
-    if (exists) continue;
-    await prisma.assignment.create({
-      data: {
-        planId: a.planId,
-        userId: a.userId,
-        cycleNumber: a.cycleNumber + 1,
-        dueDate: next,
-        status: "PENDING",
-        // A new cycle always picks up the *current* course revision — this is
-        // how periodic retraining picks up content updates automatically.
-        revisionNumber: a.plan.course.currentRevision,
-      },
-    });
-    created++;
+    if (res) created++;
   }
   return { created };
 }

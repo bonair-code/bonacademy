@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/rbac";
 import { submitExam } from "@/lib/exam/engine";
 import { issueCertificate } from "@/lib/certificate/issue";
 import { prisma } from "@/lib/db";
+import { revalidatePath } from "next/cache";
 
 export async function POST(
   req: NextRequest,
@@ -23,5 +24,9 @@ export async function POST(
       data: { status: "COMPLETED" },
     });
   }
+  // Dashboard ve eğitim sayfalarında durum güncel görünsün.
+  revalidatePath("/dashboard");
+  revalidatePath(`/course/${assignmentId}`);
+  revalidatePath(`/exam/${assignmentId}`);
   return NextResponse.json(result);
 }

@@ -106,7 +106,13 @@ export default async function Dashboard() {
       prisma.certificate.count({ where: { userId: user.id } }),
       prisma.assignment.findMany({
         where: { userId: user.id, status: { notIn: ["COMPLETED"] } },
-        include: { plan: { include: { course: true } } },
+        include: {
+          plan: {
+            include: {
+              course: { select: { id: true, title: true, currentRevision: true } },
+            },
+          },
+        },
         orderBy: { dueDate: "asc" },
         take: 6,
       }),
@@ -193,6 +199,12 @@ export default async function Dashboard() {
                       <span className={overdue ? "text-red-600 font-medium" : ""}>
                         {formatDate(a.dueDate)}
                       </span>
+                      {a.revisionNumber != null &&
+                        a.plan.course.currentRevision > a.revisionNumber && (
+                          <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium">
+                            Yeni sürüm mevcut (v{a.plan.course.currentRevision})
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>

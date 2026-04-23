@@ -10,17 +10,28 @@ import { deletePackage } from "@/lib/scorm/storage";
 
 export const runtime = "nodejs";
 
+// SCORM paketleri büyük olabilir ama sunucuyu korumak için sert bir tavan belirliyoruz.
+const MAX_SCORM_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
+const MAX_CHANGE_NOTE_LENGTH = 1000;
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const admin = await requireRole("ADMIN");
   const { id } = await params;
   const form = await req.formData();
   const file = form.get("file");
-  const changeNote = String(form.get("changeNote") || "").trim() || undefined;
+  const rawNote = String(form.get("changeNote") || "").trim();
+  const changeNote = rawNote ? rawNote.slice(0, MAX_CHANGE_NOTE_LENGTH) : undefined;
   if (!(file instanceof File)) {
     return NextResponse.json({ error: "Dosya gerekli" }, { status: 400 });
   }
   if (!file.name.toLowerCase().endsWith(".zip")) {
     return NextResponse.json({ error: "Zip gerekli" }, { status: 400 });
+  }
+  if (file.size > MAX_SCORM_ZIP_BYTES) {
+    return NextResponse.json(
+      { error: `Dosya çok büyük (maks ${Math.round(MAX_SCORM_ZIP_BYTES / 1024 / 1024)} MB)` },
+      { status: 413 }
+    );
   }
 
   const existing = await prisma.course.findUnique({ where: { id } });

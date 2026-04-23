@@ -165,7 +165,7 @@ export default async function SettingsPage() {
         <section className="card p-4">
           <h2 className="font-semibold mb-3">Departmanlar</h2>
           <form action={createDepartment} className="flex gap-2 mb-4">
-            <input name="name" placeholder="Yeni departman adı" className="input flex-1" />
+            <input name="name" placeholder="Yeni departman adı" required maxLength={100} className="input flex-1" />
             <button className="btn-primary">Ekle</button>
           </form>
           <div className="divide-y border rounded-lg">
@@ -176,7 +176,7 @@ export default async function SettingsPage() {
               <div key={d.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameDepartment} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={d.id} />
-                  <input name="name" defaultValue={d.name} className="input" />
+                  <input name="name" defaultValue={d.name} required maxLength={100} className="input" />
                   <button className="btn-secondary text-xs">Kaydet</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
@@ -195,7 +195,7 @@ export default async function SettingsPage() {
         <section className="card p-4">
           <h2 className="font-semibold mb-3">Görev Tanımları</h2>
           <form action={createJobTitle} className="flex gap-2 mb-4">
-            <input name="name" placeholder="Ör. Pilot, Kabin Memuru" className="input flex-1" />
+            <input name="name" placeholder="Ör. Pilot, Kabin Memuru" required maxLength={100} className="input flex-1" />
             <button className="btn-primary">Ekle</button>
           </form>
           <div className="divide-y border rounded-lg">
@@ -206,7 +206,7 @@ export default async function SettingsPage() {
               <div key={j.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameJobTitle} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={j.id} />
-                  <input name="name" defaultValue={j.name} className="input" />
+                  <input name="name" defaultValue={j.name} required maxLength={100} className="input" />
                   <button className="btn-secondary text-xs">Kaydet</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
