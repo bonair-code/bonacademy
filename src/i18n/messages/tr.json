@@ -30,6 +30,12 @@
     "roleUser": "Kullanıcı",
     "userFallback": "Kullanıcı"
   },
+  "cookie": {
+    "message": "Bu site; oturum, dil tercihi ve güvenlik (Google reCAPTCHA) için zorunlu çerezler kullanır. Reklam veya takip çerezi kullanılmaz.",
+    "learnMore": "KVKK Aydınlatma Metni",
+    "accept": "Kabul Et",
+    "reject": "Reddet"
+  },
   "common": {
     "support": "Sorun yaşıyorsanız BT destek ile iletişime geçin.",
     "copyright": "Bon Air Havacılık"

@@ -30,6 +30,12 @@
     "roleUser": "User",
     "userFallback": "User"
   },
+  "cookie": {
+    "message": "This site uses cookies that are strictly necessary for login, language preference and security (Google reCAPTCHA). No advertising or tracking cookies are used.",
+    "learnMore": "Privacy Notice",
+    "accept": "Accept",
+    "reject": "Reject"
+  },
   "common": {
     "support": "If you are experiencing issues, please contact IT support.",
     "copyright": "Bon Air Havacılık"
