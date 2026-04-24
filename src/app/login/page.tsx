@@ -81,7 +81,7 @@ export default async function LoginPage({
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
       {/* Left — brand panel */}
-      <div className="hidden lg:flex relative overflow-hidden bg-slate-900 text-white p-12 flex-col justify-between">
+      <div className="hidden lg:flex relative overflow-hidden bg-slate-900 text-white px-12 pt-8 pb-6 flex-col gap-6 lg:h-screen">
         <div
           className="absolute inset-0 opacity-[0.08]"
           style={{
@@ -95,13 +95,13 @@ export default async function LoginPage({
             <img src="/Logo.png" alt="Bon Air" className="h-16 w-auto" />
           </div>
         </div>
-        <div className="relative z-10 max-w-md">
-          <div className="h-1 w-14 bg-brand-600 rounded-full mb-6" />
-          <h2 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
+        <div className="relative z-10 max-w-md flex-1">
+          <div className="h-1 w-14 bg-brand-600 rounded-full mb-4" />
+          <h2 className="text-3xl font-semibold tracking-tight leading-tight mb-2">
             {t("tagline")}
           </h2>
           <p className="text-slate-300 text-sm leading-relaxed">{t("blurb")}</p>
-          <div className="mt-8 grid grid-cols-2 gap-4 text-xs">
+          <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
             <div className="border border-white/10 rounded-lg p-3">
               <div className="text-brand-400 font-semibold text-lg">{t("card.scorm")}</div>
               <div className="text-slate-400">{t("card.scormSub")}</div>
