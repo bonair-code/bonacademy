@@ -1,0 +1,91 @@
+{
+  "app": {
+    "title": "BonAcademy — Bon Air Training Management System",
+    "description": "In-house training planning, execution and tracking system.",
+    "brand": "BonAcademy"
+  },
+  "common": {
+    "support": "If you are experiencing issues, please contact IT support.",
+    "copyright": "Bon Air Havacılık"
+  },
+  "locale": {
+    "switchTo": "Switch language",
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "login": {
+    "heading": "Sign in to your account",
+    "subheading": "BonAcademy — Training Management System",
+    "withMicrosoft": "Sign in with Microsoft 365",
+    "or": "or",
+    "email": "Email",
+    "emailPlaceholder": "name.surname@bonair.com.tr",
+    "password": "Password",
+    "remember": "Remember me",
+    "forgot": "Forgot your password?",
+    "submit": "Sign In",
+    "tagline": "Compliance in aviation starts with training.",
+    "blurb": "BonAcademy plans the mandatory training for Bon Air employees, delivers SCORM content, manages exams, and automatically issues certificates. Each certificate can be instantly verified with a QR code.",
+    "card": {
+      "scorm": "SCORM",
+      "scormSub": "1.2 & 2004 support",
+      "auto": "Automated",
+      "autoSub": "Recurring plans",
+      "cert": "Certificate",
+      "certSub": "PDF + calendar (ICS)",
+      "qr": "QR Code",
+      "qrSub": "Instant certificate verification"
+    },
+    "error": {
+      "captcha": "Security verification failed or expired.",
+      "empty": "Email and password are required.",
+      "bad": "Invalid email or password.",
+      "badWithLeft": "Invalid email or password. Attempts left: {left}",
+      "locked": "Your account has been locked after 3 failed attempts. Please contact your administrator."
+    },
+    "success": {
+      "invited": "Your account is ready. Sign in with your email and new password.",
+      "reset": "Your password has been updated. Sign in with your new password."
+    }
+  },
+  "forgot": {
+    "heading": "Forgot Password",
+    "intro": "Enter your account email. We will send a reset link valid for 2 hours. Locked accounts can also be unlocked with this link.",
+    "email": "Email",
+    "emailPlaceholder": "name.surname@bonair.com.tr",
+    "submit": "Send Reset Link",
+    "backToLogin": "Back to sign in",
+    "sent": "If this email is registered in our system, a password reset link has been sent. The link is valid for 2 hours. Please check your inbox (including spam).",
+    "error": {
+      "captcha": "Security verification failed.",
+      "empty": "Please enter your email.",
+      "rate": "Too many requests. Please try again in 15 minutes."
+    }
+  },
+  "reset": {
+    "heading": "Reset Password",
+    "intro": "Hi {name}, please set your new password.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "submit": "Update Password",
+    "hint": "At least 8 characters, must include letters and numbers.",
+    "error": {
+      "invalid": "The link is invalid or expired. Please request a new reset.",
+      "mismatch": "Passwords do not match.",
+      "weak": "Password must be at least 8 characters and include letters and numbers."
+    }
+  },
+  "invite": {
+    "heading": "Set up your BonAcademy account",
+    "intro": "Hi {name}, please set your password. This link is one-time use.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "submit": "Save Password and Sign In",
+    "hint": "At least 8 characters, must include letters and numbers.",
+    "error": {
+      "invalid": "The link is invalid or expired. Please ask your administrator for a new invitation.",
+      "mismatch": "Passwords do not match.",
+      "weak": "Password must be at least 8 characters and include letters and numbers."
+    }
+  }
+}

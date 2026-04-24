@@ -3,8 +3,9 @@ import { prisma } from "@/lib/db";
 import { verifyRecaptchaToken } from "@/lib/captcha";
 import { RecaptchaV3 } from "@/components/RecaptchaV3";
 import { PasswordField } from "@/components/PasswordField";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
+import { getTranslations } from "next-intl/server";
 
 const MAX_ATTEMPTS = 3;
 const azureConfigured =
@@ -17,7 +18,6 @@ async function loginAction(formData: FormData) {
   const email = String(formData.get("email") || "").trim().toLowerCase();
   const password = String(formData.get("password") || "");
   const captchaToken = String(formData.get("captchaToken") || "");
-  const remember = formData.get("remember") === "on";
 
   const cap = await verifyRecaptchaToken(captchaToken, "login");
   if (!cap.ok) return redirect("/login?error=captcha");
@@ -31,24 +31,16 @@ async function loginAction(formData: FormData) {
     return redirect("/login?error=locked");
   }
 
-  // Pre-check: verify DB state so we can show meaningful errors without
-  // relying on NextAuth's opaque error surface.
   const after = await prisma.user.findUnique({
     where: { email },
     select: { failedLoginAttempts: true, lockedAt: true },
   });
   if (after?.lockedAt) return redirect("/login?error=locked");
 
-  // Let NextAuth handle the redirect + cookie setting atomically.
-  // It will throw a NEXT_REDIRECT on success (caught by Next.js) or
-  // CredentialsSignin on failure — in which case authorize() has already
-  // bumped failedLoginAttempts in DB.
   try {
     await signIn("password", { email, password, redirectTo: "/dashboard" });
   } catch (e: any) {
-    // NEXT_REDIRECT must re-throw so the redirect actually happens.
     if (e?.digest?.startsWith?.("NEXT_REDIRECT")) throw e;
-    // Real auth failure — read updated DB state for attempt count.
     const fresh = await prisma.user.findUnique({
       where: { email },
       select: { failedLoginAttempts: true, lockedAt: true },
@@ -58,31 +50,7 @@ async function loginAction(formData: FormData) {
     return redirect(`/login?error=bad&left=${left}`);
   }
 
-  // Unreachable — signIn with redirectTo always throws NEXT_REDIRECT on success.
   redirect("/dashboard");
-}
-
-function errorText(code?: string, left?: string): string | null {
-  switch (code) {
-    case "captcha":
-      return "Güvenlik doğrulaması yapılmadı veya süresi doldu.";
-    case "empty":
-      return "E-posta ve şifre zorunlu.";
-    case "bad":
-      return `E-posta veya şifre hatalı.${left ? ` Kalan deneme: ${left}` : ""}`;
-    case "locked":
-      return "Hesabınız 3 hatalı denemeden dolayı kilitlendi. Yöneticinize başvurun.";
-    default:
-      return null;
-  }
-}
-
-function successText(invited?: string, reset?: string): string | null {
-  if (invited === "1")
-    return "Hesabınız hazır. E-posta ve yeni şifrenizle giriş yapın.";
-  if (reset === "1")
-    return "Şifreniz güncellendi. Yeni şifrenizle giriş yapın.";
-  return null;
 }
 
 export default async function LoginPage({
@@ -96,8 +64,19 @@ export default async function LoginPage({
   }>;
 }) {
   const { error, left, invited, reset } = await searchParams;
-  const msg = errorText(error, left);
-  const ok = successText(invited, reset);
+  const t = await getTranslations("login");
+  const tc = await getTranslations("common");
+
+  let errorMsg: string | null = null;
+  if (error === "captcha") errorMsg = t("error.captcha");
+  else if (error === "empty") errorMsg = t("error.empty");
+  else if (error === "bad")
+    errorMsg = left ? t("error.badWithLeft", { left }) : t("error.bad");
+  else if (error === "locked") errorMsg = t("error.locked");
+
+  let okMsg: string | null = null;
+  if (invited === "1") okMsg = t("success.invited");
+  else if (reset === "1") okMsg = t("success.reset");
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -119,40 +98,38 @@ export default async function LoginPage({
         <div className="relative z-10 max-w-md">
           <div className="h-1 w-14 bg-brand-600 rounded-full mb-6" />
           <h2 className="text-3xl font-semibold tracking-tight leading-tight mb-3">
-            Havacılıkta uyum, eğitimle başlar.
+            {t("tagline")}
           </h2>
-          <p className="text-slate-300 text-sm leading-relaxed">
-            BonAcademy, Bon Air çalışanlarının zorunlu eğitimlerini planlar,
-            SCORM içeriklerini oynatır, sınavları yönetir ve sertifikaları
-            otomatik üretir. Her sertifika, kare kod (QR) ile anında
-            doğrulanabilir.
-          </p>
+          <p className="text-slate-300 text-sm leading-relaxed">{t("blurb")}</p>
           <div className="mt-8 grid grid-cols-2 gap-4 text-xs">
             <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">SCORM</div>
-              <div className="text-slate-400">1.2 & 2004 desteği</div>
+              <div className="text-brand-400 font-semibold text-lg">{t("card.scorm")}</div>
+              <div className="text-slate-400">{t("card.scormSub")}</div>
             </div>
             <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">Otomatik</div>
-              <div className="text-slate-400">Tekrar eden planlar</div>
+              <div className="text-brand-400 font-semibold text-lg">{t("card.auto")}</div>
+              <div className="text-slate-400">{t("card.autoSub")}</div>
             </div>
             <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">Sertifika</div>
-              <div className="text-slate-400">PDF + takvim (ICS)</div>
+              <div className="text-brand-400 font-semibold text-lg">{t("card.cert")}</div>
+              <div className="text-slate-400">{t("card.certSub")}</div>
             </div>
             <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">Kare Kod</div>
-              <div className="text-slate-400">Anlık sertifika doğrulama</div>
+              <div className="text-brand-400 font-semibold text-lg">{t("card.qr")}</div>
+              <div className="text-slate-400">{t("card.qrSub")}</div>
             </div>
           </div>
         </div>
         <div className="relative z-10 text-[11px] text-slate-500 tracking-wide">
-          © {new Date().getFullYear()} Bon Air Havacılık
+          © {new Date().getFullYear()} {tc("copyright")}
         </div>
       </div>
 
       {/* Right — form */}
-      <div className="flex items-center justify-center p-6 bg-white">
+      <div className="flex items-center justify-center p-6 bg-white relative">
+        <div className="absolute top-4 right-4">
+          <LocaleSwitcher nextPath="/login" />
+        </div>
         <div className="w-full max-w-md">
           <div className="lg:hidden flex flex-col items-center mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -162,11 +139,9 @@ export default async function LoginPage({
           <div className="mb-8">
             <div className="h-1 w-10 bg-brand-600 rounded-full mb-3" />
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              Hesabınıza giriş yapın
+              {t("heading")}
             </h1>
-            <p className="text-sm text-slate-500 mt-1">
-              BonAcademy — Eğitim Yönetim Sistemi
-            </p>
+            <p className="text-sm text-slate-500 mt-1">{t("subheading")}</p>
           </div>
 
           {azureConfigured && (
@@ -177,13 +152,11 @@ export default async function LoginPage({
               }}
               className="mb-4"
             >
-              <button className="btn-secondary w-full">
-                Microsoft 365 ile Giriş Yap
-              </button>
+              <button className="btn-secondary w-full">{t("withMicrosoft")}</button>
               <div className="flex items-center gap-3 my-4">
                 <div className="flex-1 h-px bg-slate-200" />
                 <span className="text-[11px] uppercase tracking-wider text-slate-400">
-                  veya
+                  {t("or")}
                 </span>
                 <div className="flex-1 h-px bg-slate-200" />
               </div>
@@ -192,18 +165,18 @@ export default async function LoginPage({
 
           <form action={loginAction} className="space-y-4">
             <div>
-              <label className="label">E-posta</label>
+              <label className="label">{t("email")}</label>
               <input
                 name="email"
                 type="email"
                 required
                 autoComplete="username"
                 className="input mt-1"
-                placeholder="ad.soyad@bonair.com.tr"
+                placeholder={t("emailPlaceholder")}
               />
             </div>
             <div>
-              <label className="label">Şifre</label>
+              <label className="label">{t("password")}</label>
               <PasswordField name="password" required autoComplete="current-password" />
             </div>
 
@@ -217,39 +190,32 @@ export default async function LoginPage({
                   defaultChecked
                   className="accent-brand-600"
                 />
-                Beni hatırla
+                {t("remember")}
               </label>
               <a
                 href="/forgot"
                 className="text-xs text-brand-700 hover:text-brand-800 underline"
               >
-                Şifremi unuttum?
+                {t("forgot")}
               </a>
             </div>
 
-            {ok && (
+            {okMsg && (
               <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                {ok}
+                {okMsg}
               </p>
             )}
 
-            {msg && (
+            {errorMsg && (
               <p className="text-xs text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
-                {msg}
+                {errorMsg}
               </p>
             )}
 
-            <button className="btn-primary w-full py-2.5">Giriş Yap</button>
+            <button className="btn-primary w-full py-2.5">{t("submit")}</button>
           </form>
 
-          <p className="text-[11px] text-slate-400 text-center mt-8">
-            Sorun yaşıyorsanız BT destek ile iletişime geçin.
-          </p>
-          <p className="text-[11px] text-slate-400 text-center mt-2">
-            <a href="/kvkk" className="underline hover:text-slate-600">
-              KVKK Aydınlatma Metni
-            </a>
-          </p>
+          <p className="text-[11px] text-slate-400 text-center mt-8">{tc("support")}</p>
         </div>
       </div>
     </div>

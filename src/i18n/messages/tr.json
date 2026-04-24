@@ -1,0 +1,91 @@
+{
+  "app": {
+    "title": "BonAcademy — Bon Air Eğitim Yönetim Sistemi",
+    "description": "Şirket içi eğitim planlama, gerçekleştirme ve takip sistemi.",
+    "brand": "BonAcademy"
+  },
+  "common": {
+    "support": "Sorun yaşıyorsanız BT destek ile iletişime geçin.",
+    "copyright": "Bon Air Havacılık"
+  },
+  "locale": {
+    "switchTo": "Dili değiştir",
+    "tr": "Türkçe",
+    "en": "English"
+  },
+  "login": {
+    "heading": "Hesabınıza giriş yapın",
+    "subheading": "BonAcademy — Eğitim Yönetim Sistemi",
+    "withMicrosoft": "Microsoft 365 ile Giriş Yap",
+    "or": "veya",
+    "email": "E-posta",
+    "emailPlaceholder": "ad.soyad@bonair.com.tr",
+    "password": "Şifre",
+    "remember": "Beni hatırla",
+    "forgot": "Şifremi unuttum?",
+    "submit": "Giriş Yap",
+    "tagline": "Havacılıkta uyum, eğitimle başlar.",
+    "blurb": "BonAcademy, Bon Air çalışanlarının zorunlu eğitimlerini planlar, SCORM içeriklerini oynatır, sınavları yönetir ve sertifikaları otomatik üretir. Her sertifika, kare kod (QR) ile anında doğrulanabilir.",
+    "card": {
+      "scorm": "SCORM",
+      "scormSub": "1.2 & 2004 desteği",
+      "auto": "Otomatik",
+      "autoSub": "Tekrar eden planlar",
+      "cert": "Sertifika",
+      "certSub": "PDF + takvim (ICS)",
+      "qr": "Kare Kod",
+      "qrSub": "Anlık sertifika doğrulama"
+    },
+    "error": {
+      "captcha": "Güvenlik doğrulaması yapılmadı veya süresi doldu.",
+      "empty": "E-posta ve şifre zorunlu.",
+      "bad": "E-posta veya şifre hatalı.",
+      "badWithLeft": "E-posta veya şifre hatalı. Kalan deneme: {left}",
+      "locked": "Hesabınız 3 hatalı denemeden dolayı kilitlendi. Yöneticinize başvurun."
+    },
+    "success": {
+      "invited": "Hesabınız hazır. E-posta ve yeni şifrenizle giriş yapın.",
+      "reset": "Şifreniz güncellendi. Yeni şifrenizle giriş yapın."
+    }
+  },
+  "forgot": {
+    "heading": "Şifremi Unuttum",
+    "intro": "Hesabınıza ait e-postayı girin. Size 2 saat geçerli bir sıfırlama bağlantısı göndereceğiz. Hesabınız kilitliyse de aynı bağlantıyla açılır.",
+    "email": "E-posta",
+    "emailPlaceholder": "ad.soyad@bonair.com.tr",
+    "submit": "Sıfırlama Bağlantısı Gönder",
+    "backToLogin": "Giriş sayfasına dön",
+    "sent": "Eğer bu e-posta sistemimizde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi. Bağlantı 2 saat geçerlidir. Mailinizi kontrol edin (spam dahil).",
+    "error": {
+      "captcha": "Güvenlik doğrulaması başarısız.",
+      "empty": "E-posta adresinizi girin.",
+      "rate": "Çok fazla istek. 15 dakika sonra tekrar deneyin."
+    }
+  },
+  "reset": {
+    "heading": "Şifre Sıfırlama",
+    "intro": "Merhaba {name}, yeni şifrenizi belirleyin.",
+    "newPassword": "Yeni şifre",
+    "confirmPassword": "Şifre (tekrar)",
+    "submit": "Şifreyi Güncelle",
+    "hint": "En az 8 karakter, harf ve rakam içermeli.",
+    "error": {
+      "invalid": "Bağlantı geçersiz veya süresi dolmuş. Yeni bir sıfırlama isteyin.",
+      "mismatch": "Şifreler eşleşmiyor.",
+      "weak": "Şifre en az 8 karakter olmalı ve harf + rakam içermeli."
+    }
+  },
+  "invite": {
+    "heading": "BonAcademy hesabınızı kurun",
+    "intro": "Merhaba {name}, şifrenizi belirleyin. Bu bağlantı tek kullanımlıktır.",
+    "newPassword": "Yeni şifre",
+    "confirmPassword": "Şifre (tekrar)",
+    "submit": "Şifreyi Kaydet ve Giriş Yap",
+    "hint": "En az 8 karakter, harf ve rakam içermeli.",
+    "error": {
+      "invalid": "Bağlantı geçersiz veya süresi dolmuş. Yöneticinizden yeni davet isteyin.",
+      "mismatch": "Şifreler eşleşmiyor.",
+      "weak": "Şifre en az 8 karakter olmalı ve harf + rakam içermeli."
+    }
+  }
+}
