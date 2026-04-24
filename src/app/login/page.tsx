@@ -6,8 +6,6 @@ import { PasswordField } from "@/components/PasswordField";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
-const LOGIN_BYPASS = false;
-
 const MAX_ATTEMPTS = 3;
 const azureConfigured =
   !!process.env.AUTH_AZURE_AD_CLIENT_ID &&
@@ -87,7 +85,6 @@ export default async function LoginPage({
     left?: string;
   }>;
 }) {
-  if (LOGIN_BYPASS) redirect("/dashboard");
   const { error, left } = await searchParams;
   const msg = errorText(error, left);
 
