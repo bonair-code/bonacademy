@@ -89,7 +89,10 @@ export function Shell({
   // da sağlar. ADMIN'in "Kurslar" sekmesi /admin/courses'a gittiği için burada
   // tekrar eklemiyoruz.
   if (user.role === "MANAGER") {
-    main.push({ href: "/courses", label: "Kurslar", icon: "book", iconTone: "amber" });
+    main.push(
+      { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar", iconTone: "violet" },
+      { href: "/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
+    );
   }
   if (user.role === "ADMIN") {
     main.push(

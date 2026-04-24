@@ -13,12 +13,23 @@ import { audit } from "@/lib/audit";
 
 async function createPlan(formData: FormData) {
   "use server";
-  const me = await requireRole("ADMIN");
+  const me = await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const recurrence = String(formData.get("recurrence")) as Recurrence;
   const startDate = new Date(String(formData.get("startDate")));
   const dueInDays = Number(formData.get("dueInDays") || 30);
-  const userIds = formData.getAll("userIds").map(String).filter(Boolean);
+  const userIdsRaw = formData.getAll("userIds").map(String).filter(Boolean);
+  // Güvenlik: planlara yalnızca USER rolündeki kişiler ek kullanıcı olarak
+  // atanabilir. Manager/Admin formdan gönderse bile filtrele — aksi halde
+  // kurs sahibi yöneticiye aynı eğitim atanabilirdi.
+  const userIds = userIdsRaw.length
+    ? (
+        await prisma.user.findMany({
+          where: { id: { in: userIdsRaw }, role: "USER", isActive: true },
+          select: { id: true },
+        })
+      ).map((u) => u.id)
+    : [];
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
 
   // Aynı kurs için birden fazla plan oluşturulamasın — aynı isimde eğitim
@@ -68,12 +79,20 @@ async function createPlan(formData: FormData) {
 
 async function updatePlan(formData: FormData) {
   "use server";
-  const me = await requireRole("ADMIN");
+  const me = await requireRole("ADMIN", "MANAGER");
   const planId = String(formData.get("planId"));
   const recurrence = String(formData.get("recurrence")) as Recurrence;
   const dueInDays = Number(formData.get("dueInDays") || 30);
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
-  const extraUserIds = formData.getAll("userIds").map(String).filter(Boolean);
+  const extraUserIdsRaw = formData.getAll("userIds").map(String).filter(Boolean);
+  const extraUserIds = extraUserIdsRaw.length
+    ? (
+        await prisma.user.findMany({
+          where: { id: { in: extraUserIdsRaw }, role: "USER", isActive: true },
+          select: { id: true },
+        })
+      ).map((u) => u.id)
+    : [];
 
   // Plan meta güncelle.
   await prisma.trainingPlan.update({
@@ -108,7 +127,7 @@ async function updatePlan(formData: FormData) {
 
 async function deletePlan(formData: FormData) {
   "use server";
-  const me = await requireRole("ADMIN");
+  const me = await requireRole("ADMIN", "MANAGER");
   const planId = String(formData.get("planId"));
   // Cascade sırası: atamalar → TrainingPlanJobTitle → plan.
   await prisma.assignment.deleteMany({ where: { planId } });
@@ -131,10 +150,16 @@ const RECURRENCE_LABEL: Record<string, string> = {
 };
 
 export default async function AdminPlans() {
-  const user = await requireRole("ADMIN");
+  const user = await requireRole("ADMIN", "MANAGER");
   const [courses, users, jobTitles, plans] = await Promise.all([
     prisma.course.findMany({ orderBy: { title: "asc" } }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" } }),
+    // Yalnızca USER rolündeki aktif kişiler ek kullanıcı olarak seçilebilir.
+    // Manager/Admin atama listesinde görünmez — zaten otomatik kapsam da onları
+    // dışlıyor, UI da aynı kuralı yansıtmalı.
+    prisma.user.findMany({
+      where: { isActive: true, role: "USER" },
+      orderBy: { name: "asc" },
+    }),
     prisma.jobTitle.findMany({ orderBy: { name: "asc" } }),
     prisma.trainingPlan.findMany({
       include: {
