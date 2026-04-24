@@ -1,7 +1,7 @@
 import { signIn } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { verifySliderToken } from "@/lib/captcha";
-import { SliderCaptcha } from "@/components/SliderCaptcha";
+import { verifyRecaptchaToken } from "@/lib/captcha";
+import { RecaptchaV3 } from "@/components/RecaptchaV3";
 import { PasswordField } from "@/components/PasswordField";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
@@ -21,7 +21,8 @@ async function loginAction(formData: FormData) {
   const captchaToken = String(formData.get("captchaToken") || "");
   const remember = formData.get("remember") === "on";
 
-  if (!verifySliderToken(captchaToken)) return redirect("/login?error=captcha");
+  const cap = await verifyRecaptchaToken(captchaToken, "login");
+  if (!cap.ok) return redirect("/login?error=captcha");
   if (!email || !password) return redirect("/login?error=empty");
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -198,7 +199,7 @@ export default async function LoginPage({
               <PasswordField name="password" required autoComplete="current-password" />
             </div>
 
-            <SliderCaptcha />
+            <RecaptchaV3 action="login" />
 
             <label className="flex items-center gap-2 text-xs text-slate-600">
               <input
