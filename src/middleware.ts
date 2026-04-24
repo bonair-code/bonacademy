@@ -10,6 +10,7 @@ const PUBLIC_PATHS = [
   "/logo.png",
   "/favicon.ico",
   "/verify",
+  "/kvkk",
 ];
 
 // Edge-safe: only check for the session cookie's presence. Full session

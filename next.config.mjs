@@ -25,6 +25,49 @@ const nextConfig = {
     // kapatmak için dangerouslyAllowSVG kapalı.
     dangerouslyAllowSVG: false,
   },
+  // Güvenlik header'ları — clickjacking, MIME-sniffing, HTTPS downgrade,
+  // info leak ve XSS yüzeylerini daraltır. CSP pragmatik tutuldu:
+  //  - 'unsafe-inline' script/style: Next.js SSR inline script + Tailwind
+  //    için şart (strict CSP için nonce altyapısı gerekir — ayrı iş).
+  //  - Google reCAPTCHA v3 için www.google.com + www.gstatic.com izinli.
+  //  - SCORM iframe'i Vercel Blob'dan içerik yükleyebilsin diye frame-src
+  //    *.public.blob.vercel-storage.com + same-origin.
+  //  - frame-ancestors 'self' = modern X-Frame-Options eşdeğeri (clickjacking).
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://www.gstatic.com",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img-src 'self' data: blob: https://*.public.blob.vercel-storage.com https://www.gstatic.com https://www.google.com",
+      "font-src 'self' data: https://fonts.gstatic.com",
+      "connect-src 'self' https://www.google.com https://*.public.blob.vercel-storage.com",
+      "frame-src 'self' https://www.google.com https://*.public.blob.vercel-storage.com",
+      "frame-ancestors 'self'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+      "upgrade-insecure-requests",
+    ].join("; ");
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: csp },
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=()",
+          },
+        ],
+      },
+    ];
+  },
   webpack: (config, { isServer }) => {
     if (isServer) {
       // unzipper optionally requires @aws-sdk/client-s3 which we don't use

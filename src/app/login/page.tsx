@@ -245,6 +245,11 @@ export default async function LoginPage({
           <p className="text-[11px] text-slate-400 text-center mt-8">
             Sorun yaşıyorsanız BT destek ile iletişime geçin.
           </p>
+          <p className="text-[11px] text-slate-400 text-center mt-2">
+            <a href="/kvkk" className="underline hover:text-slate-600">
+              KVKK Aydınlatma Metni
+            </a>
+          </p>
         </div>
       </div>
     </div>
