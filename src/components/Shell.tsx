@@ -112,6 +112,15 @@ export function Shell({
   }
 
   const org: NavItem[] = [];
+  if (user.role === "MANAGER") {
+    // Yönetici yalnızca USER rolündeki kullanıcıları görür ve yönetir.
+    org.push({
+      href: "/admin/users",
+      label: "Kullanıcılar",
+      icon: "users",
+      iconTone: "sky",
+    });
+  }
   if (user.role === "ADMIN") {
     org.push(
       { href: "/admin/users", label: "Kullanıcılar", icon: "users", iconTone: "sky" },

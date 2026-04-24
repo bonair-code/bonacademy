@@ -9,11 +9,26 @@ import { audit } from "@/lib/audit";
 
 async function upsertUser(formData: FormData) {
   "use server";
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const id = String(formData.get("id") || "");
   const email = String(formData.get("email")).trim().toLowerCase();
   const name = String(formData.get("name")).trim();
-  const role = String(formData.get("role")) as Role;
+  // Güvenlik: yönetici yalnızca USER rolünde kullanıcı oluşturur/düzenler.
+  // Form'dan gelen role değeri ADMIN ise dikkate alma — rol yükseltme yetkisi
+  // sadece admin'de.
+  const requestedRole = String(formData.get("role")) as Role;
+  const role: Role =
+    admin.role === "ADMIN" ? requestedRole : "USER";
+  // Yönetici var olan bir kullanıcıyı düzenliyorsa, hedef USER değilse reddet.
+  if (admin.role !== "ADMIN" && id) {
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: { role: true },
+    });
+    if (!target || target.role !== "USER") {
+      throw new Error("Yönetici yalnızca USER rolündeki kullanıcıları düzenleyebilir.");
+    }
+  }
   const departmentId = String(formData.get("departmentId") || "") || null;
   const managerIdRaw = String(formData.get("managerId") || "") || null;
   // Kendini yönetici olarak atamaya izin verme.
@@ -127,7 +142,7 @@ async function upsertUser(formData: FormData) {
 
 async function setPassword(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const userId = String(formData.get("userId"));
   const password = String(formData.get("password") || "");
   const err = validatePasswordStrength(password);
@@ -142,7 +157,7 @@ async function setPassword(formData: FormData) {
 
 async function unlockUser(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const userId = String(formData.get("userId"));
   await prisma.user.update({
     where: { id: userId },
@@ -153,16 +168,20 @@ async function unlockUser(formData: FormData) {
 
 async function createDepartment(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const name = String(formData.get("name")).trim();
   if (name) await prisma.department.create({ data: { name } });
   revalidatePath("/admin/users");
 }
 
 export default async function AdminUsers() {
-  const user = await requireRole("ADMIN");
+  const user = await requireRole("ADMIN", "MANAGER");
+  // Yönetici yalnızca USER rolündeki kişileri görür ve düzenleyebilir.
+  // Admin herkesi görür.
+  const listFilter = user.role === "ADMIN" ? {} : { role: "USER" as const };
   const [users, departments, jobTitles, managers] = await Promise.all([
     prisma.user.findMany({
+      where: listFilter,
       include: {
         department: true,
         manager: true,
@@ -198,11 +217,17 @@ export default async function AdminUsers() {
         <form action={upsertUser} className="grid grid-cols-2 gap-3 items-end text-sm">
           <input name="email" type="email" placeholder="E-posta" required maxLength={255} className="input" />
           <input name="name" placeholder="Ad Soyad" required maxLength={150} className="input" />
-          <select name="role" className="input">
-            <option value="USER">Kullanıcı</option>
-            <option value="MANAGER">Yönetici</option>
-            <option value="ADMIN">Admin</option>
-          </select>
+          {user.role === "ADMIN" ? (
+            <select name="role" className="input">
+              <option value="USER">Kullanıcı</option>
+              <option value="MANAGER">Yönetici</option>
+              <option value="ADMIN">Admin</option>
+            </select>
+          ) : (
+            // Yönetici yalnızca USER oluşturabilir — select'i gizle, hidden
+            // field ile sabitle.
+            <input type="hidden" name="role" value="USER" />
+          )}
           <select name="departmentId" className="input">
             <option value="">Departman (seçiniz)</option>
             {departments.map((d) => (
@@ -341,11 +366,15 @@ export default async function AdminUsers() {
                     maxLength={150}
                     className="input"
                   />
-                  <select name="role" defaultValue={u.role} className="input">
-                    <option value="USER">Kullanıcı</option>
-                    <option value="MANAGER">Yönetici</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
+                  {user.role === "ADMIN" ? (
+                    <select name="role" defaultValue={u.role} className="input">
+                      <option value="USER">Kullanıcı</option>
+                      <option value="MANAGER">Yönetici</option>
+                      <option value="ADMIN">Admin</option>
+                    </select>
+                  ) : (
+                    <input type="hidden" name="role" value={u.role} />
+                  )}
                   <select
                     name="departmentId"
                     defaultValue={u.departmentId ?? ""}
