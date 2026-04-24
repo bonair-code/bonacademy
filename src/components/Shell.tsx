@@ -83,7 +83,14 @@ export function Shell({
     { href: "/my-trainings/history", label: "Eğitim Geçmişim", icon: "checklist", iconTone: "teal" },
   ];
   if (user.role === "MANAGER" || user.role === "ADMIN") {
-    main.push({ href: "/manager/team", label: "Ekibim", icon: "users", iconTone: "green" });
+    main.push({
+      href: "/manager/team",
+      // Admin için "Ekibim" yanıltıcı — tüm şirketi görüyor. Yönetici kendi
+      // raporlayanlarını gördüğü için "Ekibim" uygun.
+      label: user.role === "ADMIN" ? "Çalışan Eğitimleri" : "Ekibim",
+      icon: "users",
+      iconTone: "green",
+    });
   }
   // MANAGER için salt okunur Kurslar sekmesi — /courses Excel dışa aktarımını
   // da sağlar. ADMIN'in "Kurslar" sekmesi /admin/courses'a gittiği için burada

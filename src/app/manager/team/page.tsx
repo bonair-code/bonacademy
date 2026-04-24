@@ -33,7 +33,15 @@ export default async function ManagerTeam() {
   });
 
   return (
-    <Shell user={user} title="Ekibim" subtitle={`${members.length} kişi`}>
+    <Shell
+      user={user}
+      title={user.role === "ADMIN" ? "Çalışan Eğitimleri" : "Ekibim"}
+      subtitle={
+        user.role === "ADMIN"
+          ? `Tüm çalışanların eğitim durumu · ${members.length} kişi`
+          : `${members.length} kişi`
+      }
+    >
       <div className="flex justify-end mb-3">
         <a
           href="/api/manager/team/pdf"
