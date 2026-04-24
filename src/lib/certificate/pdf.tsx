@@ -97,6 +97,14 @@ const styles = StyleSheet.create({
     color: "#b91c1c",
   },
   course: { fontFamily: "Roboto", fontWeight: "bold", color: "#0f172a" },
+  birthInfo: {
+    fontSize: 10,
+    textAlign: "center",
+    color: "#64748b",
+    marginTop: -8,
+    marginBottom: 10,
+    letterSpacing: 1,
+  },
   footerRow: {
     position: "absolute",
     bottom: 40,
@@ -170,6 +178,8 @@ export type CertificateKind = "achievement" | "participation";
 
 export async function renderCertificatePdf(opts: {
   name: string;
+  birthDate?: Date | null;
+  birthPlace?: string | null;
   courseTitle: string;
   issuedAt: Date;
   serialNo: string;
@@ -208,6 +218,11 @@ export async function renderCertificatePdf(opts: {
       : tpl.subtitleAchievement;
   const bodySuffix =
     kind === "participation" ? tpl.bodyParticipation : tpl.bodyAchievement;
+  // "Doğum Tarihi: ... · Doğum Yeri: ..." — ikisinden en az biri varsa göster.
+  const birthParts: string[] = [];
+  if (opts.birthDate) birthParts.push(`Doğum Tarihi: ${fmtTrDate(opts.birthDate)}`);
+  if (opts.birthPlace) birthParts.push(`Doğum Yeri: ${opts.birthPlace}`);
+  const birthLine = birthParts.join("  ·  ");
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
@@ -218,6 +233,7 @@ export async function renderCertificatePdf(opts: {
           <Text style={styles.subtitle}>{subtitle}</Text>
           <Text style={styles.body}>Bu sertifika</Text>
           <Text style={styles.name}>{opts.name}</Text>
+          {birthLine ? <Text style={styles.birthInfo}>{birthLine}</Text> : null}
           <Text style={styles.body}>
             adlı kişinin <Text style={styles.course}>{opts.courseTitle}</Text>{" "}
             {bodySuffix}

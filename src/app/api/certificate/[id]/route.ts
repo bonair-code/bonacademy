@@ -58,6 +58,8 @@ export async function GET(
     : await loadCurrentCertificateTemplate();
   const pdf = await renderCertificatePdf({
     name: cert.user.name,
+    birthDate: cert.user.birthDate ?? null,
+    birthPlace: cert.user.birthPlace ?? null,
     courseTitle: cert.assignment.plan.course.title,
     issuedAt: cert.issuedAt,
     serialNo: cert.serialNo,

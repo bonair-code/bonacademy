@@ -20,6 +20,13 @@ async function upsertUser(formData: FormData) {
   const managerId = managerIdRaw && managerIdRaw !== id ? managerIdRaw : null;
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
   const password = String(formData.get("password") || "");
+  // Doğum bilgileri — sertifikada görünür, ikisi de opsiyonel.
+  const birthDateRaw = String(formData.get("birthDate") || "").trim();
+  const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(birthDateRaw)
+    ? new Date(birthDateRaw + "T00:00:00Z")
+    : null;
+  const birthPlaceRaw = String(formData.get("birthPlace") || "").trim();
+  const birthPlace = birthPlaceRaw ? birthPlaceRaw.slice(0, 120) : null;
 
   let passwordHash: string | undefined;
   if (password) {
@@ -45,13 +52,15 @@ async function upsertUser(formData: FormData) {
           role,
           departmentId,
           managerId,
+          birthDate,
+          birthPlace,
           ...(passwordHash
             ? { passwordHash, failedLoginAttempts: 0, lockedAt: null }
             : {}),
         },
       })
     : await prisma.user.create({
-        data: { email, name, role, departmentId, managerId, ...(passwordHash ? { passwordHash } : {}) },
+        data: { email, name, role, departmentId, managerId, birthDate, birthPlace, ...(passwordHash ? { passwordHash } : {}) },
       });
 
   await prisma.userJobTitle.deleteMany({ where: { userId: user.id } });
@@ -210,6 +219,19 @@ export default async function AdminUsers() {
             className="input"
             autoComplete="new-password"
           />
+          <label className="text-xs text-slate-600">
+            Doğum tarihi (opsiyonel)
+            <input type="date" name="birthDate" className="input w-full mt-1" />
+          </label>
+          <label className="text-xs text-slate-600">
+            Doğum yeri (opsiyonel)
+            <input
+              name="birthPlace"
+              maxLength={120}
+              placeholder="Örn. İstanbul"
+              className="input w-full mt-1"
+            />
+          </label>
           <label className="col-span-2 block text-xs text-slate-600">
             Görev tanımları (Ctrl / Cmd ile çoklu seçim)
             <select
@@ -322,6 +344,29 @@ export default async function AdminUsers() {
                         </option>
                       ))}
                   </select>
+                  <label className="text-xs text-slate-600">
+                    Doğum tarihi
+                    <input
+                      type="date"
+                      name="birthDate"
+                      defaultValue={
+                        u.birthDate
+                          ? new Date(u.birthDate).toISOString().slice(0, 10)
+                          : ""
+                      }
+                      className="input w-full mt-1"
+                    />
+                  </label>
+                  <label className="text-xs text-slate-600">
+                    Doğum yeri
+                    <input
+                      name="birthPlace"
+                      maxLength={120}
+                      defaultValue={u.birthPlace ?? ""}
+                      placeholder="Örn. İstanbul"
+                      className="input w-full mt-1"
+                    />
+                  </label>
                   <label className="col-span-2 text-xs text-slate-600">
                     Görev tanımları (çoklu seçim için Ctrl/Cmd)
                     <select
