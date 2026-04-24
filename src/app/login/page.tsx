@@ -102,9 +102,9 @@ export default async function LoginPage({
           }}
         />
         <div className="relative z-10">
-          <div className="inline-flex items-center gap-3 bg-white rounded-xl px-4 py-3 shadow">
+          <div className="inline-flex items-center gap-3 bg-white rounded-xl px-5 py-4 shadow">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/Logo.png" alt="Bon Air" className="h-8 w-auto" />
+            <img src="/Logo.png" alt="Bon Air" className="h-16 w-auto" />
           </div>
         </div>
         <div className="relative z-10 max-w-md">
@@ -142,7 +142,7 @@ export default async function LoginPage({
         <div className="w-full max-w-md">
           <div className="lg:hidden flex flex-col items-center mb-8">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/Logo.png" alt="Bon Air" className="h-12 w-auto mb-2" />
+            <img src="/Logo.png" alt="Bon Air" className="h-20 w-auto mb-2" />
           </div>
 
           <div className="mb-8">
