@@ -67,7 +67,10 @@ export async function LocaleSwitcher({
   }
 
   return (
-    <form action={setLocaleAction} className={`inline-flex items-center gap-1 text-xs ${className}`}>
+    <form
+      action={setLocaleAction}
+      className={`inline-flex items-center rounded-full border border-slate-200 bg-white p-0.5 text-xs shadow-sm ${className}`}
+    >
       <input type="hidden" name="next" value={next} />
       {LOCALES.map((l) => {
         const active = l === current;
@@ -81,8 +84,8 @@ export async function LocaleSwitcher({
             aria-pressed={active}
             className={
               active
-                ? "px-2 py-1 rounded-md bg-slate-900 text-white font-medium"
-                : "px-2 py-1 rounded-md text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                ? "px-3 py-1 rounded-full bg-teal-500 text-white font-semibold transition-colors"
+                : "px-3 py-1 rounded-full text-slate-600 font-semibold hover:text-slate-900 transition-colors"
             }
           >
             {l.toUpperCase()}
