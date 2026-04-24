@@ -1,6 +1,9 @@
 import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
+import { addDays, format } from "date-fns";
+import { revalidatePath } from "next/cache";
+import { createRetakeAssignment, canRequestRetakeFor } from "@/lib/scheduler/retake";
 
 const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
   PENDING: { text: "Bekliyor", cls: "bg-slate-100 text-slate-600" },
@@ -118,29 +121,80 @@ export default async function ManagerTeam() {
                   };
                   const isOverdue =
                     new Date(a.dueDate) < new Date() && a.status !== "COMPLETED";
+                  // Bu kurs (plan) için aynı kullanıcıda aktif başka bir döngü var mı?
+                  // Varsa "Tekrar İste" butonunu gizle — çifte atama oluşmasın.
+                  const hasActiveForPlan = m.assignments.some(
+                    (x) =>
+                      x.planId === a.planId &&
+                      x.id !== a.id &&
+                      x.status !== "COMPLETED"
+                  );
+                  const canRequestRetake =
+                    a.status === "COMPLETED" && !hasActiveForPlan;
+                  const defaultDue = format(addDays(new Date(), 30), "yyyy-MM-dd");
                   return (
-                    <div
-                      key={a.id}
-                      className="flex items-center justify-between gap-3 px-4 py-3"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-slate-900 truncate">
-                          {a.plan.course.title}
+                    <div key={a.id} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-slate-900 truncate">
+                            {a.plan.course.title}
+                          </div>
+                          <div className="text-xs text-slate-500 mt-0.5">
+                            Döngü {a.cycleNumber} · Son tarih{" "}
+                            <span
+                              className={isOverdue ? "text-red-600 font-medium" : ""}
+                            >
+                              {a.dueDate.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          Döngü {a.cycleNumber} · Son tarih{" "}
+                        <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={isOverdue ? "text-red-600 font-medium" : ""}
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${s.cls}`}
                           >
-                            {a.dueDate.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
+                            {s.text}
                           </span>
                         </div>
                       </div>
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0 ${s.cls}`}
-                      >
-                        {s.text}
-                      </span>
+                      {canRequestRetake && (
+                        <details className="mt-2">
+                          <summary className="text-[11px] text-sky-700 hover:underline cursor-pointer inline-block select-none">
+                            Tekrar iste →
+                          </summary>
+                          <form
+                            action={managerRetakeAction}
+                            className="mt-2 grid gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200"
+                          >
+                            <input type="hidden" name="assignmentId" value={a.id} />
+                            <label className="text-xs text-slate-600">
+                              Sebep <span className="text-red-600">*</span>
+                              <textarea
+                                name="reason"
+                                required
+                                minLength={5}
+                                maxLength={500}
+                                rows={2}
+                                className="input w-full text-sm mt-1"
+                                placeholder="Örn. Mevzuat değişti, yeniden alınması gerekiyor."
+                              />
+                            </label>
+                            <label className="text-xs text-slate-600">
+                              Son tarih
+                              <input
+                                type="date"
+                                name="dueDate"
+                                defaultValue={defaultDue}
+                                className="input w-full text-sm mt-1"
+                              />
+                            </label>
+                            <div>
+                              <button className="btn-primary text-xs py-1.5">
+                                Tekrar İste
+                              </button>
+                            </div>
+                          </form>
+                        </details>
+                      )}
                     </div>
                   );
                 })}
@@ -151,4 +205,34 @@ export default async function ManagerTeam() {
       </div>
     </Shell>
   );
+}
+
+async function managerRetakeAction(formData: FormData) {
+  "use server";
+  const actor = await requireRole("MANAGER", "ADMIN");
+  const assignmentId = String(formData.get("assignmentId") || "").trim();
+  const reason = String(formData.get("reason") || "").trim();
+  const dueDateRaw = String(formData.get("dueDate") || "").trim();
+  if (!assignmentId || !reason || reason.length < 5) return;
+
+  // Hedef kullanıcı için yetki kontrolü.
+  const src = await prisma.assignment.findUnique({
+    where: { id: assignmentId },
+    select: { userId: true },
+  });
+  if (!src) return;
+  const allowed = await canRequestRetakeFor(actor, src.userId);
+  if (!allowed) return;
+
+  const customDue =
+    /^\d{4}-\d{2}-\d{2}$/.test(dueDateRaw) ? new Date(dueDateRaw) : null;
+
+  await createRetakeAssignment({
+    sourceAssignmentId: assignmentId,
+    triggeredBy: "MANAGER_REQUESTED",
+    triggeredById: actor.id,
+    reason: reason.slice(0, 500),
+    customDueDate: customDue,
+  });
+  revalidatePath("/manager/team");
 }

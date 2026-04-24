@@ -86,7 +86,7 @@ const I = {
 export default async function Dashboard() {
   const user = await requireUser();
 
-  const [active, overdue, completed, inProgress, certs, upcoming] =
+  const [active, overdue, completed, inProgress, certs, upcoming, recentCompleted] =
     await Promise.all([
       prisma.assignment.count({
         where: { userId: user.id, status: { notIn: ["COMPLETED"] } },
@@ -115,6 +115,16 @@ export default async function Dashboard() {
         },
         orderBy: { dueDate: "asc" },
         take: 6,
+      }),
+      // En son tamamlanan eğitimler — ayrı bölümde gösterim için.
+      prisma.assignment.findMany({
+        where: { userId: user.id, status: "COMPLETED" },
+        include: {
+          plan: { include: { course: { select: { title: true } } } },
+          certificate: { select: { id: true, serialNo: true } },
+        },
+        orderBy: { completedAt: "desc" },
+        take: 5,
       }),
     ]);
 
@@ -205,6 +215,14 @@ export default async function Dashboard() {
                             Yeni sürüm mevcut (v{a.plan.course.currentRevision})
                           </span>
                         )}
+                      {a.triggeredBy === "MANAGER_REQUESTED" && (
+                        <span
+                          className="ml-2 inline-flex items-center rounded-full bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 text-[10px] font-medium"
+                          title={a.triggerReason ?? undefined}
+                        >
+                          Yönetici tekrar istedi
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -228,6 +246,67 @@ export default async function Dashboard() {
           })}
         </div>
       </div>
+
+      {/* Tamamlanan eğitimler */}
+      {recentCompleted.length > 0 && (
+        <div className="card mb-6">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-5 w-5 text-emerald-600"
+              >
+                <path d={I.check} />
+              </svg>
+              <h3 className="font-semibold text-slate-900">
+                Son Tamamlanan Eğitimlerim
+              </h3>
+            </div>
+            <Link
+              href="/my-trainings/history"
+              className="text-xs text-sky-700 hover:underline"
+            >
+              Tümü →
+            </Link>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {recentCompleted.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-center justify-between gap-4 px-5 py-4"
+              >
+                <div className="min-w-0">
+                  <div className="font-medium text-slate-900 truncate">
+                    {a.plan.course.title}
+                  </div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {a.completedAt
+                      ? `Tamamlandı: ${formatDate(a.completedAt)}`
+                      : "Tamamlandı"}
+                    {" · Döngü "}
+                    {a.cycleNumber}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {a.certificate && (
+                    <a
+                      href={`/api/certificate/${a.certificate.id}`}
+                      className="btn-secondary text-xs py-1.5"
+                    >
+                      Sertifika
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
     </Shell>
   );

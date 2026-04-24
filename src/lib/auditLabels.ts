@@ -24,6 +24,8 @@ const LABELS: Record<string, string> = {
   "question.delete": "Soru silindi",
   "revision.create": "Yeni revizyon",
   "certificate.template.update": "Sertifika şablonu güncellendi",
+  "assignment.voluntary-retake": "Eğitim tekrarı (gönüllü)",
+  "assignment.manager-retake": "Eğitim tekrarı (yönetici talebi)",
 };
 
 export function auditActionLabel(action: string): string {
@@ -39,6 +41,7 @@ const ENTITY_LABELS: Record<string, string> = {
   QuestionBank: "Soru Bankası",
   CourseRevision: "Revizyon",
   OrganizationSettings: "Kurum Ayarları",
+  Assignment: "Atama",
 };
 
 export function auditEntityLabel(entity: string): string {

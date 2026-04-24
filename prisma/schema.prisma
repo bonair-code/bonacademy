@@ -37,6 +37,15 @@ enum AttemptType {
   EXAM
 }
 
+// Assignment'ın hangi tetikleyici tarafından üretildiğini kaydeder. Denetim
+// ve raporlama için önemli: otomatik periyodik döngü mü, kullanıcının gönüllü
+// tekrarı mı, yoksa yönetici zorunlu kılışı mı?
+enum AssignmentTrigger {
+  AUTO
+  VOLUNTARY
+  MANAGER_REQUESTED
+}
+
 enum TokenType {
   INVITE
   RESET
@@ -79,6 +88,8 @@ model User {
   updatedAt     DateTime     @updatedAt
 
   assignments   Assignment[]
+  // Gönüllü tekrar veya yönetici tarafından tetiklenen assignment'lar.
+  triggeredAssignments Assignment[] @relation("AssignmentTriggeredBy")
   plansCreated  TrainingPlan[] @relation("PlanCreator")
   certificates  Certificate[]
   auditLogs     AuditLog[]
@@ -245,6 +256,15 @@ model Assignment {
   // users which version they completed and detect when a newer revision exists.
   revisionNumber Int?
   createdAt      DateTime         @default(now())
+
+  // Tetikleyici. AUTO: cron (recurrence) — varsayılan (eski kayıtlar).
+  // VOLUNTARY: kullanıcı kendi başlattı. MANAGER_REQUESTED: yönetici/admin zorunlu kıldı.
+  triggeredBy    AssignmentTrigger @default(AUTO)
+  // Manuel tetiklendiyse (VOLUNTARY/MANAGER_REQUESTED) kimin tetiklediği.
+  triggeredById  String?
+  triggeredBy_User User?            @relation("AssignmentTriggeredBy", fields: [triggeredById], references: [id], onDelete: SetNull)
+  // Yönetici zorunlu kıldıysa sebep (audit + kullanıcıya gösterim için).
+  triggerReason  String?
 
   attempts     Attempt[]
   examAttempts ExamAttempt[]

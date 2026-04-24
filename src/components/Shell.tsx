@@ -80,6 +80,7 @@ export function Shell({
   const main: NavItem[] = [
     { href: "/dashboard", label: "Gösterge Paneli", icon: "dashboard", iconTone: "teal" },
     { href: "/certificates", label: "Sertifikalarım", icon: "cert", iconTone: "green" },
+    { href: "/my-trainings/history", label: "Eğitim Geçmişim", icon: "checklist", iconTone: "teal" },
   ];
   if (user.role === "MANAGER" || user.role === "ADMIN") {
     main.push({ href: "/manager/team", label: "Ekibim", icon: "users", iconTone: "green" });

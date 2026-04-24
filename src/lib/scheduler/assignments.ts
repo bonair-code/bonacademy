@@ -25,6 +25,9 @@ async function createAssignmentIfAbsent(data: {
   dueDate: Date;
   status: "PENDING";
   revisionNumber: number;
+  triggeredBy?: "AUTO" | "VOLUNTARY" | "MANAGER_REQUESTED";
+  triggeredById?: string | null;
+  triggerReason?: string | null;
 }): Promise<{ id: string } | null> {
   try {
     return await prisma.assignment.create({ data, select: { id: true } });

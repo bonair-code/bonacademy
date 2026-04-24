@@ -22,7 +22,9 @@ export type AuditAction =
   | "question.create"
   | "question.delete"
   | "revision.create"
-  | "certificate.template.update";
+  | "certificate.template.update"
+  | "assignment.voluntary-retake"
+  | "assignment.manager-retake";
 
 // Audit yazımı silent fail — kritik işin sonrasında çağrılır, hata çalışmayı
 // durdurmamalı. Yine de console'a düşer ki izlensin.
