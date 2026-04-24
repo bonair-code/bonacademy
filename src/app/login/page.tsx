@@ -115,9 +115,10 @@ export default async function LoginPage({
           <p className="text-slate-300 text-sm leading-relaxed">
             BonAcademy, Bon Air çalışanlarının zorunlu eğitimlerini planlar,
             SCORM içeriklerini oynatır, sınavları yönetir ve sertifikaları
-            otomatik üretir.
+            otomatik üretir. Her sertifika, kare kod (QR) ile anında
+            doğrulanabilir.
           </p>
-          <div className="mt-8 grid grid-cols-3 gap-4 text-xs">
+          <div className="mt-8 grid grid-cols-2 gap-4 text-xs">
             <div className="border border-white/10 rounded-lg p-3">
               <div className="text-brand-400 font-semibold text-lg">SCORM</div>
               <div className="text-slate-400">1.2 & 2004 desteği</div>
@@ -129,6 +130,10 @@ export default async function LoginPage({
             <div className="border border-white/10 rounded-lg p-3">
               <div className="text-brand-400 font-semibold text-lg">Sertifika</div>
               <div className="text-slate-400">PDF + takvim (ICS)</div>
+            </div>
+            <div className="border border-white/10 rounded-lg p-3">
+              <div className="text-brand-400 font-semibold text-lg">Kare Kod</div>
+              <div className="text-slate-400">Anlık sertifika doğrulama</div>
             </div>
           </div>
         </div>
