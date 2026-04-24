@@ -11,6 +11,7 @@ const PUBLIC_PATHS = [
   "/favicon.ico",
   "/verify",
   "/kvkk",
+  "/icon",
 ];
 
 // Edge-safe: only check for the session cookie's presence. Full session
