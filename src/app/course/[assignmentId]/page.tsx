@@ -5,6 +5,7 @@ import { ScormPlayer } from "./ScormPlayer";
 import { notFound } from "next/navigation";
 import { getFile } from "@/lib/scorm/storage";
 import { AttemptsHistoryDrawer } from "@/components/AttemptsHistoryDrawer";
+import { buildTrainingSteps } from "@/lib/trainingSteps";
 
 export default async function CoursePage({
   params,
@@ -19,9 +20,21 @@ export default async function CoursePage({
   const a = await prisma.assignment.findUnique({
     where: { id: assignmentId },
     include: {
-      plan: { include: { course: true } },
+      plan: {
+        include: {
+          course: {
+            include: {
+              exam: { select: { id: true } },
+              questionBank: {
+                select: { _count: { select: { questions: true } } },
+              },
+            },
+          },
+        },
+      },
       attempts: { orderBy: { startedAt: "desc" } },
       examAttempts: { orderBy: { createdAt: "desc" } },
+      certificate: { select: { id: true } },
     },
   });
   if (!a || a.userId !== user.id) notFound();
@@ -104,8 +117,25 @@ export default async function CoursePage({
   const scormDone =
     a.status === "SCORM_COMPLETED" || a.status === "EXAM_FAILED";
 
+  const hasExam =
+    !!course.exam || (course.questionBank?._count.questions ?? 0) > 0;
+  const steps = buildTrainingSteps({
+    assignmentId: a.id,
+    // Status kaydı DB'ye az önce IN_PROGRESS olarak güncellenmiş olabilir;
+    // ama a.status hâlâ eski değeri taşıyor. UI için en doğru resim: eğer
+    // yukarıdaki update çalıştıysa IN_PROGRESS, yoksa mevcut status.
+    status:
+      a.status === "PENDING" || a.status === "RETAKE_REQUIRED"
+        ? "IN_PROGRESS"
+        : a.status,
+    hasExam,
+    hasCertificate: !!a.certificate,
+    certificateId: a.certificate?.id ?? null,
+    context: "course",
+  });
+
   return (
-    <Shell user={user}>
+    <Shell user={user} trainingSteps={steps} trainingTitle={course.title}>
       <div className="flex items-center justify-between gap-3 mb-3">
         <h1 className="text-lg font-semibold">{course.title}</h1>
         <div className="flex items-center gap-2 text-xs">
@@ -138,14 +168,31 @@ export default async function CoursePage({
         version={course.scormVersion}
         initialCmi={initialCmi}
       />
-      {/* Manual bridge: when the SCORM package has been marked completed but
-          never auto-navigated (some packages don't follow through on LMSFinish),
-          give the learner an explicit path into the exam. */}
-      {scormDone && (
-        <div className="mt-4 flex items-center justify-end">
-          <a href={`/exam/${a.id}`} className="btn-primary">
-            Sınava Geç →
-          </a>
+      {/* "Sınava Başla" düğmesi eğitim altında daima görünür; yalnızca SCORM
+          tamamlanmadıysa devre dışı — kullanıcı adımın varlığından haberdar
+          olsun ama önce eğitimi bitirmesi gerektiğini net görsün. */}
+      {hasExam && (
+        <div className="mt-4 flex items-center justify-end gap-3">
+          {!scormDone && (
+            <span className="text-xs text-slate-500">
+              Sınavı açmak için önce eğitim içeriğini tamamlayın.
+            </span>
+          )}
+          {scormDone ? (
+            <a href={`/exam/${a.id}`} className="btn-primary">
+              Sınava Başla →
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-disabled="true"
+              title="Önce eğitimi tamamlayın"
+              className="btn-primary opacity-50 cursor-not-allowed"
+            >
+              Sınava Başla →
+            </button>
+          )}
         </div>
       )}
       {(scormAttempts.length > 0 || examAttempts.length > 0) && (

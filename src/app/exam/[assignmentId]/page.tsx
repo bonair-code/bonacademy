@@ -5,6 +5,7 @@ import { Shell } from "@/components/Shell";
 import { ensureExamSession } from "@/lib/exam/engine";
 import { ExamForm } from "./ExamForm";
 import { ExamAttemptsDrawer } from "@/components/ExamAttemptsDrawer";
+import { buildTrainingSteps } from "@/lib/trainingSteps";
 
 export default async function ExamPage({
   params,
@@ -27,6 +28,7 @@ export default async function ExamPage({
         },
       },
       examAttempts: true,
+      certificate: { select: { id: true } },
     },
   });
   if (!a || a.userId !== user.id) notFound();
@@ -52,13 +54,23 @@ export default async function ExamPage({
       },
     });
   }
+  const stepsBase = {
+    assignmentId: a.id,
+    status: a.status,
+    hasCertificate: !!a.certificate,
+    certificateId: a.certificate?.id ?? null,
+  };
+
   if (!bank || bank.questions.length === 0 || !exam) {
+    const steps = buildTrainingSteps({ ...stepsBase, hasExam: false, context: "exam" });
     return (
-      <Shell user={user}>
+      <Shell user={user} trainingSteps={steps} trainingTitle={a.plan.course.title}>
         <p>Bu kurs için sınav tanımlı değil.</p>
       </Shell>
     );
   }
+
+  const steps = buildTrainingSteps({ ...stepsBase, hasExam: true, context: "exam" });
 
   // Server-side snapshot: bu denemeye ait soru kümesini ExamSession'a yaz.
   // Sayfa yenilense de aynı sorular gelir; submit ise bu snapshot'a göre
@@ -82,7 +94,7 @@ export default async function ExamPage({
     }));
 
   return (
-    <Shell user={user}>
+    <Shell user={user} trainingSteps={steps} trainingTitle={a.plan.course.title}>
       <h1 className="text-xl font-semibold mb-1">{a.plan.course.title} — Sınav</h1>
       <p className="text-sm text-slate-500 mb-4">
         Geçme notu: %{exam.passingScore}. Deneme: {a.examAttempts.length + 1}/2
