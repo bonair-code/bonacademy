@@ -7,6 +7,7 @@ import { getFile } from "@/lib/scorm/storage";
 import { AttemptsHistoryDrawer } from "@/components/AttemptsHistoryDrawer";
 import { buildTrainingSteps } from "@/lib/trainingSteps";
 import { computeScormProgress } from "@/lib/scorm/progress";
+import { getTranslations } from "next-intl/server";
 
 export default async function CoursePage({
   params,
@@ -16,6 +17,7 @@ export default async function CoursePage({
   searchParams?: Promise<{ needsCompletion?: string }>;
 }) {
   const user = await requireUser();
+  const t = await getTranslations("coursePlayer");
   const { assignmentId } = await params;
   const sp = (await searchParams) || {};
   const a = await prisma.assignment.findUnique({
@@ -43,7 +45,7 @@ export default async function CoursePage({
   if (!course.scormPackagePath || !course.scormEntryPoint) {
     return (
       <Shell user={user}>
-        <p className="text-slate-500">Bu kurs için henüz SCORM paketi yüklenmemiş.</p>
+        <p className="text-slate-500">{t("noPackage")}</p>
       </Shell>
     );
   }
@@ -56,16 +58,14 @@ export default async function CoursePage({
     return (
       <Shell user={user} title={course.title}>
         <div className="card p-6 max-w-2xl">
-          <h2 className="font-semibold text-slate-900 mb-2">SCORM paketi bulunamadı</h2>
+          <h2 className="font-semibold text-slate-900 mb-2">{t("packageMissingTitle")}</h2>
           <p className="text-sm text-slate-600 mb-3">
-            Bu kursun SCORM içeriği şu anda depolama alanında değil. Büyük ihtimalle paket,
-            kalıcı bulut depolamaya (Vercel Blob) geçmeden önce yüklendi ve geçici sunucu
-            dosyasıyla birlikte silindi.
+            {t("packageMissingBody")}
           </p>
-          <p className="text-sm text-slate-600">
-            Yönetici <strong>/admin/courses</strong> sayfasından bu kurs için SCORM paketini
-            yeniden yüklemelidir. Tekrar yüklendiğinde içerik kalıcı olarak saklanacak.
-          </p>
+          <p
+            className="text-sm text-slate-600"
+            dangerouslySetInnerHTML={{ __html: t.raw("packageMissingAdmin") as string }}
+          />
         </div>
       </Shell>
     );
@@ -147,32 +147,30 @@ export default async function CoursePage({
         <h1 className="text-lg font-semibold">{course.title}</h1>
         <div className="flex items-center gap-2 text-xs">
           {stampedRev != null && (
-            <span className="badge-teal">Atama: v{stampedRev}</span>
+            <span className="badge-teal">{t("assignmentVersion", { rev: stampedRev })}</span>
           )}
-          <span className="text-slate-500">Mevcut sürüm: v{liveRev}</span>
+          <span className="text-slate-500">{t("currentVersion", { rev: liveRev })}</span>
         </div>
       </div>
       {showOutdatedNotice && (
         <div className="card p-3 mb-3 text-sm text-amber-800 bg-amber-50 border-amber-200">
-          Bu kursun daha güncel bir sürümü (v{liveRev}) yayınlandı. Bir sonraki
-          döngüde yeni sürüm otomatik atanacak.
+          {t("outdatedNotice", { rev: liveRev })}
         </div>
       )}
       {sp.needsCompletion === "1" && !scormDone && (
         <div className="card p-3 mb-3 text-sm text-amber-900 bg-amber-50 border-amber-200">
-          Sınava geçebilmek için önce eğitim içeriğini sonuna kadar tamamlamanız gerekir.
+          {t("needsCompletion")}
         </div>
       )}
       {retakeRequired && (
         <div className="card p-3 mb-3 text-sm text-red-800 bg-red-50 border-red-200">
-          Sınavda iki kez başarısız oldunuz. Eğitim içeriğini baştan tamamlamanız
-          ve ardından sınava yeniden girmeniz gerekiyor.
+          {t("retakeRequired")}
         </div>
       )}
       <div className="mb-3">
         <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
-          <span>İlerleme: {progress.label}</span>
-          <span className="font-medium">%{progress.percent}</span>
+          <span>{t("progressLabel", { label: progress.label })}</span>
+          <span className="font-medium">{t("progressPercent", { pct: progress.percent })}</span>
         </div>
         <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
           <div
@@ -180,12 +178,11 @@ export default async function CoursePage({
               progress.percent >= 100 ? "bg-emerald-500" : "bg-teal-500"
             }`}
             style={{ width: `${progress.percent}%` }}
-            aria-label={`İlerleme yüzde ${progress.percent}`}
+            aria-label={t("progressAria", { pct: progress.percent })}
           />
         </div>
         <p className="text-[11px] text-slate-500 mt-1">
-          İlerleme her ~30 saniyede bir güncellenir; sayfayı yenileyerek en son
-          değeri görebilirsiniz.
+          {t("progressHint")}
         </p>
       </div>
       <ScormPlayer
@@ -201,22 +198,22 @@ export default async function CoursePage({
         <div className="mt-4 flex items-center justify-end gap-3">
           {!scormDone && (
             <span className="text-xs text-slate-500">
-              Sınavı açmak için önce eğitim içeriğini tamamlayın.
+              {t("examHint")}
             </span>
           )}
           {scormDone ? (
             <a href={`/exam/${a.id}`} className="btn-primary">
-              Sınava Başla →
+              {t("startExam")}
             </a>
           ) : (
             <button
               type="button"
               disabled
               aria-disabled="true"
-              title="Önce eğitimi tamamlayın"
+              title={t("completeFirstTitle")}
               className="btn-primary opacity-50 cursor-not-allowed"
             >
-              Sınava Başla →
+              {t("startExam")}
             </button>
           )}
         </div>

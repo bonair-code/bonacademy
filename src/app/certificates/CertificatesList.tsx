@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type Item = {
   id: string;
@@ -10,6 +11,7 @@ type Item = {
 };
 
 export function CertificatesList({ items }: { items: Item[] }) {
+  const t = useTranslations("user");
   const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
@@ -40,7 +42,7 @@ export function CertificatesList({ items }: { items: Item[] }) {
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Kurs adı veya seri no ile ara..."
+          placeholder={t("certificates.searchPlaceholder")}
           className="input w-full pl-9"
         />
       </div>
@@ -49,8 +51,8 @@ export function CertificatesList({ items }: { items: Item[] }) {
         {filtered.length === 0 ? (
           <p className="p-8 text-center text-slate-400 text-sm">
             {items.length === 0
-              ? "Henüz sertifikanız yok."
-              : "Aramanızla eşleşen sertifika bulunamadı."}
+              ? t("certificates.emptyNone")
+              : t("certificates.emptySearch")}
           </p>
         ) : (
           filtered.map((c) => (
@@ -80,7 +82,7 @@ export function CertificatesList({ items }: { items: Item[] }) {
                     {c.courseTitle}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    Seri No: {c.serialNo}
+                    {t("certificates.serialNo", { serial: c.serialNo })}
                   </div>
                 </div>
               </div>

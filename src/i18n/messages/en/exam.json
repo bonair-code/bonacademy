@@ -1,0 +1,46 @@
+{
+  "exam": {
+    "notDefined": "No exam is defined for this course.",
+    "titleSuffix": "Exam",
+    "resultTitleSuffix": "Exam Result",
+    "passingAndAttempt": "Passing score: {passingScore}%. Attempt: {current}/{total}",
+    "submitting": "Submitting…",
+    "submit": "Submit Exam",
+    "unanswered": "Please answer all questions ({count} left blank).",
+    "result": {
+      "passed": "Passed",
+      "failed": "Failed",
+      "yourScore": "Your score:",
+      "passingScore": "Passing score:",
+      "attemptLine": "Attempt #{attemptNo} · Correct: {correct} / {total} · Wrong: {wrong}",
+      "downloadCertificate": "Download Certificate (PDF)",
+      "retakeCourse": "Retake Course",
+      "tryAgain": "Try Again",
+      "dashboard": "Dashboard",
+      "retakeRequiredNote": "You have used both attempts. You need to complete the training content again and retake the exam.",
+      "questionReport": "Question Report",
+      "correct": "Correct",
+      "wrong": "Wrong",
+      "yourAnswer": "your answer",
+      "correctAnswer": "correct answer"
+    },
+    "attempts": {
+      "previous": "Previous Attempts",
+      "records": "{count} records",
+      "close": "Close",
+      "empty": "No attempts yet.",
+      "passed": "Passed",
+      "failed": "Failed"
+    },
+    "history": {
+      "title": "Past Attempts",
+      "records": "{count} records",
+      "scormSection": "Training content ({count})",
+      "examSection": "Exam attempts ({count})",
+      "inProgress": "in progress",
+      "empty": "No attempts yet.",
+      "passed": "Passed",
+      "failed": "Failed"
+    }
+  }
+}

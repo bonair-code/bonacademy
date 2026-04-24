@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import Link from "next/link";
 import { formatDate } from "@/lib/format";
+import { getTranslations } from "next-intl/server";
 
 type Tone = "teal" | "amber" | "green" | "red" | "slate";
 
@@ -85,6 +86,7 @@ const I = {
 
 export default async function Dashboard() {
   const user = await requireUser();
+  const t = await getTranslations("user");
 
   const [active, overdue, completed, inProgress, certs, upcoming, recentCompleted] =
     await Promise.all([
@@ -130,39 +132,39 @@ export default async function Dashboard() {
 
   const pending = active - inProgress;
 
-  const statusLabel: Record<string, { text: string; cls: string }> = {
-    PENDING: { text: "Bekliyor", cls: "badge-slate" },
-    IN_PROGRESS: { text: "Devam Ediyor", cls: "badge-amber" },
-    SCORM_COMPLETED: { text: "Sınav Bekliyor", cls: "badge-teal" },
-    EXAM_PASSED: { text: "Sınav Geçti", cls: "badge-green" },
-    EXAM_FAILED: { text: "Sınav Başarısız", cls: "badge-red" },
-    RETAKE_REQUIRED: { text: "Tekrar Gerekli", cls: "badge-red" },
-    COMPLETED: { text: "Tamamlandı", cls: "badge-green" },
-    OVERDUE: { text: "Gecikmiş", cls: "badge-red" },
+  const statusCls: Record<string, string> = {
+    PENDING: "badge-slate",
+    IN_PROGRESS: "badge-amber",
+    SCORM_COMPLETED: "badge-teal",
+    EXAM_PASSED: "badge-green",
+    EXAM_FAILED: "badge-red",
+    RETAKE_REQUIRED: "badge-red",
+    COMPLETED: "badge-green",
+    OVERDUE: "badge-red",
   };
 
   return (
-    <Shell user={user} title="Gösterge Paneli" subtitle="Genel Bakış">
+    <Shell user={user} title={t("dashboard.title")} subtitle={t("dashboard.subtitle")}>
       {/* Section heading with PDF action */}
       <div className="flex items-center justify-between mb-4 mt-2">
         <h2 className="text-lg font-semibold text-slate-900">
-          Eğitim Özeti
+          {t("dashboard.summaryHeading")}
         </h2>
         <button className="btn-secondary text-xs py-1.5">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 11h6" />
           </svg>
-          PDF
+          {t("dashboard.pdf")}
         </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-6">
-        <Kpi tone="teal"  icon={I.clipboard} value={active}     label="Aktif Eğitim" />
-        <Kpi tone="slate" icon={I.calendar}  value={pending < 0 ? 0 : pending} label="Bekleyen" />
-        <Kpi tone="amber" icon={I.refresh}   value={inProgress} label="Devam Eden" />
-        <Kpi tone="green" icon={I.check}     value={completed}  label="Tamamlanan" />
-        <Kpi tone="red"   icon={I.alarm}     value={overdue}    label="Geciken" />
-        <Kpi tone="amber" icon={I.clock}     value={certs}      label="Sertifikalarım" />
+        <Kpi tone="teal"  icon={I.clipboard} value={active}     label={t("dashboard.kpi.active")} />
+        <Kpi tone="slate" icon={I.calendar}  value={pending < 0 ? 0 : pending} label={t("dashboard.kpi.pending")} />
+        <Kpi tone="amber" icon={I.refresh}   value={inProgress} label={t("dashboard.kpi.inProgress")} />
+        <Kpi tone="green" icon={I.check}     value={completed}  label={t("dashboard.kpi.completed")} />
+        <Kpi tone="red"   icon={I.alarm}     value={overdue}    label={t("dashboard.kpi.overdue")} />
+        <Kpi tone="amber" icon={I.clock}     value={certs}      label={t("dashboard.kpi.myCertificates")} />
       </div>
 
       {/* Active trainings card */}
@@ -172,18 +174,19 @@ export default async function Dashboard() {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5 text-teal-600">
               <path d={I.clipboard} />
             </svg>
-            <h3 className="font-semibold text-slate-900">Aktif Eğitimlerim</h3>
+            <h3 className="font-semibold text-slate-900">{t("dashboard.activeTrainings")}</h3>
           </div>
-          <span className="text-xs text-slate-400">{upcoming.length} kayıt</span>
+          <span className="text-xs text-slate-400">{t("dashboard.recordsCount", { count: upcoming.length })}</span>
         </div>
         <div className="divide-y divide-slate-100">
           {upcoming.length === 0 && (
             <p className="p-8 text-center text-slate-400 text-sm">
-              Aktif eğitiminiz yok.
+              {t("dashboard.noActive")}
             </p>
           )}
           {upcoming.map((a) => {
-            const s = statusLabel[a.status] || { text: a.status, cls: "badge-slate" };
+            const cls = statusCls[a.status] || "badge-slate";
+            const statusText = t(`status.${a.status.toLowerCase()}` as `status.${Lowercase<typeof a.status>}`);
             const overdue = new Date(a.dueDate) < new Date();
             // SCORM tamamlanmış (veya tek bir sınav başarısızlığı sonrası
             // tekrar deneyebiliyor) → "Sınava Başla". Aksi halde eğitim sayfasına.
@@ -205,14 +208,14 @@ export default async function Dashboard() {
                       {a.plan.course.title}
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
-                      Döngü {a.cycleNumber} · Son tarih{" "}
+                      {t("dashboard.cycle", { num: a.cycleNumber })} · {t("dashboard.dueDate")}{" "}
                       <span className={overdue ? "text-red-600 font-medium" : ""}>
                         {formatDate(a.dueDate)}
                       </span>
                       {a.revisionNumber != null &&
                         a.plan.course.currentRevision > a.revisionNumber && (
                           <span className="ml-2 inline-flex items-center rounded-full bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 text-[10px] font-medium">
-                            Yeni sürüm mevcut (v{a.plan.course.currentRevision})
+                            {t("dashboard.newVersionAvailable", { version: a.plan.course.currentRevision })}
                           </span>
                         )}
                       {a.triggeredBy === "MANAGER_REQUESTED" && (
@@ -220,24 +223,24 @@ export default async function Dashboard() {
                           className="ml-2 inline-flex items-center rounded-full bg-red-50 text-red-700 border border-red-200 px-1.5 py-0.5 text-[10px] font-medium"
                           title={a.triggerReason ?? undefined}
                         >
-                          Yönetici tekrar istedi
+                          {t("dashboard.managerRequested")}
                         </span>
                       )}
                     </div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
-                  <span className={s.cls}>{s.text}</span>
+                  <span className={cls}>{statusText}</span>
                   {examReady ? (
                     <Link href={`/exam/${a.id}`} className="btn-primary text-xs py-1.5">
-                      Sınava Başla →
+                      {t("dashboard.startExam")}
                     </Link>
                   ) : (
                     <Link
                       href={`/course/${a.id}`}
                       className="btn-secondary text-xs py-1.5"
                     >
-                      Eğitime Git →
+                      {t("dashboard.goToCourse")}
                     </Link>
                   )}
                 </div>
@@ -264,14 +267,14 @@ export default async function Dashboard() {
                 <path d={I.check} />
               </svg>
               <h3 className="font-semibold text-slate-900">
-                Son Tamamlanan Eğitimlerim
+                {t("dashboard.recentCompleted")}
               </h3>
             </div>
             <Link
               href="/my-trainings/history"
               className="text-xs text-sky-700 hover:underline"
             >
-              Tümü →
+              {t("dashboard.viewAll")}
             </Link>
           </div>
           <div className="divide-y divide-slate-100">
@@ -286,10 +289,10 @@ export default async function Dashboard() {
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
                     {a.completedAt
-                      ? `Tamamlandı: ${formatDate(a.completedAt)}`
-                      : "Tamamlandı"}
-                    {" · Döngü "}
-                    {a.cycleNumber}
+                      ? t("dashboard.completedOn", { date: formatDate(a.completedAt) })
+                      : t("dashboard.completedLabel")}
+                    {" "}
+                    {t("dashboard.cycleInline", { num: a.cycleNumber })}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -298,7 +301,7 @@ export default async function Dashboard() {
                       href={`/api/certificate/${a.certificate.id}`}
                       className="btn-secondary text-xs py-1.5"
                     >
-                      Sertifika
+                      {t("dashboard.certificate")}
                     </a>
                   )}
                 </div>

@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/db";
-import Link from "next/link";
 import { headers } from "next/headers";
 import { fmtTrDate } from "@/lib/dates";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
+import { getTranslations } from "next-intl/server";
 
 // Bu sayfa public — middleware "/verify" prefix'ini auth'tan muaf tutuyor.
 // QR okuyan kişi giriş yapmadan sertifikanın gerçekliğini doğrulayabilsin.
@@ -15,12 +15,11 @@ export default async function VerifyCertificate({
 }: {
   params: Promise<{ serialNo: string }>;
 }) {
+  const t = await getTranslations("misc");
   const { serialNo: rawSerial } = await params;
   const serialNo = decodeURIComponent(rawSerial).trim();
 
   // Seri numarası brute-force koruması: IP başına dakikada 20 doğrulama.
-  // Normal kullanıcı QR'ı okutup tek bir sayfa açar; 20/dk gerçek kullanım
-  // için rahat ama script-enumeration'ı belirgin biçimde yavaşlatır.
   const h = await headers();
   const ip = clientIp(h);
   const rl = rateLimit(`verify:${ip}`, 20, 60_000);
@@ -29,10 +28,10 @@ export default async function VerifyCertificate({
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
           <h1 className="text-xl font-semibold text-slate-900 mb-2">
-            Çok Fazla İstek
+            {t("verify.tooManyTitle")}
           </h1>
           <p className="text-sm text-slate-600">
-            Lütfen bir dakika sonra tekrar deneyin.
+            {t("verify.tooManyBody")}
           </p>
         </div>
       </main>
@@ -71,17 +70,17 @@ export default async function VerifyCertificate({
             ✕
           </div>
           <h1 className="text-xl font-semibold text-slate-900 mb-2">
-            Sertifika Doğrulanamadı
+            {t("verify.notVerifiedTitle")}
           </h1>
           <p className="text-sm text-slate-600">
-            Bu seri numarasına ait geçerli bir sertifika kaydı bulunamadı:
+            {t("verify.notVerifiedBody")}
             <br />
             <code className="mt-2 inline-block text-xs bg-slate-100 px-2 py-1 rounded">
-              {serialNo || "(boş)"}
+              {serialNo || t("verify.empty")}
             </code>
           </p>
           <p className="text-xs text-slate-500 mt-6">
-            Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy
+            {t("verify.footer")}
           </p>
         </div>
       </main>
@@ -98,45 +97,45 @@ export default async function VerifyCertificate({
             ✓
           </div>
           <div>
-            <div className="text-sm/none opacity-90">DOĞRULANDI</div>
-            <div className="text-lg font-semibold">Geçerli Sertifika</div>
+            <div className="text-sm/none opacity-90">{t("verify.verifiedLabel")}</div>
+            <div className="text-lg font-semibold">{t("verify.verifiedTitle")}</div>
           </div>
         </div>
 
         <dl className="divide-y divide-slate-100 px-6 py-4 text-sm">
           <div className="py-3 flex justify-between gap-4">
-            <dt className="text-slate-500">Ad Soyad</dt>
+            <dt className="text-slate-500">{t("verify.fullName")}</dt>
             <dd className="font-medium text-slate-900 text-right">
               {cert.user.name}
             </dd>
           </div>
           <div className="py-3 flex justify-between gap-4">
-            <dt className="text-slate-500">Eğitim</dt>
+            <dt className="text-slate-500">{t("verify.training")}</dt>
             <dd className="font-medium text-slate-900 text-right">
               {cert.assignment.plan.course.title}
             </dd>
           </div>
           <div className="py-3 flex justify-between gap-4">
-            <dt className="text-slate-500">Tür</dt>
+            <dt className="text-slate-500">{t("verify.type")}</dt>
             <dd className="text-slate-900 text-right">
-              {passedExam ? "Başarı Sertifikası" : "Katılım Sertifikası"}
+              {passedExam ? t("verify.achievementCert") : t("verify.participationCert")}
             </dd>
           </div>
           <div className="py-3 flex justify-between gap-4">
-            <dt className="text-slate-500">Veriliş Tarihi</dt>
+            <dt className="text-slate-500">{t("verify.issuedAt")}</dt>
             <dd className="text-slate-900 text-right">
               {fmtTrDate(cert.issuedAt)}
             </dd>
           </div>
           <div className="py-3 flex justify-between gap-4">
-            <dt className="text-slate-500">Seri No</dt>
+            <dt className="text-slate-500">{t("verify.serialNo")}</dt>
             <dd className="font-mono text-xs text-slate-700 text-right break-all">
               {cert.serialNo}
             </dd>
           </div>
           {cert.assignment.plan.course.ownerManager?.name && (
             <div className="py-3 flex justify-between gap-4">
-              <dt className="text-slate-500">Sorumlu</dt>
+              <dt className="text-slate-500">{t("verify.owner")}</dt>
               <dd className="text-slate-900 text-right">
                 {cert.assignment.plan.course.ownerManager.name}
               </dd>
@@ -145,9 +144,9 @@ export default async function VerifyCertificate({
         </dl>
 
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 text-xs text-slate-500 text-center">
-          Bu kayıt BonAcademy veritabanında bulunmaktadır.
+          {t("verify.recordNote")}
           <br />
-          Bon Air Havacılık Sanayi ve Ticaret A.Ş.
+          {t("verify.company")}
         </div>
       </div>
     </main>
@@ -159,9 +158,10 @@ export async function generateMetadata({
 }: {
   params: Promise<{ serialNo: string }>;
 }) {
+  const t = await getTranslations("misc");
   const { serialNo } = await params;
   return {
-    title: `Sertifika Doğrulama · ${decodeURIComponent(serialNo)}`,
+    title: t("verify.metaTitle", { serialNo: decodeURIComponent(serialNo) }),
     robots: { index: false, follow: false },
   };
 }

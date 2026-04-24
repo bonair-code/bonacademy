@@ -1,0 +1,22 @@
+{
+  "ui": {
+    "password": {
+      "show": "Show password",
+      "hide": "Hide password",
+      "showShort": "Show",
+      "hideShort": "Hide"
+    },
+    "submit": {
+      "pending": "Saving...",
+      "saved": "Saved ✓"
+    },
+    "recaptcha": {
+      "notConfigured": "reCAPTCHA is not configured (NEXT_PUBLIC_RECAPTCHA_SITE_KEY missing).",
+      "protectedBy": "This site is protected by Google reCAPTCHA —",
+      "privacy": "Privacy",
+      "and": "and",
+      "terms": "Terms",
+      "apply": "apply."
+    }
+  }
+}

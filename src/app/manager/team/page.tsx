@@ -4,20 +4,33 @@ import { Shell } from "@/components/Shell";
 import { addDays, format } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { createRetakeAssignment, canRequestRetakeFor } from "@/lib/scheduler/retake";
+import { getTranslations } from "next-intl/server";
 
-const STATUS_LABEL: Record<string, { text: string; cls: string }> = {
-  PENDING: { text: "Bekliyor", cls: "bg-slate-100 text-slate-600" },
-  IN_PROGRESS: { text: "Devam Ediyor", cls: "bg-amber-100 text-amber-700" },
-  SCORM_COMPLETED: { text: "Sınav Bekliyor", cls: "bg-teal-100 text-teal-700" },
-  EXAM_PASSED: { text: "Sınav Geçti", cls: "bg-emerald-100 text-emerald-700" },
-  EXAM_FAILED: { text: "Sınav Başarısız", cls: "bg-red-100 text-red-700" },
-  RETAKE_REQUIRED: { text: "Tekrar Gerekli", cls: "bg-red-100 text-red-700" },
-  COMPLETED: { text: "Tamamlandı", cls: "bg-emerald-100 text-emerald-700" },
-  OVERDUE: { text: "Gecikmiş", cls: "bg-red-100 text-red-700" },
+const STATUS_CLS: Record<string, string> = {
+  PENDING: "bg-slate-100 text-slate-600",
+  IN_PROGRESS: "bg-amber-100 text-amber-700",
+  SCORM_COMPLETED: "bg-teal-100 text-teal-700",
+  EXAM_PASSED: "bg-emerald-100 text-emerald-700",
+  EXAM_FAILED: "bg-red-100 text-red-700",
+  RETAKE_REQUIRED: "bg-red-100 text-red-700",
+  COMPLETED: "bg-emerald-100 text-emerald-700",
+  OVERDUE: "bg-red-100 text-red-700",
+};
+
+const STATUS_KEY: Record<string, string> = {
+  PENDING: "pending",
+  IN_PROGRESS: "inProgress",
+  SCORM_COMPLETED: "scormCompleted",
+  EXAM_PASSED: "examPassed",
+  EXAM_FAILED: "examFailed",
+  RETAKE_REQUIRED: "retakeRequired",
+  COMPLETED: "completed",
+  OVERDUE: "overdue",
 };
 
 export default async function ManagerTeam() {
   const user = await requireRole("MANAGER", "ADMIN");
+  const t = await getTranslations("misc");
   // Manager için "ekibim" = managerId'si kendisine bağlı olan kullanıcılar.
   // Admin tüm kullanıcıları görür.
   const where = user.role === "ADMIN" ? {} : { managerId: user.id };
@@ -35,11 +48,11 @@ export default async function ManagerTeam() {
   return (
     <Shell
       user={user}
-      title={user.role === "ADMIN" ? "Çalışan Eğitimleri" : "Ekibim"}
+      title={user.role === "ADMIN" ? t("manager.titleAdmin") : t("manager.titleManager")}
       subtitle={
         user.role === "ADMIN"
-          ? `Tüm çalışanların eğitim durumu · ${members.length} kişi`
-          : `${members.length} kişi`
+          ? t("manager.subtitleAdmin", { count: members.length })
+          : t("manager.subtitleManager", { count: members.length })
       }
     >
       <div className="flex justify-end mb-3">
@@ -60,12 +73,12 @@ export default async function ManagerTeam() {
           >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 15h6M9 11h6" />
           </svg>
-          PDF Olarak Al
+          {t("manager.downloadPdf")}
         </a>
       </div>
       <div className="space-y-2">
         {members.length === 0 && (
-          <p className="text-sm text-slate-500">Ekibinde kayıtlı kullanıcı yok.</p>
+          <p className="text-sm text-slate-500">{t("manager.noTeam")}</p>
         )}
         {members.map((m) => {
           const total = m.assignments.length;
@@ -91,17 +104,17 @@ export default async function ManagerTeam() {
                   </div>
                   <div className="min-w-0">
                     <div className="font-medium text-slate-900 truncate">
-                      {m.name || "(isim yok)"}
+                      {m.name || t("manager.noName")}
                     </div>
                     <div className="text-xs text-slate-500 truncate">{m.email}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span className="text-xs text-slate-500">
-                    {completed}/{total} tamamlandı
+                    {t("manager.completedOf", { completed, total })}
                     {overdue > 0 && (
                       <span className="ml-2 text-red-600 font-medium">
-                        {overdue} gecikmiş
+                        {t("manager.overdueCount", { count: overdue })}
                       </span>
                     )}
                   </span>
@@ -120,17 +133,17 @@ export default async function ManagerTeam() {
               </summary>
               <div className="border-t border-slate-100 divide-y divide-slate-100">
                 {m.assignments.length === 0 && (
-                  <p className="p-4 text-sm text-slate-500">Atama yok.</p>
+                  <p className="p-4 text-sm text-slate-500">{t("manager.noAssignments")}</p>
                 )}
                 {m.assignments.map((a) => {
-                  const s = STATUS_LABEL[a.status] || {
-                    text: a.status,
-                    cls: "bg-slate-100 text-slate-600",
-                  };
+                  const cls = STATUS_CLS[a.status] ?? "bg-slate-100 text-slate-600";
+                  const statusKey = STATUS_KEY[a.status];
+                  const statusText = statusKey
+                    ? t(`manager.status.${statusKey}` as "manager.status.pending")
+                    : a.status;
                   const isOverdue =
                     new Date(a.dueDate) < new Date() && a.status !== "COMPLETED";
                   // Bu kurs (plan) için aynı kullanıcıda aktif başka bir döngü var mı?
-                  // Varsa "Tekrar İste" butonunu gizle — çifte atama oluşmasın.
                   const hasActiveForPlan = m.assignments.some(
                     (x) =>
                       x.planId === a.planId &&
@@ -148,7 +161,7 @@ export default async function ManagerTeam() {
                             {a.plan.course.title}
                           </div>
                           <div className="text-xs text-slate-500 mt-0.5">
-                            Döngü {a.cycleNumber} · Son tarih{" "}
+                            {t("manager.cycle", { number: a.cycleNumber })} · {t("manager.dueDate")}{" "}
                             <span
                               className={isOverdue ? "text-red-600 font-medium" : ""}
                             >
@@ -158,16 +171,16 @@ export default async function ManagerTeam() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${s.cls}`}
+                            className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${cls}`}
                           >
-                            {s.text}
+                            {statusText}
                           </span>
                         </div>
                       </div>
                       {canRequestRetake && (
                         <details className="mt-2">
                           <summary className="text-[11px] text-sky-700 hover:underline cursor-pointer inline-block select-none">
-                            Tekrar iste →
+                            {t("manager.requestRetake")}
                           </summary>
                           <form
                             action={managerRetakeAction}
@@ -175,7 +188,7 @@ export default async function ManagerTeam() {
                           >
                             <input type="hidden" name="assignmentId" value={a.id} />
                             <label className="text-xs text-slate-600">
-                              Sebep <span className="text-red-600">*</span>
+                              {t("manager.reason")} <span className="text-red-600">*</span>
                               <textarea
                                 name="reason"
                                 required
@@ -183,11 +196,11 @@ export default async function ManagerTeam() {
                                 maxLength={500}
                                 rows={2}
                                 className="input w-full text-sm mt-1"
-                                placeholder="Örn. Mevzuat değişti, yeniden alınması gerekiyor."
+                                placeholder={t("manager.reasonPlaceholder")}
                               />
                             </label>
                             <label className="text-xs text-slate-600">
-                              Son tarih
+                              {t("manager.dueDateLabel")}
                               <input
                                 type="date"
                                 name="dueDate"
@@ -197,7 +210,7 @@ export default async function ManagerTeam() {
                             </label>
                             <div>
                               <button className="btn-primary text-xs py-1.5">
-                                Tekrar İste
+                                {t("manager.requestRetakeButton")}
                               </button>
                             </div>
                           </form>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type Props = {
   name: string;
@@ -20,6 +21,7 @@ export function PasswordField({
   className = "input mt-1",
 }: Props) {
   const [show, setShow] = useState(false);
+  const t = useTranslations("ui.password");
   return (
     <div className="relative">
       <input
@@ -36,10 +38,10 @@ export function PasswordField({
         onClick={() => setShow((s) => !s)}
         className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-500 hover:text-teal-700 px-2 py-1 rounded"
         tabIndex={-1}
-        aria-label={show ? "Şifreyi gizle" : "Şifreyi göster"}
+        aria-label={show ? t("hide") : t("show")}
         aria-pressed={show}
       >
-        {show ? "Gizle" : "Göster"}
+        {show ? t("hideShort") : t("showShort")}
       </button>
     </div>
   );

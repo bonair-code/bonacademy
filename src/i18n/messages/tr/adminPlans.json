@@ -1,0 +1,37 @@
+{
+  "adminPlans": {
+    "pageTitle": "Eğitim Planları",
+    "newPlan": "Yeni Plan",
+    "course": "Kurs",
+    "createNewCourse": "+ Yeni kurs oluştur",
+    "noCoursesYet": "Henüz kurs yok — önce kurs ekleyin",
+    "allCoursesPlanned": "Tüm kursların planı zaten var",
+    "recurrence": "Tekrar sıklığı",
+    "recurrenceOptions": {
+      "NONE": "Tek seferlik",
+      "SIX_MONTHS": "6 ayda bir",
+      "ONE_YEAR": "1 yılda bir",
+      "TWO_YEARS": "2 yılda bir"
+    },
+    "startDate": "Başlangıç tarihi",
+    "dueInDays": "Tamamlama süresi (gün)",
+    "jobTitlesAuto": "Görev tanımları (otomatik atanır)",
+    "extraUsers": "Ek kullanıcılar (opsiyonel)",
+    "assignmentHelp": "Seçilen görev tanımındaki tüm kullanıcılar + ek kullanıcılar birlikte atanır. Sonradan görev tanımı atanan yeni kullanıcılara da otomatik atama yapılır.",
+    "createPlan": "Plan Oluştur",
+    "creating": "Oluşturuluyor...",
+    "created": "Oluşturuldu",
+    "existingPlans": "Mevcut Planlar",
+    "noPlans": "Henüz plan yok.",
+    "assignmentsCount": "{count} atama",
+    "startsOn": "Başlangıç {date}",
+    "jobTitles": "Görev tanımları",
+    "updateNoteLabel": "Not:",
+    "updateNoteBody": " Yeni görev tanımı eklediğinde sadece henüz ataması olmayan kullanıcılara atama üretilir. Eski kullanıcıların durumu, denemeleri ve ilerlemesi korunur — kaldıkları yerden devam ederler. Görev tanımını çıkarmak mevcut atamaları silmez.",
+    "saveChanges": "Değişiklikleri Kaydet",
+    "deletePlan": "Planı sil",
+    "errors": {
+      "duplicatePlan": "Bu kurs için zaten bir plan var: \"{title}\". Mevcut planı düzenleyin veya önce silin."
+    }
+  }
+}

@@ -10,6 +10,7 @@ import {
 } from "@/lib/auditLabels";
 import { parseFilterDate } from "@/lib/audit-filters";
 import type { Prisma } from "@prisma/client";
+import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,7 @@ export default async function AuditPage({
     page?: string;
   }>;
 }) {
+  const t = await getTranslations("admin.audit");
   const user = await requireRole("ADMIN");
   const sp = await searchParams;
 
@@ -78,8 +80,8 @@ export default async function AuditPage({
   return (
     <Shell
       user={user}
-      title="Denetim Kayıtları"
-      subtitle="Admin eylemlerinin kronolojik izi"
+      title={t("title")}
+      subtitle={t("subtitle")}
     >
       {/* Filtre formu */}
       <form
@@ -87,9 +89,9 @@ export default async function AuditPage({
         className="card p-4 mb-4 grid md:grid-cols-6 gap-3 text-sm"
       >
         <label className="block">
-          <span className="block text-slate-600 mb-1 text-xs">Varlık</span>
+          <span className="block text-slate-600 mb-1 text-xs">{t("entity")}</span>
           <select name="entity" defaultValue={sp.entity ?? ""} className="input w-full">
-            <option value="">Hepsi</option>
+            <option value="">{t("all")}</option>
             {ALL_AUDIT_ENTITIES.map((e) => (
               <option key={e} value={e}>
                 {auditEntityLabel(e)}
@@ -98,9 +100,9 @@ export default async function AuditPage({
           </select>
         </label>
         <label className="block md:col-span-2">
-          <span className="block text-slate-600 mb-1 text-xs">Eylem</span>
+          <span className="block text-slate-600 mb-1 text-xs">{t("action")}</span>
           <select name="action" defaultValue={sp.action ?? ""} className="input w-full">
-            <option value="">Hepsi</option>
+            <option value="">{t("all")}</option>
             {ALL_AUDIT_ACTIONS.map((a) => (
               <option key={a} value={a}>
                 {auditActionLabel(a)}
@@ -109,9 +111,9 @@ export default async function AuditPage({
           </select>
         </label>
         <label className="block">
-          <span className="block text-slate-600 mb-1 text-xs">Aktör</span>
+          <span className="block text-slate-600 mb-1 text-xs">{t("actor")}</span>
           <select name="actorId" defaultValue={sp.actorId ?? ""} className="input w-full">
-            <option value="">Hepsi</option>
+            <option value="">{t("all")}</option>
             {actors.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.name}
@@ -120,35 +122,43 @@ export default async function AuditPage({
           </select>
         </label>
         <label className="block">
-          <span className="block text-slate-600 mb-1 text-xs">Başlangıç</span>
+          <span className="block text-slate-600 mb-1 text-xs">{t("from")}</span>
           <input type="date" name="from" defaultValue={sp.from ?? ""} className="input w-full" />
         </label>
         <label className="block">
-          <span className="block text-slate-600 mb-1 text-xs">Bitiş</span>
+          <span className="block text-slate-600 mb-1 text-xs">{t("to")}</span>
           <input type="date" name="to" defaultValue={sp.to ?? ""} className="input w-full" />
         </label>
         <div className="md:col-span-6 flex items-center gap-2">
           <button type="submit" className="btn-primary text-sm">
-            Filtrele
+            {t("filter")}
           </button>
           <a href="/admin/audit" className="btn-secondary text-sm">
-            Temizle
+            {t("clear")}
           </a>
           <div className="flex-1" />
           <a
             href={`/api/admin/audit/export${exportQs.toString() ? `?${exportQs.toString()}` : ""}`}
             className="btn-secondary text-sm"
           >
-            Excel olarak indir
+            {t("downloadExcel")}
           </a>
         </div>
       </form>
 
       <div className="text-xs text-slate-500 mb-2">
-        Toplam: <b>{total}</b> kayıt · Sayfa {page}/{totalPages}
+        {t.rich("totalSummary", {
+          total,
+          page,
+          pages: totalPages,
+          b: (c) => <b>{c}</b>,
+        })}
         {sp.entityId && (
           <span className="ml-2">
-            · Tek kayda filtrelendi (<code className="text-[10px]">{sp.entityId}</code>)
+            {t.rich("filteredOne", {
+              id: sp.entityId,
+              code: (c) => <code className="text-[10px]">{c}</code>,
+            })}
           </span>
         )}
       </div>
@@ -157,19 +167,19 @@ export default async function AuditPage({
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="text-left p-3 font-medium">Zaman</th>
-              <th className="text-left p-3 font-medium">Aktör</th>
-              <th className="text-left p-3 font-medium">Eylem</th>
-              <th className="text-left p-3 font-medium">Varlık</th>
-              <th className="text-left p-3 font-medium">Kimlik</th>
-              <th className="text-left p-3 font-medium">Detay</th>
+              <th className="text-left p-3 font-medium">{t("colTime")}</th>
+              <th className="text-left p-3 font-medium">{t("colActor")}</th>
+              <th className="text-left p-3 font-medium">{t("colAction")}</th>
+              <th className="text-left p-3 font-medium">{t("colEntity")}</th>
+              <th className="text-left p-3 font-medium">{t("colId")}</th>
+              <th className="text-left p-3 font-medium">{t("colDetail")}</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {rows.length === 0 && (
               <tr>
                 <td colSpan={6} className="p-6 text-center text-slate-500">
-                  Kayıt bulunamadı.
+                  {t("noRecords")}
                 </td>
               </tr>
             )}
@@ -187,7 +197,7 @@ export default async function AuditPage({
                       </span>
                     </span>
                   ) : (
-                    <span className="text-slate-400 italic">silinmiş kullanıcı</span>
+                    <span className="text-slate-400 italic">{t("deletedUser")}</span>
                   )}
                 </td>
                 <td className="p-3">{auditActionLabel(r.action)}</td>
@@ -199,7 +209,7 @@ export default async function AuditPage({
                   {r.metadata ? (
                     <details>
                       <summary className="text-xs text-sky-700 cursor-pointer">
-                        göster
+                        {t("show")}
                       </summary>
                       <pre className="text-[10px] bg-slate-50 p-2 rounded mt-1 whitespace-pre-wrap break-all">
                         {JSON.stringify(r.metadata, null, 2)}
@@ -223,18 +233,18 @@ export default async function AuditPage({
               href={buildPageHref(sp, page - 1)}
               className="btn-secondary text-xs"
             >
-              ← Önceki
+              {t("previous")}
             </a>
           )}
           <span className="text-xs text-slate-500">
-            Sayfa {page} / {totalPages}
+            {t("pageOf", { page, pages: totalPages })}
           </span>
           {page < totalPages && (
             <a
               href={buildPageHref(sp, page + 1)}
               className="btn-secondary text-xs"
             >
-              Sonraki →
+              {t("next")}
             </a>
           )}
         </div>

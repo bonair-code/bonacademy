@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 
 type ScormItem = {
   id: string;
@@ -24,6 +25,7 @@ export function AttemptsHistoryDrawer({
   examAttempts: ExamItem[];
 }) {
   const [open, setOpen] = useState(false);
+  const t = useTranslations("exam");
   const total = scormAttempts.length + examAttempts.length;
 
   return (
@@ -46,10 +48,10 @@ export function AttemptsHistoryDrawer({
           >
             <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
           </svg>
-          <span className="font-semibold text-slate-900">Geçmiş Denemeler</span>
+          <span className="font-semibold text-slate-900">{t("history.title")}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">{total} kayıt</span>
+          <span className="text-xs text-slate-400">{t("history.records", { count: total })}</span>
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -71,7 +73,7 @@ export function AttemptsHistoryDrawer({
           {scormAttempts.length > 0 && (
             <section>
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                Eğitim içeriği ({scormAttempts.length})
+                {t("history.scormSection", { count: scormAttempts.length })}
               </div>
               <ul className="text-sm space-y-2">
                 {scormAttempts.map((at, i) => (
@@ -86,7 +88,7 @@ export function AttemptsHistoryDrawer({
                       {new Date(at.startedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
                       {at.finishedAt
                         ? ` → ${new Date(at.finishedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}`
-                        : " · devam ediyor"}
+                        : ` · ${t("history.inProgress")}`}
                     </span>
                   </li>
                 ))}
@@ -96,7 +98,7 @@ export function AttemptsHistoryDrawer({
           {examAttempts.length > 0 && (
             <section>
               <div className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
-                Sınav denemeleri ({examAttempts.length})
+                {t("history.examSection", { count: examAttempts.length })}
               </div>
               <ul className="text-sm space-y-2">
                 {examAttempts.map((e) => (
@@ -111,7 +113,7 @@ export function AttemptsHistoryDrawer({
                           : "text-red-700"
                       }
                     >
-                      %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                      {Math.round(e.score)}% · {e.passed ? t("history.passed") : t("history.failed")}
                     </span>
                     <span className="text-xs text-slate-500">
                       {new Date(e.createdAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}
@@ -123,7 +125,7 @@ export function AttemptsHistoryDrawer({
           )}
           {total === 0 && (
             <p className="p-4 text-center text-slate-400 text-sm">
-              Henüz deneme yok.
+              {t("history.empty")}
             </p>
           )}
         </div>

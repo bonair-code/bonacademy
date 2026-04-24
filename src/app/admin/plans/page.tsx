@@ -10,9 +10,11 @@ import type { Recurrence } from "@prisma/client";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { audit } from "@/lib/audit";
+import { getTranslations } from "next-intl/server";
 
 async function createPlan(formData: FormData) {
   "use server";
+  const t = await getTranslations("adminPlans");
   const me = await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const recurrence = String(formData.get("recurrence")) as Recurrence;
@@ -39,10 +41,7 @@ async function createPlan(formData: FormData) {
     select: { id: true, course: { select: { title: true } } },
   });
   if (existingPlan) {
-    throw new Error(
-      `Bu kurs için zaten bir plan var: "${existingPlan.course.title}". ` +
-        `Mevcut planı düzenleyin veya önce silin.`
-    );
+    throw new Error(t("errors.duplicatePlan", { title: existingPlan.course.title }));
   }
 
   const plan = await prisma.trainingPlan.create({
@@ -142,15 +141,9 @@ async function deletePlan(formData: FormData) {
   revalidatePath("/admin/plans");
 }
 
-const RECURRENCE_LABEL: Record<string, string> = {
-  NONE: "Tek seferlik",
-  SIX_MONTHS: "6 ayda bir",
-  ONE_YEAR: "1 yılda bir",
-  TWO_YEARS: "2 yılda bir",
-};
-
 export default async function AdminPlans() {
   const user = await requireRole("ADMIN", "MANAGER");
+  const t = await getTranslations("adminPlans");
   const [courses, users, jobTitles, plans] = await Promise.all([
     prisma.course.findMany({ orderBy: { title: "asc" } }),
     // Yalnızca USER rolündeki aktif kişiler ek kullanıcı olarak seçilebilir.
@@ -175,28 +168,34 @@ export default async function AdminPlans() {
   // isimde iki kez planlanmayı engelliyoruz.
   const plannedCourseIds = new Set(plans.map((p) => p.courseId));
   const availableCourses = courses.filter((c) => !plannedCourseIds.has(c.id));
+  const recurrenceLabel: Record<string, string> = {
+    NONE: t("recurrenceOptions.NONE"),
+    SIX_MONTHS: t("recurrenceOptions.SIX_MONTHS"),
+    ONE_YEAR: t("recurrenceOptions.ONE_YEAR"),
+    TWO_YEARS: t("recurrenceOptions.TWO_YEARS"),
+  };
 
   return (
-    <Shell user={user} title="Eğitim Planları">
+    <Shell user={user} title={t("pageTitle")}>
       <form action={createPlan} className="card p-4 mb-6 space-y-3">
-        <h2 className="font-semibold text-slate-900">Yeni Plan</h2>
+        <h2 className="font-semibold text-slate-900">{t("newPlan")}</h2>
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm">
             <div className="flex items-center justify-between">
-              <span>Kurs</span>
+              <span>{t("course")}</span>
               <Link
                 href="/admin/courses"
                 className="text-[11px] text-teal-700 hover:underline"
               >
-                + Yeni kurs oluştur
+                {t("createNewCourse")}
               </Link>
             </div>
             <select name="courseId" required className="input block w-full">
               {availableCourses.length === 0 && (
                 <option value="" disabled>
                   {courses.length === 0
-                    ? "Henüz kurs yok — önce kurs ekleyin"
-                    : "Tüm kursların planı zaten var"}
+                    ? t("noCoursesYet")
+                    : t("allCoursesPlanned")}
                 </option>
               )}
               {availableCourses.map((c) => (
@@ -207,16 +206,16 @@ export default async function AdminPlans() {
             </select>
           </label>
           <label className="text-sm">
-            Tekrar sıklığı
+            {t("recurrence")}
             <select name="recurrence" className="input block w-full">
-              <option value="NONE">Tek seferlik</option>
-              <option value="SIX_MONTHS">6 ayda bir</option>
-              <option value="ONE_YEAR">1 yılda bir</option>
-              <option value="TWO_YEARS">2 yılda bir</option>
+              <option value="NONE">{t("recurrenceOptions.NONE")}</option>
+              <option value="SIX_MONTHS">{t("recurrenceOptions.SIX_MONTHS")}</option>
+              <option value="ONE_YEAR">{t("recurrenceOptions.ONE_YEAR")}</option>
+              <option value="TWO_YEARS">{t("recurrenceOptions.TWO_YEARS")}</option>
             </select>
           </label>
           <label className="text-sm">
-            Başlangıç tarihi
+            {t("startDate")}
             <input
               name="startDate"
               type="date"
@@ -225,7 +224,7 @@ export default async function AdminPlans() {
             />
           </label>
           <label className="text-sm">
-            Tamamlama süresi (gün)
+            {t("dueInDays")}
             <input
               name="dueInDays"
               type="number"
@@ -237,7 +236,7 @@ export default async function AdminPlans() {
 
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm block">
-            Görev tanımları (otomatik atanır)
+            {t("jobTitlesAuto")}
             <select
               name="jobTitleIds"
               multiple
@@ -251,7 +250,7 @@ export default async function AdminPlans() {
             </select>
           </label>
           <label className="text-sm block">
-            Ek kullanıcılar (opsiyonel)
+            {t("extraUsers")}
             <select
               name="userIds"
               multiple
@@ -266,18 +265,17 @@ export default async function AdminPlans() {
           </label>
         </div>
         <p className="text-xs text-slate-500">
-          Seçilen görev tanımındaki tüm kullanıcılar + ek kullanıcılar birlikte atanır.
-          Sonradan görev tanımı atanan yeni kullanıcılara da otomatik atama yapılır.
+          {t("assignmentHelp")}
         </p>
-        <SubmitButton pendingText="Oluşturuluyor..." savedText="Oluşturuldu ✓">
-          Plan Oluştur
+        <SubmitButton pendingText={t("creating")} savedText={`${t("created")} ✓`}>
+          {t("createPlan")}
         </SubmitButton>
       </form>
 
-      <h2 className="font-semibold mb-2">Mevcut Planlar</h2>
+      <h2 className="font-semibold mb-2">{t("existingPlans")}</h2>
       <div className="space-y-2">
         {plans.length === 0 && (
-          <p className="text-sm text-slate-500">Henüz plan yok.</p>
+          <p className="text-sm text-slate-500">{t("noPlans")}</p>
         )}
         {plans.map((p) => {
           const currentJt = new Set(p.jobTitles.map((j) => j.jobTitleId));
@@ -289,9 +287,9 @@ export default async function AdminPlans() {
                     {p.course.title}
                   </div>
                   <div className="text-xs text-slate-500 mt-0.5">
-                    {RECURRENCE_LABEL[p.recurrence] ?? p.recurrence} ·{" "}
-                    {p._count.assignments} atama · Başlangıç{" "}
-                    {new Date(p.startDate).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" })}
+                    {recurrenceLabel[p.recurrence] ?? p.recurrence} ·{" "}
+                    {t("assignmentsCount", { count: p._count.assignments })} ·{" "}
+                    {t("startsOn", { date: new Date(p.startDate).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" }) })}
                     {p.jobTitles.length > 0 && (
                       <> · {p.jobTitles.map((j) => j.jobTitle.name).join(", ")}</>
                     )}
@@ -316,20 +314,20 @@ export default async function AdminPlans() {
                 <input type="hidden" name="planId" value={p.id} />
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm">
-                    Tekrar sıklığı
+                    {t("recurrence")}
                     <select
                       name="recurrence"
                       defaultValue={p.recurrence}
                       className="input block w-full"
                     >
-                      <option value="NONE">Tek seferlik</option>
-                      <option value="SIX_MONTHS">6 ayda bir</option>
-                      <option value="ONE_YEAR">1 yılda bir</option>
-                      <option value="TWO_YEARS">2 yılda bir</option>
+                      <option value="NONE">{t("recurrenceOptions.NONE")}</option>
+                      <option value="SIX_MONTHS">{t("recurrenceOptions.SIX_MONTHS")}</option>
+                      <option value="ONE_YEAR">{t("recurrenceOptions.ONE_YEAR")}</option>
+                      <option value="TWO_YEARS">{t("recurrenceOptions.TWO_YEARS")}</option>
                     </select>
                   </label>
                   <label className="text-sm">
-                    Tamamlama süresi (gün)
+                    {t("dueInDays")}
                     <input
                       name="dueInDays"
                       type="number"
@@ -340,7 +338,7 @@ export default async function AdminPlans() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <label className="text-sm block">
-                    Görev tanımları
+                    {t("jobTitles")}
                     <select
                       name="jobTitleIds"
                       multiple
@@ -355,7 +353,7 @@ export default async function AdminPlans() {
                     </select>
                   </label>
                   <label className="text-sm block">
-                    Ek kullanıcılar (opsiyonel)
+                    {t("extraUsers")}
                     <select
                       name="userIds"
                       multiple
@@ -370,20 +368,17 @@ export default async function AdminPlans() {
                   </label>
                 </div>
                 <p className="text-xs text-slate-600">
-                  <strong>Not:</strong> Yeni görev tanımı eklediğinde sadece henüz
-                  ataması olmayan kullanıcılara atama üretilir. Eski kullanıcıların
-                  durumu, denemeleri ve ilerlemesi korunur — kaldıkları yerden
-                  devam ederler. Görev tanımını çıkarmak mevcut atamaları silmez.
+                  <strong>{t("updateNoteLabel")}</strong>{t("updateNoteBody")}
                 </p>
                 <div className="flex items-center gap-2">
-                  <SubmitButton>Değişiklikleri Kaydet</SubmitButton>
+                  <SubmitButton>{t("saveChanges")}</SubmitButton>
                   <button
                     type="submit"
                     formAction={deletePlan}
                     className="text-xs text-red-600 hover:underline px-2 py-1 ml-auto"
                     formNoValidate
                   >
-                    Planı sil
+                    {t("deletePlan")}
                   </button>
                 </div>
               </form>

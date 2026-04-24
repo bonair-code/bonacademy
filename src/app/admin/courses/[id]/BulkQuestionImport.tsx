@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 export function BulkQuestionImport({ courseId }: { courseId: string }) {
   const router = useRouter();
+  const t = useTranslations("adminCourses");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -23,12 +25,12 @@ export function BulkQuestionImport({ courseId }: { courseId: string }) {
     const data = await res.json();
     setBusy(false);
     if (!res.ok) {
-      setMsg(`Hata: ${data.error || "bilinmeyen"}`);
+      setMsg(t("bulk.errorPrefix", { msg: data.error || t("bulk.unknownError") }));
       return;
     }
-    const errs = data.errors?.length ? ` · ${data.errors.length} hata` : "";
+    const errs = data.errors?.length ? t("bulk.errorCount", { count: data.errors.length }) : "";
     setMsg(
-      `${data.created} soru eklendi, ${data.skipped} satır atlandı${errs}` +
+      t("bulk.result", { created: data.created, skipped: data.skipped, errs }) +
         (data.errors?.length ? `\n${data.errors.join("\n")}` : "")
     );
     form.reset();
@@ -37,13 +39,13 @@ export function BulkQuestionImport({ courseId }: { courseId: string }) {
 
   return (
     <div className="border rounded-lg p-3 bg-slate-50 space-y-2 text-sm">
-      <div className="font-medium">Toplu Soru Yükleme</div>
+      <div className="font-medium">{t("bulk.title")}</div>
       <div className="flex flex-wrap items-center gap-2">
         <a
           href={`/api/admin/courses/${courseId}/questions/template`}
           className="border rounded-lg px-3 py-1.5 bg-white hover:bg-slate-100"
         >
-          📥 Şablon İndir (xlsx)
+          📥 {t("bulk.downloadTemplate")}
         </a>
         <form onSubmit={upload} className="flex items-center gap-2">
           <input name="file" type="file" accept=".xlsx" required className="text-xs" />
@@ -51,7 +53,7 @@ export function BulkQuestionImport({ courseId }: { courseId: string }) {
             disabled={busy}
             className="bg-slate-900 text-white rounded-lg px-3 py-1.5 disabled:opacity-50"
           >
-            {busy ? "Yükleniyor…" : "Toplu Yükle"}
+            {busy ? t("bulk.uploading") : t("bulk.bulkUpload")}
           </button>
         </form>
       </div>
@@ -61,10 +63,13 @@ export function BulkQuestionImport({ courseId }: { courseId: string }) {
         </pre>
       )}
       <p className="text-xs text-slate-500">
-        Şablonu indir, Excel&apos;de doldur ve aynı dosyayı buradan yükle. Format:
-        Soru · Puan · Şık1–4 · Doğru1–4. Her soru için <strong>sadece bir
-        şıkkın</strong> Doğru sütununa <code>1</code> veya <code>X</code> yazın;
-        diğerlerini boş bırakın.
+        {t("bulk.helpBefore")}
+        <strong>{t("bulk.helpStrong")}</strong>
+        {t("bulk.helpMiddle")}
+        <code>{t("bulk.helpCode1")}</code>
+        {t("bulk.helpOr")}
+        <code>{t("bulk.helpCode2")}</code>
+        {t("bulk.helpAfter")}
       </p>
     </div>
   );

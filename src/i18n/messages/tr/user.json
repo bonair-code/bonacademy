@@ -1,0 +1,74 @@
+{
+  "user": {
+    "status": {
+      "pending": "Bekliyor",
+      "in_progress": "Devam Ediyor",
+      "scorm_completed": "Sınav Bekliyor",
+      "exam_passed": "Sınav Geçti",
+      "exam_failed": "Sınav Başarısız",
+      "retake_required": "Tekrar Gerekli",
+      "completed": "Tamamlandı",
+      "overdue": "Gecikmiş"
+    },
+    "dashboard": {
+      "title": "Gösterge Paneli",
+      "subtitle": "Genel Bakış",
+      "summaryHeading": "Eğitim Özeti",
+      "pdf": "PDF",
+      "kpi": {
+        "active": "Aktif Eğitim",
+        "pending": "Bekleyen",
+        "inProgress": "Devam Eden",
+        "completed": "Tamamlanan",
+        "overdue": "Geciken",
+        "myCertificates": "Sertifikalarım"
+      },
+      "activeTrainings": "Aktif Eğitimlerim",
+      "recordsCount": "{count} kayıt",
+      "noActive": "Aktif eğitiminiz yok.",
+      "cycle": "Döngü {num}",
+      "dueDate": "Son tarih",
+      "newVersionAvailable": "Yeni sürüm mevcut (v{version})",
+      "managerRequested": "Yönetici tekrar istedi",
+      "startExam": "Sınava Başla →",
+      "goToCourse": "Eğitime Git →",
+      "recentCompleted": "Son Tamamlanan Eğitimlerim",
+      "viewAll": "Tümü →",
+      "completedOn": "Tamamlandı: {date}",
+      "completedLabel": "Tamamlandı",
+      "cycleInline": "· Döngü {num}",
+      "certificate": "Sertifika"
+    },
+    "history": {
+      "title": "Eğitim Geçmişim",
+      "subtitle": "Tamamladığım eğitimler ve gönüllü tekrar",
+      "col": {
+        "training": "Eğitim",
+        "completion": "Tamamlanma",
+        "cycle": "Döngü",
+        "certificate": "Sertifika",
+        "action": "İşlem"
+      },
+      "empty": "Henüz tamamlanmış eğitiminiz yok.",
+      "pdfSuffix": "{serial} (PDF)",
+      "hasActive": "Aktif döngünüz var",
+      "retake": "Tekrar Et",
+      "footNote": "\"Tekrar Et\" ile başlattığınız eğitim, mevcut sertifikanızı etkilemez. Yeni sertifika sınavı başarıyla tamamladığınızda düzenlenir."
+    },
+    "certificates": {
+      "title": "Sertifikalarım",
+      "subtitleCount": "{count} sertifika",
+      "searchPlaceholder": "Kurs adı veya seri no ile ara...",
+      "emptyNone": "Henüz sertifikanız yok.",
+      "emptySearch": "Aramanızla eşleşen sertifika bulunamadı.",
+      "serialNo": "Seri No: {serial}"
+    },
+    "certificatesDrawer": {
+      "title": "Sertifikalarım",
+      "recordsCount": "{count} kayıt",
+      "close": "Kapat",
+      "empty": "Henüz sertifikanız yok.",
+      "serialNo": "Seri No: {serial}"
+    }
+  }
+}

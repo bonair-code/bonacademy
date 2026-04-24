@@ -8,46 +8,39 @@ import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { audit } from "@/lib/audit";
 import { createPasswordToken } from "@/lib/passwordTokens";
 import { sendInviteEmail } from "@/lib/notifications/mailer";
+import { getTranslations } from "next-intl/server";
 
 async function upsertUser(formData: FormData) {
   "use server";
+  const t = await getTranslations("admin.users.error");
   const admin = await requireRole("ADMIN", "MANAGER");
   const id = String(formData.get("id") || "");
   const email = String(formData.get("email")).trim().toLowerCase();
   const name = String(formData.get("name")).trim();
   // Güvenlik: yönetici yalnızca USER rolünde kullanıcı oluşturur/düzenler.
-  // Form'dan gelen role değeri ADMIN ise dikkate alma — rol yükseltme yetkisi
-  // sadece admin'de.
   const requestedRole = String(formData.get("role")) as Role;
   const role: Role =
     admin.role === "ADMIN" ? requestedRole : "USER";
-  // Yönetici var olan bir kullanıcıyı düzenliyorsa, hedef USER değilse reddet.
   if (admin.role !== "ADMIN" && id) {
     const target = await prisma.user.findUnique({
       where: { id },
       select: { role: true },
     });
     if (!target || target.role !== "USER") {
-      throw new Error("Yönetici yalnızca USER rolündeki kullanıcıları düzenleyebilir.");
+      throw new Error(t("managerOnlyUsers"));
     }
   }
   const departmentId = String(formData.get("departmentId") || "") || null;
   const managerIdRaw = String(formData.get("managerId") || "") || null;
-  // Kendini yönetici olarak atamaya izin verme.
   const managerId = managerIdRaw && managerIdRaw !== id ? managerIdRaw : null;
   const jobTitleIds = formData.getAll("jobTitleIds").map(String).filter(Boolean);
   const password = String(formData.get("password") || "");
-  // Doğum bilgileri — sertifikada görünür, ikisi de opsiyonel.
   const birthDateRaw = String(formData.get("birthDate") || "").trim();
   const birthDate = /^\d{4}-\d{2}-\d{2}$/.test(birthDateRaw)
     ? new Date(birthDateRaw + "T00:00:00Z")
     : null;
   const birthPlaceRaw = String(formData.get("birthPlace") || "").trim();
   const birthPlace = birthPlaceRaw ? birthPlaceRaw.slice(0, 120) : null;
-  // Görev tanımına göre otomatik plan ataması yapılsın mı? Checkbox işaretliyse
-  // "on" gelir; aksi halde alan form'a hiç eklenmez. Admin işaretini kaldırırsa
-  // bu kayıtta enroll çalışmaz → admin sonradan /admin/plans üzerinden manuel
-  // atama yapabilir.
   const autoEnroll = String(formData.get("autoEnroll") || "") === "on";
 
   let passwordHash: string | undefined;
@@ -56,10 +49,8 @@ async function upsertUser(formData: FormData) {
     if (err) throw new Error(err);
     passwordHash = await hashPassword(password);
   }
-  // Yeni kullanıcı + şifre yoksa: davet maili göndereceğiz (akış aşağıda).
   const sendInvite = !id && !password;
 
-  // Mevcut durumu audit meta için yakala (rol/manager değişimlerini izleyebilmek üzere).
   const before = id
     ? await prisma.user.findUnique({
         where: { id },
@@ -98,9 +89,6 @@ async function upsertUser(formData: FormData) {
     await enrollUserIntoJobTitlePlans(user.id);
   }
 
-  // Şifre belirlenmediyse davet maili at — kullanıcı kendi şifresini kursun.
-  // Mail başarısız olsa bile kullanıcı oluşturuldu; admin sonradan tekrar
-  // davet butonu üzerinden tetikleyebilir.
   if (sendInvite) {
     try {
       const token = await createPasswordToken(user.id, "INVITE");
@@ -110,7 +98,6 @@ async function upsertUser(formData: FormData) {
     }
   }
 
-  // Rol ve yönetici değişiklikleri hassas: ayrı audit action'larıyla izlenir.
   if (id && before) {
     if (before.role !== role) {
       await audit({
@@ -173,6 +160,7 @@ async function setPassword(formData: FormData) {
 
 async function sendInvite(formData: FormData) {
   "use server";
+  const t = await getTranslations("admin.users.error");
   const admin = await requireRole("ADMIN", "MANAGER");
   const userId = String(formData.get("userId"));
   const u = await prisma.user.findUniqueOrThrow({
@@ -180,9 +168,9 @@ async function sendInvite(formData: FormData) {
     select: { id: true, email: true, name: true, role: true, isActive: true, locale: true },
   });
   if (admin.role !== "ADMIN" && u.role !== "USER") {
-    throw new Error("Yönetici yalnızca USER rolüne davet gönderebilir.");
+    throw new Error(t("managerInviteOnlyUsers"));
   }
-  if (!u.isActive) throw new Error("Pasif kullanıcıya davet gönderilemez.");
+  if (!u.isActive) throw new Error(t("inactiveInvite"));
   const token = await createPasswordToken(u.id, "INVITE");
   await sendInviteEmail(u.email, u.name, token, u.locale);
   await audit({
@@ -215,9 +203,8 @@ async function createDepartment(formData: FormData) {
 }
 
 export default async function AdminUsers() {
+  const t = await getTranslations("admin.users");
   const user = await requireRole("ADMIN", "MANAGER");
-  // Yönetici yalnızca USER rolündeki kişileri görür ve düzenleyebilir.
-  // Admin herkesi görür.
   const listFilter = user.role === "ADMIN" ? {} : { role: "USER" as const };
   const [users, departments, jobTitles, managers] = await Promise.all([
     prisma.user.findMany({
@@ -239,39 +226,36 @@ export default async function AdminUsers() {
   ]);
 
   return (
-    <Shell user={user} title="Kullanıcılar" subtitle="Kullanıcı yönetimi ve şifre işlemleri">
+    <Shell user={user} title={t("title")} subtitle={t("subtitle")}>
       <section className="card p-5 mb-6">
-        <h2 className="font-semibold mb-3">Yeni Departman</h2>
+        <h2 className="font-semibold mb-3">{t("newDepartment")}</h2>
         <form action={createDepartment} className="flex gap-2">
-          <input name="name" placeholder="Departman adı" required maxLength={100} className="input flex-1" />
-          <button className="btn-primary">Ekle</button>
+          <input name="name" placeholder={t("departmentNamePlaceholder")} required maxLength={100} className="input flex-1" />
+          <button className="btn-primary">{t("add")}</button>
         </form>
       </section>
 
       <section className="card p-5 mb-6">
-        <h2 className="font-semibold mb-3">Yeni / Güncelle Kullanıcı</h2>
+        <h2 className="font-semibold mb-3">{t("newOrUpdateUser")}</h2>
         <p className="text-xs text-slate-500 mb-3">
-          <strong>Şifre alanını boş bırakın</strong> — kullanıcıya 72 saat geçerli bir davet
-          maili gider, kendisi şifre kurar (önerilen). Şifre yazarsanız doğrudan o şifreyle
-          oluşturulur (en az 8 karakter, harf + rakam). Mevcut kullanıcıda boş bırakırsanız
-          şifre korunur.
+          {t.rich("passwordHelp", {
+            b: (c) => <strong>{c}</strong>,
+          })}
         </p>
         <form action={upsertUser} className="grid grid-cols-2 gap-3 items-end text-sm">
-          <input name="email" type="email" placeholder="E-posta" required maxLength={255} className="input" />
-          <input name="name" placeholder="Ad Soyad" required maxLength={150} className="input" />
+          <input name="email" type="email" placeholder={t("emailPlaceholder")} required maxLength={255} className="input" />
+          <input name="name" placeholder={t("fullNamePlaceholder")} required maxLength={150} className="input" />
           {user.role === "ADMIN" ? (
             <select name="role" className="input">
-              <option value="USER">Kullanıcı</option>
-              <option value="MANAGER">Yönetici</option>
-              <option value="ADMIN">Admin</option>
+              <option value="USER">{t("roleUser")}</option>
+              <option value="MANAGER">{t("roleManager")}</option>
+              <option value="ADMIN">{t("roleAdmin")}</option>
             </select>
           ) : (
-            // Yönetici yalnızca USER oluşturabilir — select'i gizle, hidden
-            // field ile sabitle.
             <input type="hidden" name="role" value="USER" />
           )}
           <select name="departmentId" className="input">
-            <option value="">Departman (seçiniz)</option>
+            <option value="">{t("departmentSelect")}</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
                 {d.name}
@@ -279,7 +263,7 @@ export default async function AdminUsers() {
             ))}
           </select>
           <select name="managerId" className="input" defaultValue="">
-            <option value="">Yönetici (yok)</option>
+            <option value="">{t("managerNone")}</option>
             {managers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name} ({m.email})
@@ -289,25 +273,25 @@ export default async function AdminUsers() {
           <input
             name="password"
             type="password"
-            placeholder="Başlangıç şifresi (boş = davet maili gönder)"
+            placeholder={t("initialPasswordPlaceholder")}
             className="input"
             autoComplete="new-password"
           />
           <label className="text-xs text-slate-600">
-            Doğum tarihi (opsiyonel)
+            {t("birthDateOptional")}
             <input type="date" name="birthDate" className="input w-full mt-1" />
           </label>
           <label className="text-xs text-slate-600">
-            Doğum yeri (opsiyonel)
+            {t("birthPlaceOptional")}
             <input
               name="birthPlace"
               maxLength={120}
-              placeholder="Örn. İstanbul"
+              placeholder={t("birthPlacePlaceholder")}
               className="input w-full mt-1"
             />
           </label>
           <label className="col-span-2 block text-xs text-slate-600">
-            Görev tanımları (Ctrl / Cmd ile çoklu seçim)
+            {t("jobTitlesMulti")}
             <select
               name="jobTitleIds"
               multiple
@@ -329,19 +313,17 @@ export default async function AdminUsers() {
             />
             <span>
               <span className="font-medium">
-                Görev tanımına göre otomatik eğitim ataması yap
+                {t("autoEnrollLabel")}
               </span>
               <br />
               <span className="text-slate-500">
-                İşaretliyse, kullanıcının seçtiğiniz görev tanımları için aktif
-                olan tüm eğitim planları anında atanır. İşareti kaldırırsanız
-                atama yapılmaz — eğitimleri sonradan{" "}
-                <span className="font-medium">Eğitim Planları</span>{" "}
-                sayfasından manuel olarak ekleyebilirsiniz.
+                {t.rich("autoEnrollHelp", {
+                  strong: (c) => <span className="font-medium">{c}</span>,
+                })}
               </span>
             </span>
           </label>
-          <button className="btn-primary col-span-2 w-max">Kaydet</button>
+          <button className="btn-primary col-span-2 w-max">{t("save")}</button>
         </form>
       </section>
 
@@ -355,17 +337,17 @@ export default async function AdminUsers() {
                   <span className="text-slate-500 font-normal">· {u.email}</span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  {u.role} · {u.department?.name ?? "Departman yok"} · Yönetici: {u.manager?.name ?? "—"}
+                  {u.role} · {u.department?.name ?? t("noDepartment")} · {t("managerLabel")}: {u.manager?.name ?? "—"}
                   {u.jobTitles.length > 0 && (
                     <> · {u.jobTitles.map((jt) => jt.jobTitle.name).join(", ")}</>
                   )}
                 </div>
                 <div className="mt-1 flex gap-2 flex-wrap">
-                  {!u.passwordHash && <span className="badge-amber">Şifre yok</span>}
-                  {u.lockedAt && <span className="badge-red">Kilitli</span>}
+                  {!u.passwordHash && <span className="badge-amber">{t("noPassword")}</span>}
+                  {u.lockedAt && <span className="badge-red">{t("locked")}</span>}
                   {u.failedLoginAttempts > 0 && !u.lockedAt && (
                     <span className="badge-amber">
-                      {u.failedLoginAttempts} hatalı deneme
+                      {t("failedAttempts", { count: u.failedLoginAttempts })}
                     </span>
                   )}
                 </div>
@@ -375,12 +357,12 @@ export default async function AdminUsers() {
                   href={`/admin/audit?entity=User&entityId=${u.id}`}
                   className="text-xs text-sky-700 hover:underline whitespace-nowrap"
                 >
-                  Denetim geçmişi →
+                  {t("auditHistory")}
                 </a>
                 {u.lockedAt && (
                   <form action={unlockUser}>
                     <input type="hidden" name="userId" value={u.id} />
-                    <button className="btn-secondary text-xs py-1.5">Kilidi Kaldır</button>
+                    <button className="btn-secondary text-xs py-1.5">{t("unlock")}</button>
                   </form>
                 )}
                 {u.isActive && (
@@ -390,11 +372,11 @@ export default async function AdminUsers() {
                       className="btn-secondary text-xs py-1.5"
                       title={
                         u.passwordHash
-                          ? "Yeniden davet maili gönder (eski şifre korunur, yeni link 72 saat geçerli)"
-                          : "Davet maili gönder"
+                          ? t("resendInviteTitle")
+                          : t("sendInviteTitle")
                       }
                     >
-                      {u.passwordHash ? "Daveti Yenile" : "Davet Gönder"}
+                      {u.passwordHash ? t("resendInvite") : t("sendInvite")}
                     </button>
                   </form>
                 )}
@@ -403,7 +385,7 @@ export default async function AdminUsers() {
 
             <details className="text-sm">
               <summary className="cursor-pointer text-teal-700 hover:text-teal-800 text-xs font-medium select-none">
-                Düzenle / Şifre değiştir
+                {t("editOrChangePassword")}
               </summary>
               <div className="mt-3 grid grid-cols-2 gap-3 p-3 bg-slate-50 rounded-lg">
                 <form action={upsertUser} className="col-span-2 grid grid-cols-2 gap-3">
@@ -425,9 +407,9 @@ export default async function AdminUsers() {
                   />
                   {user.role === "ADMIN" ? (
                     <select name="role" defaultValue={u.role} className="input">
-                      <option value="USER">Kullanıcı</option>
-                      <option value="MANAGER">Yönetici</option>
-                      <option value="ADMIN">Admin</option>
+                      <option value="USER">{t("roleUser")}</option>
+                      <option value="MANAGER">{t("roleManager")}</option>
+                      <option value="ADMIN">{t("roleAdmin")}</option>
                     </select>
                   ) : (
                     <input type="hidden" name="role" value={u.role} />
@@ -437,7 +419,7 @@ export default async function AdminUsers() {
                     defaultValue={u.departmentId ?? ""}
                     className="input"
                   >
-                    <option value="">Departman (yok)</option>
+                    <option value="">{t("departmentNone")}</option>
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
                         {d.name}
@@ -449,7 +431,7 @@ export default async function AdminUsers() {
                     defaultValue={u.managerId ?? ""}
                     className="input col-span-2"
                   >
-                    <option value="">Yönetici (yok)</option>
+                    <option value="">{t("managerNone")}</option>
                     {managers
                       .filter((m) => m.id !== u.id)
                       .map((m) => (
@@ -459,7 +441,7 @@ export default async function AdminUsers() {
                       ))}
                   </select>
                   <label className="text-xs text-slate-600">
-                    Doğum tarihi
+                    {t("birthDate")}
                     <input
                       type="date"
                       name="birthDate"
@@ -472,17 +454,17 @@ export default async function AdminUsers() {
                     />
                   </label>
                   <label className="text-xs text-slate-600">
-                    Doğum yeri
+                    {t("birthPlace")}
                     <input
                       name="birthPlace"
                       maxLength={120}
                       defaultValue={u.birthPlace ?? ""}
-                      placeholder="Örn. İstanbul"
+                      placeholder={t("birthPlacePlaceholder")}
                       className="input w-full mt-1"
                     />
                   </label>
                   <label className="col-span-2 text-xs text-slate-600">
-                    Görev tanımları (çoklu seçim için Ctrl/Cmd)
+                    {t("jobTitlesMultiShort")}
                     <select
                       name="jobTitleIds"
                       multiple
@@ -498,34 +480,34 @@ export default async function AdminUsers() {
                   </label>
                   <label className="col-span-2 flex items-center gap-2 text-xs text-slate-600">
                     <input type="checkbox" name="autoEnroll" />
-                    Görev tanımı değişikliğine göre eksik eğitimleri otomatik ata
+                    {t("autoEnrollEdit")}
                     <span className="text-slate-400">
-                      (işaretlenmezse atama yapılmaz — zaten var olanlar korunur)
+                      {t("autoEnrollEditHint")}
                     </span>
                   </label>
                   <button className="btn-primary col-span-2 w-max text-xs py-1.5">
-                    Bilgileri Kaydet
+                    {t("saveDetails")}
                   </button>
                 </form>
 
                 <form action={setPassword} className="col-span-2 border-t border-slate-200 pt-3">
                   <div className="text-xs font-semibold text-slate-700 mb-2">
-                    Şifreyi Değiştir
+                    {t("changePassword")}
                   </div>
                   <input type="hidden" name="userId" value={u.id} />
                   <div className="flex gap-2">
                     <input
                       name="password"
                       type="password"
-                      placeholder="Yeni şifre (min 8 karakter, harf + rakam)"
+                      placeholder={t("newPasswordPlaceholder")}
                       required
                       className="input flex-1"
                       autoComplete="new-password"
                     />
-                    <button className="btn-brand text-xs py-1.5">Şifreyi Ayarla</button>
+                    <button className="btn-brand text-xs py-1.5">{t("setPassword")}</button>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-1">
-                    Yeni şifre belirlenince kilit ve hatalı deneme sayacı sıfırlanır.
+                    {t("setPasswordHint")}
                   </p>
                 </form>
               </div>

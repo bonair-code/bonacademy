@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 
 type Attempt = {
   id: string;
@@ -12,6 +13,7 @@ type Attempt = {
 
 export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
   const [open, setOpen] = useState(false);
+  const t = useTranslations("exam");
 
   useEffect(() => {
     if (!open) return;
@@ -53,10 +55,10 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
           >
             <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
           </svg>
-          <span className="font-semibold text-slate-900">Önceki Denemeler</span>
+          <span className="font-semibold text-slate-900">{t("attempts.previous")}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">{attempts.length} kayıt</span>
+          <span className="text-xs text-slate-400">{t("attempts.records", { count: attempts.length })}</span>
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -95,13 +97,13 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
                 >
                   <path d="M12 8v5l3 2M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z" />
                 </svg>
-                <h3 className="font-semibold text-slate-900">Önceki Denemeler</h3>
+                <h3 className="font-semibold text-slate-900">{t("attempts.previous")}</h3>
                 <span className="text-xs text-slate-400">({attempts.length})</span>
               </div>
               <button
                 onClick={() => setOpen(false)}
                 className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
-                aria-label="Kapat"
+                aria-label={t("attempts.close")}
               >
                 ✕
               </button>
@@ -109,7 +111,7 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
             <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
               {sorted.length === 0 && (
                 <p className="p-8 text-center text-slate-400 text-sm">
-                  Henüz deneme yok.
+                  {t("attempts.empty")}
                 </p>
               )}
               {sorted.map((e) => (
@@ -127,7 +129,7 @@ export function ExamAttemptsDrawer({ attempts }: { attempts: Attempt[] }) {
                           e.passed ? "text-emerald-700" : "text-red-700"
                         }`}
                       >
-                        %{Math.round(e.score)} · {e.passed ? "Geçti" : "Kaldı"}
+                        {Math.round(e.score)}% · {e.passed ? t("attempts.passed") : t("attempts.failed")}
                       </div>
                       {e.finishedAt && (
                         <div className="text-xs text-slate-500 mt-0.5">

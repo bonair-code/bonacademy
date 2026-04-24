@@ -1,12 +1,14 @@
 import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
+import { getTranslations } from "next-intl/server";
 
 // ADMIN ve MANAGER için salt okunur kurs listesi. Yönetici raporlama
 // ihtiyacı için Excel dışa aktarımı buradan yapabilir. Düzenleme ve
 // SCORM/soru işlemleri hâlâ yalnızca /admin/courses altından yapılır.
 export default async function CoursesReadOnly() {
   const user = await requireRole("ADMIN", "MANAGER");
+  const t = await getTranslations("misc");
   const courses = await prisma.course.findMany({
     orderBy: [{ isActive: "desc" }, { title: "asc" }],
     include: {
@@ -16,22 +18,22 @@ export default async function CoursesReadOnly() {
   });
 
   return (
-    <Shell user={user} title="Kurslar" subtitle="Tanımlı eğitim listesi">
+    <Shell user={user} title={t("coursesPublic.title")} subtitle={t("coursesPublic.subtitle")}>
       <div className="flex items-center justify-between mb-3 gap-3">
         <p className="text-sm text-slate-500">
-          Toplam {courses.length} kurs.
+          {t("coursesPublic.total", { count: courses.length })}
         </p>
         <a
           href="/api/courses/export"
           className="btn-secondary text-xs inline-flex items-center gap-1.5"
           download
         >
-          <span>📊</span> Excel Olarak İndir
+          <span>📊</span> {t("coursesPublic.downloadExcel")}
         </a>
       </div>
       <div className="space-y-2">
         {courses.length === 0 && (
-          <p className="text-sm text-slate-500">Henüz kurs yok.</p>
+          <p className="text-sm text-slate-500">{t("coursesPublic.noCourses")}</p>
         )}
         {courses.map((c) => (
           <div key={c.id} className="card p-4">
@@ -44,16 +46,16 @@ export default async function CoursesReadOnly() {
               </span>
               {!c.isActive && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-600">
-                  pasif
+                  {t("coursesPublic.inactive")}
                 </span>
               )}
             </div>
             <div className="text-xs text-slate-500 mt-0.5">
-              {c.scormPackagePath ? "SCORM yüklü" : "SCORM bekleniyor"}
-              {c._count.plans > 0 && ` · ${c._count.plans} plan`}
+              {c.scormPackagePath ? t("coursesPublic.scormUploaded") : t("coursesPublic.scormPending")}
+              {c._count.plans > 0 && t("coursesPublic.planCount", { count: c._count.plans })}
               {c.ownerManager
-                ? ` · Sorumlu: ${c.ownerManager.name}`
-                : " · Sorumlu atanmamış"}
+                ? t("coursesPublic.owner", { name: c.ownerManager.name ?? "" })
+                : t("coursesPublic.noOwner")}
             </div>
           </div>
         ))}

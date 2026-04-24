@@ -2,23 +2,32 @@ import { requireRole } from "@/lib/rbac";
 import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { fmtTrDate } from "@/lib/dates";
+import { getTranslations } from "next-intl/server";
 
 // Rapor sayfası: Excel indirmeden de yönetimin "tek bakışta" görmesi gereken
 // tüm temel analizleri burada sunuyoruz. Grafikler harici kütüphane olmadan
 // inline SVG ile çiziliyor — bundle yükü yok, SSR-safe.
 
-const STATUS_META: Record<
-  string,
-  { label: string; color: string; bg: string }
-> = {
-  PENDING: { label: "Bekliyor", color: "#64748b", bg: "bg-slate-100 text-slate-700" },
-  IN_PROGRESS: { label: "Devam Ediyor", color: "#f59e0b", bg: "bg-amber-100 text-amber-700" },
-  SCORM_COMPLETED: { label: "Sınav Bekliyor", color: "#14b8a6", bg: "bg-teal-100 text-teal-700" },
-  EXAM_PASSED: { label: "Sınav Geçti", color: "#10b981", bg: "bg-emerald-100 text-emerald-700" },
-  EXAM_FAILED: { label: "Sınav Başarısız", color: "#ef4444", bg: "bg-red-100 text-red-700" },
-  RETAKE_REQUIRED: { label: "Tekrar Gerekli", color: "#dc2626", bg: "bg-red-100 text-red-700" },
-  COMPLETED: { label: "Tamamlandı", color: "#059669", bg: "bg-emerald-100 text-emerald-700" },
-  OVERDUE: { label: "Gecikmiş", color: "#b91c1c", bg: "bg-red-100 text-red-700" },
+const STATUS_KEY: Record<string, string> = {
+  PENDING: "pending",
+  IN_PROGRESS: "inProgress",
+  SCORM_COMPLETED: "scormCompleted",
+  EXAM_PASSED: "examPassed",
+  EXAM_FAILED: "examFailed",
+  RETAKE_REQUIRED: "retakeRequired",
+  COMPLETED: "completed",
+  OVERDUE: "overdue",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  PENDING: "#64748b",
+  IN_PROGRESS: "#f59e0b",
+  SCORM_COMPLETED: "#14b8a6",
+  EXAM_PASSED: "#10b981",
+  EXAM_FAILED: "#ef4444",
+  RETAKE_REQUIRED: "#dc2626",
+  COMPLETED: "#059669",
+  OVERDUE: "#b91c1c",
 };
 
 function pct(part: number, total: number) {
@@ -26,7 +35,6 @@ function pct(part: number, total: number) {
   return Math.round((part / total) * 1000) / 10;
 }
 
-/** Inline SVG donut chart: segments = [{ label, value, color }] */
 function Donut({
   segments,
   size = 180,
@@ -66,7 +74,6 @@ function Donut({
   );
 }
 
-/** Horizontal bar chart with labels + values */
 function HBar({
   rows,
   max,
@@ -104,7 +111,6 @@ function HBar({
   );
 }
 
-/** Line chart — inline SVG polyline + area fill + labeled axis */
 function LineChart({
   points,
   width = 560,
@@ -134,7 +140,6 @@ function LineChart({
   const yTicks = 4;
   return (
     <svg width={width} height={height} className="max-w-full">
-      {/* grid */}
       {Array.from({ length: yTicks + 1 }, (_, i) => {
         const y = pad.t + (h * i) / yTicks;
         const v = Math.round((maxV * (yTicks - i)) / yTicks);
@@ -160,9 +165,7 @@ function LineChart({
           </g>
         );
       })}
-      {/* area */}
       <polygon points={area} fill={color} fillOpacity={0.08} />
-      {/* line */}
       <polyline
         points={poly}
         fill="none"
@@ -171,7 +174,6 @@ function LineChart({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {/* dots + x labels */}
       {xy.map((p, i) => (
         <g key={i}>
           <circle cx={p.x} cy={p.y} r={3} fill={color} />
@@ -233,8 +235,6 @@ function Kpi({
   );
 }
 
-// Ayın başı (UTC) — groupBy yerine uygulama tarafında aylara kırıyoruz, SQL
-// bağımsız ve Postgres/SQLite farkından etkilenmiyor.
 function startOfMonthUTC(d: Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
@@ -243,12 +243,13 @@ function monthKey(d: Date) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-const TR_MONTHS = [
-  "Oca", "Şub", "Mar", "Nis", "May", "Haz",
-  "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara",
+const MONTH_KEYS = [
+  "jan", "feb", "mar", "apr", "may", "jun",
+  "jul", "aug", "sep", "oct", "nov", "dec",
 ];
 
 export default async function AdminReports() {
+  const t = await getTranslations("admin.reports");
   const user = await requireRole("ADMIN");
 
   const now = new Date();
@@ -323,7 +324,6 @@ export default async function AdminReports() {
     }),
   ]);
 
-  // Toplam atama + durumlara göre dağılım
   const totalAssignments = statusCounts.reduce((s, x) => s + x._count._all, 0);
   const countBy: Record<string, number> = {};
   for (const s of statusCounts) countBy[s.status] = s._count._all;
@@ -337,11 +337,10 @@ export default async function AdminReports() {
     (countBy["RETAKE_REQUIRED"] ?? 0);
   const compliancePct = pct(completedCount, totalAssignments);
 
-  // Son 6 ay — tamamlanan + sertifika trend
   const months: { key: string; label: string; d: Date }[] = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
-    months.push({ key: monthKey(d), label: TR_MONTHS[d.getUTCMonth()], d });
+    months.push({ key: monthKey(d), label: t(`months.${MONTH_KEYS[d.getUTCMonth()]}` as never), d });
   }
   const completedByMonth: Record<string, number> = Object.fromEntries(
     months.map((m) => [m.key, 0])
@@ -359,7 +358,6 @@ export default async function AdminReports() {
     if (k in certsByMonth) certsByMonth[k]++;
   }
 
-  // Kursa göre tamamlanma oranı (en az 1 ataması olanlar)
   const courseRows = coursesWithAssignments
     .map((c) => {
       const all = c.plans.flatMap((p) => p.assignments);
@@ -378,7 +376,6 @@ export default async function AdminReports() {
     .sort((a, b) => b.rate - a.rate || b.total - a.total)
     .slice(0, 8);
 
-  // Departman uyum oranı
   const deptRows = departmentsWithUsers
     .map((d) => {
       const all = d.users.flatMap((u) => u.assignments);
@@ -403,7 +400,6 @@ export default async function AdminReports() {
     .filter((r) => r.total > 0)
     .sort((a, b) => b.rate - a.rate);
 
-  // Sınav: ilk denemede geçme oranı
   let firstTryPass = 0;
   let firstTryTotal = 0;
   for (const g of examAttemptsGrouped) {
@@ -415,62 +411,59 @@ export default async function AdminReports() {
   const firstTryRate = pct(firstTryPass, firstTryTotal);
   const avgScore = examAttemptsAgg._avg.score ?? 0;
 
-  // Donut segmentleri (status)
   const donutSegments = Object.entries(countBy)
     .filter(([, v]) => v > 0)
     .map(([status, value]) => ({
-      label: STATUS_META[status]?.label ?? status,
+      label: STATUS_KEY[status] ? t(`status.${STATUS_KEY[status]}` as never) : status,
       value,
-      color: STATUS_META[status]?.color ?? "#94a3b8",
+      color: STATUS_COLOR[status] ?? "#94a3b8",
     }));
 
   return (
-    <Shell user={user} title="Raporlar" subtitle="Genel analiz ve grafikler">
-      {/* KPI şeridi */}
+    <Shell user={user} title={t("title")} subtitle={t("subtitle")}>
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         <Kpi
-          label="Toplam Atama"
+          label={t("kpi.totalAssignments")}
           value={totalAssignments}
           tone="slate"
-          sub={`${totalActiveUsers} aktif kullanıcı`}
+          sub={t("kpi.activeUsersSub", { count: totalActiveUsers })}
         />
         <Kpi
-          label="Uyum Oranı"
+          label={t("kpi.complianceRate")}
           value={`%${compliancePct}`}
           tone="green"
-          sub={`${completedCount} tamamlandı`}
+          sub={t("kpi.completedSub", { count: completedCount })}
         />
         <Kpi
-          label="Devam Eden"
+          label={t("kpi.inProgress")}
           value={inProgressCount}
           tone="amber"
         />
         <Kpi
-          label="Geciken"
+          label={t("kpi.overdue")}
           value={overdueCount}
           tone="red"
         />
         <Kpi
-          label="Sertifika"
+          label={t("kpi.certificates")}
           value={totalCertificates}
           tone="teal"
         />
         <Kpi
-          label="İlk Deneme Geçme"
+          label={t("kpi.firstTryPass")}
           value={`%${firstTryRate}`}
           tone="violet"
-          sub={`${firstTryTotal} sınav`}
+          sub={t("kpi.examsSub", { count: firstTryTotal })}
         />
       </div>
 
-      {/* İlk satır: durum donut + aylık trend */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-4">
-            Atama Durum Dağılımı
+            {t("statusDistribution")}
           </h2>
           {totalAssignments === 0 ? (
-            <p className="text-sm text-slate-500">Henüz atama yok.</p>
+            <p className="text-sm text-slate-500">{t("noAssignments")}</p>
           ) : (
             <div className="flex items-center gap-6 flex-wrap">
               <div className="relative">
@@ -480,7 +473,7 @@ export default async function AdminReports() {
                     {totalAssignments}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-slate-500">
-                    Atama
+                    {t("assignmentLabel")}
                   </div>
                 </div>
               </div>
@@ -512,10 +505,10 @@ export default async function AdminReports() {
 
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-1">
-            Son 6 Ay · Tamamlanan Eğitim
+            {t("last6MonthsCompleted")}
           </h2>
           <p className="text-xs text-slate-500 mb-3">
-            Aylık tamamlanma sayısı (completedAt tarihine göre).
+            {t("last6MonthsHelp")}
           </p>
           <LineChart
             points={months.map((m) => ({
@@ -525,7 +518,7 @@ export default async function AdminReports() {
           />
           <div className="mt-4 pt-4 border-t border-slate-100">
             <h3 className="text-xs font-semibold text-slate-700 mb-2">
-              Sertifika Üretimi (aylık)
+              {t("certsMonthly")}
             </h3>
             <LineChart
               points={months.map((m) => ({
@@ -539,17 +532,16 @@ export default async function AdminReports() {
         </div>
       </div>
 
-      {/* İkinci satır: kurs tamamlanma + departman uyum */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-1">
-            Kurs Bazında Tamamlanma Oranı
+            {t("coursesCompletion")}
           </h2>
           <p className="text-xs text-slate-500 mb-4">
-            En yüksek 8 kurs (yalnızca ataması olanlar).
+            {t("coursesCompletionHelp")}
           </p>
           {courseRows.length === 0 ? (
-            <p className="text-sm text-slate-500">Henüz veri yok.</p>
+            <p className="text-sm text-slate-500">{t("noData")}</p>
           ) : (
             <HBar
               rows={courseRows.map((c) => ({
@@ -571,19 +563,19 @@ export default async function AdminReports() {
 
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-1">
-            Departman Uyum Oranı
+            {t("departmentCompliance")}
           </h2>
           <p className="text-xs text-slate-500 mb-4">
-            Kullanıcı atamaları üzerinden tamamlanma yüzdesi.
+            {t("departmentComplianceHelp")}
           </p>
           {deptRows.length === 0 ? (
-            <p className="text-sm text-slate-500">Henüz veri yok.</p>
+            <p className="text-sm text-slate-500">{t("noData")}</p>
           ) : (
             <HBar
               rows={deptRows.map((d) => ({
                 label: d.label,
                 value: d.rate,
-                sub: `${d.userCount} kişi · ${d.overdue} geciken`,
+                sub: t("deptSub", { users: d.userCount, overdue: d.overdue }),
                 color:
                   d.rate >= 80
                     ? "#10b981"
@@ -598,24 +590,23 @@ export default async function AdminReports() {
         </div>
       </div>
 
-      {/* Üçüncü: sınav performansı + en çok geciken */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-4">
-            Sınav Performansı
+            {t("examPerformance")}
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-slate-200 p-3">
-              <div className="text-xs text-slate-500">Ortalama Puan</div>
+              <div className="text-xs text-slate-500">{t("averageScore")}</div>
               <div className="text-2xl font-bold text-violet-600 mt-1">
                 {avgScore ? avgScore.toFixed(1) : "—"}
               </div>
               <div className="text-xs text-slate-400 mt-0.5">
-                {examAttemptsAgg._count._all} deneme
+                {t("attemptsSub", { count: examAttemptsAgg._count._all })}
               </div>
             </div>
             <div className="rounded-lg border border-slate-200 p-3">
-              <div className="text-xs text-slate-500">İlk Deneme Geçme</div>
+              <div className="text-xs text-slate-500">{t("firstTryPassTitle")}</div>
               <div className="text-2xl font-bold text-emerald-600 mt-1">
                 %{firstTryRate}
               </div>
@@ -626,7 +617,7 @@ export default async function AdminReports() {
           </div>
           <div className="mt-4 pt-4 border-t border-slate-100 space-y-2">
             <h3 className="text-xs font-semibold text-slate-700">
-              Deneme Numarasına Göre
+              {t("byAttemptNumber")}
             </h3>
             {(() => {
               const byAttempt: Record<number, { pass: number; fail: number }> = {};
@@ -640,7 +631,7 @@ export default async function AdminReports() {
                 .sort((a, b) => a.n - b.n);
               if (sorted.length === 0)
                 return (
-                  <p className="text-xs text-slate-500">Henüz sınav yok.</p>
+                  <p className="text-xs text-slate-500">{t("noExams")}</p>
                 );
               return sorted.map((s) => {
                 const total = s.pass + s.fail;
@@ -648,9 +639,9 @@ export default async function AdminReports() {
                 return (
                   <div key={s.n}>
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-700">{s.n}. deneme</span>
+                      <span className="text-slate-700">{t("attemptLabel", { n: s.n })}</span>
                       <span className="text-slate-500">
-                        %{rate} · {s.pass}/{total}
+                        {t("attemptRate", { rate, pass: s.pass, total })}
                       </span>
                     </div>
                     <div className="mt-1 h-2 rounded-full bg-slate-100 overflow-hidden flex">
@@ -672,13 +663,13 @@ export default async function AdminReports() {
 
         <div className="card p-5">
           <h2 className="font-semibold text-slate-900 mb-1">
-            En Çok Geciken 10 Atama
+            {t("topOverdue")}
           </h2>
           <p className="text-xs text-slate-500 mb-3">
-            Son tarihi en erken geçmiş olanlar üstte.
+            {t("topOverdueHelp")}
           </p>
           {topOverdue.length === 0 ? (
-            <p className="text-sm text-slate-500">Geciken atama yok 🎉</p>
+            <p className="text-sm text-slate-500">{t("noOverdue")}</p>
           ) : (
             <div className="divide-y divide-slate-100">
               {topOverdue.map((a) => {
@@ -696,12 +687,11 @@ export default async function AdminReports() {
                         {a.user.name || a.user.email}
                       </div>
                       <div className="text-xs text-slate-500 truncate">
-                        {a.plan.course.title} · Son tarih{" "}
-                        {fmtTrDate(a.dueDate)}
+                        {a.plan.course.title} · {t("dueDate", { date: fmtTrDate(a.dueDate) })}
                       </div>
                     </div>
                     <span className="text-xs font-semibold text-red-600 shrink-0">
-                      {daysLate} gün
+                      {t("daysLate", { days: daysLate })}
                     </span>
                   </div>
                 );
@@ -711,12 +701,11 @@ export default async function AdminReports() {
         </div>
       </div>
 
-      {/* Excel indirme — yine de erişilebilir */}
       <div className="card p-5 flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h3 className="font-semibold text-slate-900">Detaylı Dışa Aktarım</h3>
+          <h3 className="font-semibold text-slate-900">{t("detailedExport")}</h3>
           <p className="text-xs text-slate-500 mt-0.5">
-            Tüm atamalar satır bazında, filtre + pivot için Excel.
+            {t("detailedExportHelp")}
           </p>
         </div>
         <a
@@ -734,7 +723,7 @@ export default async function AdminReports() {
           >
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 18v-6M9 15l3 3 3-3" />
           </svg>
-          Excel İndir
+          {t("downloadExcel")}
         </a>
       </div>
     </Shell>

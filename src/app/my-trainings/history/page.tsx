@@ -5,6 +5,7 @@ import { fmtTrDate } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createRetakeAssignment } from "@/lib/scheduler/retake";
+import { getTranslations } from "next-intl/server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 // döngü gösterilir; "Tekrar Et" butonu ile gönüllü yeni döngü başlatılabilir.
 export default async function MyTrainingsHistoryPage() {
   const user = await requireUser();
+  const t = await getTranslations("user");
 
   const completed = await prisma.assignment.findMany({
     where: { userId: user.id, status: "COMPLETED" },
@@ -60,25 +62,25 @@ export default async function MyTrainingsHistoryPage() {
   return (
     <Shell
       user={user}
-      title="Eğitim Geçmişim"
-      subtitle="Tamamladığım eğitimler ve gönüllü tekrar"
+      title={t("history.title")}
+      subtitle={t("history.subtitle")}
     >
       <div className="card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
-              <th className="text-left p-3 font-medium">Eğitim</th>
-              <th className="text-left p-3 font-medium">Tamamlanma</th>
-              <th className="text-left p-3 font-medium">Döngü</th>
-              <th className="text-left p-3 font-medium">Sertifika</th>
-              <th className="text-right p-3 font-medium">İşlem</th>
+              <th className="text-left p-3 font-medium">{t("history.col.training")}</th>
+              <th className="text-left p-3 font-medium">{t("history.col.completion")}</th>
+              <th className="text-left p-3 font-medium">{t("history.col.cycle")}</th>
+              <th className="text-left p-3 font-medium">{t("history.col.certificate")}</th>
+              <th className="text-right p-3 font-medium">{t("history.col.action")}</th>
             </tr>
           </thead>
           <tbody className="divide-y">
             {latestPerPlan.length === 0 && (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-slate-400">
-                  Henüz tamamlanmış eğitiminiz yok.
+                  {t("history.empty")}
                 </td>
               </tr>
             )}
@@ -99,7 +101,7 @@ export default async function MyTrainingsHistoryPage() {
                         className="text-sky-700 hover:underline text-xs"
                         href={`/api/certificate/${a.certificate.id}`}
                       >
-                        {a.certificate.serialNo} (PDF)
+                        {t("history.pdfSuffix", { serial: a.certificate.serialNo })}
                       </a>
                     ) : (
                       <span className="text-slate-400 text-xs">—</span>
@@ -108,13 +110,13 @@ export default async function MyTrainingsHistoryPage() {
                   <td className="p-3 text-right">
                     {hasActive ? (
                       <span className="text-xs text-slate-400">
-                        Aktif döngünüz var
+                        {t("history.hasActive")}
                       </span>
                     ) : (
                       <form action={voluntaryRetakeAction}>
                         <input type="hidden" name="assignmentId" value={a.id} />
                         <button className="btn-secondary text-xs py-1.5">
-                          Tekrar Et
+                          {t("history.retake")}
                         </button>
                       </form>
                     )}
@@ -127,8 +129,7 @@ export default async function MyTrainingsHistoryPage() {
       </div>
 
       <p className="text-xs text-slate-500 mt-3">
-        "Tekrar Et" ile başlattığınız eğitim, mevcut sertifikanızı etkilemez.
-        Yeni sertifika sınavı başarıyla tamamladığınızda düzenlenir.
+        {t("history.footNote")}
       </p>
     </Shell>
   );

@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 export function UploadScormForm({ courseId }: { courseId: string }) {
   const router = useRouter();
+  const t = useTranslations("adminCourses");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const MAX_BYTES = 30 * 1024 * 1024;
@@ -15,7 +17,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
     const changeNote = (form.elements.namedItem("changeNote") as HTMLInputElement).value;
     if (!file) return;
     if (file.size > MAX_BYTES) {
-      setError("Dosya çok büyük (maks 30 MB)");
+      setError(t("upload.fileTooLarge"));
       return;
     }
     setBusy(true);
@@ -29,7 +31,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
     });
     setBusy(false);
     if (!res.ok) {
-      setError((await res.json()).error || "Yükleme başarısız");
+      setError((await res.json()).error || t("upload.uploadFailed"));
       return;
     }
     router.refresh();
@@ -43,7 +45,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
           disabled={busy}
           className="btn-primary disabled:opacity-50"
         >
-          {busy ? "Yükleniyor…" : "SCORM Yükle"}
+          {busy ? t("upload.uploading") : t("upload.uploadScorm")}
         </button>
         {error && <span className="text-sm text-red-600">{error}</span>}
       </div>
@@ -51,12 +53,11 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
         name="changeNote"
         type="text"
         maxLength={1000}
-        placeholder="Revizyon notu (örn. 'FAA kural güncellemesi 2026-Q1') — isteğe bağlı"
+        placeholder={t("upload.revisionNotePlaceholder")}
         className="input w-full text-sm"
       />
       <p className="text-[11px] text-slate-500">
-        Her yeni SCORM yüklemesi otomatik olarak yeni bir revizyon oluşturur.
-        Maksimum dosya boyutu: 30 MB.
+        {t("upload.help")}
       </p>
     </form>
   );

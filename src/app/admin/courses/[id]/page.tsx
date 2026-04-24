@@ -7,6 +7,7 @@ import { UploadScormForm } from "./UploadScormForm";
 import { BulkQuestionImport } from "./BulkQuestionImport";
 import { createCourseRevision, ensureBaselineRevision } from "@/lib/courseRevisions";
 import { audit } from "@/lib/audit";
+import { getTranslations } from "next-intl/server";
 
 async function addQuestion(formData: FormData) {
   "use server";
@@ -61,6 +62,7 @@ async function deleteQuestion(formData: FormData) {
 
 async function saveCourseMeta(formData: FormData) {
   "use server";
+  const t = await getTranslations("adminCourses");
   const admin = await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const title = String(formData.get("title") || "").trim();
@@ -71,14 +73,14 @@ async function saveCourseMeta(formData: FormData) {
   const ownerManagerId = String(formData.get("ownerManagerId") || "").trim();
   if (!title) return;
   if (!ownerManagerId) {
-    throw new Error("Kurstan sorumlu yönetici seçilmelidir.");
+    throw new Error(t("errors.ownerRequired"));
   }
   const owner = await prisma.user.findUnique({
     where: { id: ownerManagerId },
     select: { id: true, role: true, isActive: true },
   });
   if (!owner || owner.role !== "MANAGER" || !owner.isActive) {
-    throw new Error("Geçersiz sorumlu yönetici seçimi.");
+    throw new Error(t("errors.ownerInvalid"));
   }
 
   const existing = await prisma.course.findUniqueOrThrow({ where: { id: courseId } });
@@ -93,7 +95,7 @@ async function saveCourseMeta(formData: FormData) {
       select: { title: true },
     });
     if (duplicate) {
-      throw new Error(`Bu isimde bir eğitim zaten var: "${duplicate.title}"`);
+      throw new Error(t("errors.duplicateTitle", { title: duplicate.title }));
     }
   }
 
@@ -128,7 +130,7 @@ async function saveCourseMeta(formData: FormData) {
     await createCourseRevision(
       courseId,
       admin.id,
-      changeNote ?? "Kurs bilgileri güncellendi"
+      changeNote ?? t("detail.courseInfoUpdated")
     );
     await audit({
       actorId: admin.id,
@@ -172,6 +174,7 @@ export default async function CourseDetail({
   params: Promise<{ id: string }>;
 }) {
   const user = await requireRole("ADMIN", "MANAGER");
+  const t = await getTranslations("adminCourses");
   const { id } = await params;
   const [course, managers] = await Promise.all([
     prisma.course.findUnique({
@@ -204,22 +207,22 @@ export default async function CourseDetail({
     <Shell
       user={user}
       title={course.title}
-      subtitle={`Mevcut sürüm: v${course.currentRevision}`}
+      subtitle={t("detail.currentVersion", { version: course.currentRevision })}
     >
       <div className="mb-4">
         <a
           href={`/admin/audit?entity=Course&entityId=${course.id}`}
           className="text-xs text-sky-700 hover:underline"
         >
-          Bu kurs için denetim geçmişini göster →
+          {t("detail.auditLink")} →
         </a>
       </div>
       <section className="card p-4 mb-6">
-        <h2 className="font-semibold mb-3">Kurs Bilgileri ve Sınav Ayarları</h2>
+        <h2 className="font-semibold mb-3">{t("detail.infoAndExam")}</h2>
         <form action={saveCourseMeta} className="space-y-3">
           <input type="hidden" name="courseId" value={course.id} />
           <label className="text-sm block">
-            Başlık
+            {t("title")}
             <input
               name="title"
               defaultValue={course.title}
@@ -229,7 +232,7 @@ export default async function CourseDetail({
             />
           </label>
           <label className="text-sm block">
-            Sorumlu yönetici <span className="text-red-600">*</span>
+            {t("ownerManager")} <span className="text-red-600">*</span>
             <select
               name="ownerManagerId"
               required
@@ -238,8 +241,8 @@ export default async function CourseDetail({
             >
               <option value="" disabled>
                 {managerOptions.length === 0
-                  ? "Önce bir MANAGER kullanıcı tanımlayın"
-                  : "Yönetici seçin..."}
+                  ? t("defineManagerFirst")
+                  : t("selectManager")}
               </option>
               {managerOptions.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -249,7 +252,7 @@ export default async function CourseDetail({
             </select>
           </label>
           <label className="text-sm block">
-            Açıklama
+            {t("detail.description")}
             <textarea
               name="description"
               defaultValue={course.description ?? ""}
@@ -260,7 +263,7 @@ export default async function CourseDetail({
           </label>
           <div className="grid grid-cols-2 gap-3">
             <label className="text-sm">
-              Geçme Skoru (%)
+              {t("detail.passingScore")}
               <input
                 name="passingScore"
                 type="number"
@@ -271,7 +274,7 @@ export default async function CourseDetail({
               />
             </label>
             <label className="text-sm">
-              Sınav soru sayısı
+              {t("detail.questionCount")}
               <input
                 name="questionCount"
                 type="number"
@@ -282,50 +285,49 @@ export default async function CourseDetail({
             </label>
           </div>
           <label className="text-sm block">
-            Revizyon notu (değişiklik varsa oluşturulur) — isteğe bağlı
+            {t("detail.revisionNote")}
             <input
               name="changeNote"
-              placeholder="örn. 'Başlık güncellendi'"
+              placeholder={t("detail.revisionNotePlaceholder")}
               maxLength={1000}
               className="input mt-1 w-full"
             />
           </label>
-          <button className="btn-primary">Kaydet</button>
+          <button className="btn-primary">{t("detail.save")}</button>
         </form>
       </section>
 
       <section className="card p-4 mb-6">
-        <h2 className="font-semibold mb-2">SCORM Paketi</h2>
+        <h2 className="font-semibold mb-2">{t("detail.scormPackage")}</h2>
         <p className="text-xs text-slate-500 mb-2">
-          Mevcut:{" "}
+          {t("detail.current")}:{" "}
           {course.scormPackagePath
             ? `${course.scormPackagePath} · ${course.scormVersion}`
-            : "Yok"}
+            : t("detail.none")}
         </p>
         <UploadScormForm courseId={course.id} />
       </section>
 
       {/* Revision History */}
       <section className="card p-4 mb-6">
-        <h2 className="font-semibold mb-2">Revizyon Geçmişi</h2>
+        <h2 className="font-semibold mb-2">{t("detail.revisionHistory")}</h2>
         <p className="text-xs text-slate-500 mb-3">
-          Her SCORM yüklemesi ve kurs bilgisi değişikliği yeni bir revizyon oluşturur.
-          Aşağıdan manuel bir revizyon kaydı da ekleyebilirsin (içerik değişmeden süreç notu için).
+          {t("detail.revisionHelp")}
         </p>
         <form action={createManualRevision} className="flex gap-2 mb-4">
           <input type="hidden" name="courseId" value={course.id} />
           <input
             name="changeNote"
-            placeholder="Manuel revizyon notu (zorunlu)"
+            placeholder={t("detail.manualRevisionPlaceholder")}
             required
             maxLength={1000}
             className="input flex-1"
           />
-          <button className="btn-secondary text-sm">Revizyon Oluştur</button>
+          <button className="btn-secondary text-sm">{t("detail.createRevision")}</button>
         </form>
         <div className="border rounded-lg divide-y text-sm">
           {course.revisions.length === 0 && (
-            <p className="p-4 text-slate-500">Henüz revizyon yok.</p>
+            <p className="p-4 text-slate-500">{t("detail.noRevisions")}</p>
           )}
           {course.revisions.map((r) => (
             <div key={r.id} className="p-3">
@@ -333,7 +335,7 @@ export default async function CourseDetail({
                 <div className="flex items-center gap-2">
                   <span className="badge-teal">v{r.revisionNumber}</span>
                   {r.revisionNumber === course.currentRevision && (
-                    <span className="text-[11px] text-teal-700 font-medium">mevcut</span>
+                    <span className="text-[11px] text-teal-700 font-medium">{t("detail.currentBadge")}</span>
                   )}
                 </div>
                 <span className="text-[11px] text-slate-500">
@@ -344,8 +346,8 @@ export default async function CourseDetail({
                 <p className="text-slate-700 mt-1">{r.changeNote}</p>
               )}
               <div className="text-[11px] text-slate-500 mt-1">
-                {r.title} · geçme %{r.passingScore}
-                {r.scormPackagePath ? ` · SCORM: ${r.scormPackagePath}` : ""}
+                {r.title} · {t("detail.passingLabel", { score: r.passingScore })}
+                {r.scormPackagePath ? ` · ${t("detail.scormLabel", { path: r.scormPackagePath })}` : ""}
               </div>
             </div>
           ))}
@@ -354,7 +356,7 @@ export default async function CourseDetail({
 
       <section className="card p-4">
         <h2 className="font-semibold mb-2">
-          Soru Bankası ({course.questionBank?.questions.length ?? 0})
+          {t("detail.questionBank", { count: course.questionBank?.questions.length ?? 0 })}
         </h2>
         <div className="mb-4">
           <BulkQuestionImport courseId={course.id} />
@@ -363,13 +365,14 @@ export default async function CourseDetail({
           <input type="hidden" name="courseId" value={course.id} />
           <textarea
             name="text"
-            placeholder="Soru metni"
+            placeholder={t("detail.questionText")}
             className="input w-full"
             rows={2}
           />
           <p className="text-xs text-slate-600">
-            Her sorunun <strong>tek bir doğru cevabı</strong> olmalıdır. Doğru şıkkın
-            solundaki yeşil yuvarlağı işaretleyin.
+            {t("detail.singleCorrectHelpBefore")}
+            <strong>{t("detail.singleCorrectHelpStrong")}</strong>
+            {t("detail.singleCorrectHelpAfter")}
           </p>
           {[0, 1, 2, 3].map((i) => (
             <label
@@ -383,20 +386,20 @@ export default async function CourseDetail({
                   type="radio"
                   className="h-4 w-4 accent-emerald-600"
                 />
-                Doğru
+                {t("detail.correct")}
               </span>
               <input
                 name={`opt_${i}`}
-                placeholder={`Şık ${i + 1}`}
+                placeholder={t("detail.optionPlaceholder", { n: i + 1 })}
                 className="input flex-1"
               />
             </label>
           ))}
-          <button className="btn-primary">Soru Ekle</button>
+          <button className="btn-primary">{t("detail.addQuestion")}</button>
         </form>
         <div className="space-y-2">
           {course.questionBank?.questions.length === 0 && (
-            <p className="text-sm text-slate-500">Henüz soru eklenmemiş.</p>
+            <p className="text-sm text-slate-500">{t("detail.noQuestions")}</p>
           )}
           {course.questionBank?.questions.map((q, qi) => (
             <div key={q.id} className="border border-slate-200 rounded-md p-3">
@@ -407,7 +410,7 @@ export default async function CourseDetail({
                 <form action={deleteQuestion}>
                   <input type="hidden" name="id" value={q.id} />
                   <input type="hidden" name="courseId" value={course.id} />
-                  <button className="text-xs text-red-600 hover:underline">Sil</button>
+                  <button className="text-xs text-red-600 hover:underline">{t("detail.delete")}</button>
                 </form>
               </div>
               <ul className="mt-2 space-y-1 text-sm">
@@ -428,7 +431,7 @@ export default async function CourseDetail({
                     {o.text}
                     {o.isCorrect && (
                       <span className="text-[10px] uppercase tracking-wide text-emerald-700">
-                        doğru
+                        {t("detail.correctLabel")}
                       </span>
                     )}
                   </li>

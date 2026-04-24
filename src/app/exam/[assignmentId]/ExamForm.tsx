@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 type Q = { id: string; text: string; options: { id: string; text: string }[] };
 
@@ -15,6 +16,7 @@ export function ExamForm({
   questions: Q[];
 }) {
   const router = useRouter();
+  const t = useTranslations("exam");
   // Tek doğru cevap seçimi → soru başına sadece bir option id.
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -24,7 +26,7 @@ export function ExamForm({
     // Tüm sorular cevaplanmadıysa uyar.
     const unanswered = questions.filter((q) => !answers[q.id]);
     if (unanswered.length > 0) {
-      setError(`Lütfen tüm soruları cevaplayın (${unanswered.length} soru boş).`);
+      setError(t("unanswered", { count: unanswered.length }));
       return;
     }
     setError(null);
@@ -88,7 +90,7 @@ export function ExamForm({
         disabled={busy}
         className="bg-slate-900 text-white rounded-lg px-5 py-2 hover:bg-slate-800 disabled:opacity-50"
       >
-        {busy ? "Gönderiliyor…" : "Sınavı Gönder"}
+        {busy ? t("submitting") : t("submit")}
       </button>
     </div>
   );

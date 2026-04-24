@@ -6,6 +6,7 @@ import { ensureExamSession } from "@/lib/exam/engine";
 import { ExamForm } from "./ExamForm";
 import { ExamAttemptsDrawer } from "@/components/ExamAttemptsDrawer";
 import { buildTrainingSteps } from "@/lib/trainingSteps";
+import { getTranslations } from "next-intl/server";
 
 export default async function ExamPage({
   params,
@@ -13,6 +14,7 @@ export default async function ExamPage({
   params: Promise<{ assignmentId: string }>;
 }) {
   const user = await requireUser();
+  const t = await getTranslations("exam");
   const { assignmentId } = await params;
   const a = await prisma.assignment.findUnique({
     where: { id: assignmentId },
@@ -65,7 +67,7 @@ export default async function ExamPage({
     const steps = buildTrainingSteps({ ...stepsBase, hasExam: false, context: "exam" });
     return (
       <Shell user={user} trainingSteps={steps} trainingTitle={a.plan.course.title}>
-        <p>Bu kurs için sınav tanımlı değil.</p>
+        <p>{t("notDefined")}</p>
       </Shell>
     );
   }
@@ -95,9 +97,9 @@ export default async function ExamPage({
 
   return (
     <Shell user={user} trainingSteps={steps} trainingTitle={a.plan.course.title}>
-      <h1 className="text-xl font-semibold mb-1">{a.plan.course.title} — Sınav</h1>
+      <h1 className="text-xl font-semibold mb-1">{a.plan.course.title} — {t("titleSuffix")}</h1>
       <p className="text-sm text-slate-500 mb-4">
-        Geçme notu: %{exam.passingScore}. Deneme: {a.examAttempts.length + 1}/2
+        {t("passingAndAttempt", { passingScore: exam.passingScore, current: a.examAttempts.length + 1, total: 2 })}
       </p>
       <ExamForm assignmentId={a.id} sessionId={session.id} questions={picked} />
       {a.examAttempts.length > 0 && (

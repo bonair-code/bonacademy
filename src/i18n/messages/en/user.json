@@ -1,0 +1,74 @@
+{
+  "user": {
+    "status": {
+      "pending": "Pending",
+      "in_progress": "In Progress",
+      "scorm_completed": "Awaiting Exam",
+      "exam_passed": "Exam Passed",
+      "exam_failed": "Exam Failed",
+      "retake_required": "Retake Required",
+      "completed": "Completed",
+      "overdue": "Overdue"
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Overview",
+      "summaryHeading": "Training Summary",
+      "pdf": "PDF",
+      "kpi": {
+        "active": "Active Training",
+        "pending": "Pending",
+        "inProgress": "In Progress",
+        "completed": "Completed",
+        "overdue": "Overdue",
+        "myCertificates": "My Certificates"
+      },
+      "activeTrainings": "My Active Trainings",
+      "recordsCount": "{count} records",
+      "noActive": "You have no active trainings.",
+      "cycle": "Cycle {num}",
+      "dueDate": "Due date",
+      "newVersionAvailable": "New version available (v{version})",
+      "managerRequested": "Manager requested retake",
+      "startExam": "Start Exam →",
+      "goToCourse": "Go to Training →",
+      "recentCompleted": "Recently Completed Trainings",
+      "viewAll": "View all →",
+      "completedOn": "Completed: {date}",
+      "completedLabel": "Completed",
+      "cycleInline": "· Cycle {num}",
+      "certificate": "Certificate"
+    },
+    "history": {
+      "title": "My Training History",
+      "subtitle": "Completed trainings and voluntary retakes",
+      "col": {
+        "training": "Training",
+        "completion": "Completion",
+        "cycle": "Cycle",
+        "certificate": "Certificate",
+        "action": "Action"
+      },
+      "empty": "You have no completed trainings yet.",
+      "pdfSuffix": "{serial} (PDF)",
+      "hasActive": "You have an active cycle",
+      "retake": "Retake",
+      "footNote": "A training started via \"Retake\" does not affect your current certificate. A new certificate is issued when you successfully complete the exam."
+    },
+    "certificates": {
+      "title": "My Certificates",
+      "subtitleCount": "{count} certificates",
+      "searchPlaceholder": "Search by course name or serial number...",
+      "emptyNone": "You have no certificates yet.",
+      "emptySearch": "No certificates match your search.",
+      "serialNo": "Serial No: {serial}"
+    },
+    "certificatesDrawer": {
+      "title": "My Certificates",
+      "recordsCount": "{count} records",
+      "close": "Close",
+      "empty": "You have no certificates yet.",
+      "serialNo": "Serial No: {serial}"
+    }
+  }
+}

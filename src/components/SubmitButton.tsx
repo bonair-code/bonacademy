@@ -2,11 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useTranslations } from "next-intl";
 
 export function SubmitButton({
   children,
-  pendingText = "Kaydediliyor...",
-  savedText = "Kaydedildi ✓",
+  pendingText,
+  savedText,
   className = "btn-primary",
 }: {
   children: React.ReactNode;
@@ -15,6 +16,9 @@ export function SubmitButton({
   className?: string;
 }) {
   const { pending } = useFormStatus();
+  const tr = useTranslations("ui.submit");
+  const effectivePending = pendingText ?? tr("pending");
+  const effectiveSaved = savedText ?? tr("saved");
   const prevPending = useRef(false);
   const [justSaved, setJustSaved] = useState(false);
 
@@ -28,7 +32,7 @@ export function SubmitButton({
     prevPending.current = pending;
   }, [pending]);
 
-  const label = pending ? pendingText : justSaved ? savedText : children;
+  const label = pending ? effectivePending : justSaved ? effectiveSaved : children;
   const cls = justSaved
     ? className.replace("btn-primary", "btn-primary") + " !bg-emerald-600"
     : className;

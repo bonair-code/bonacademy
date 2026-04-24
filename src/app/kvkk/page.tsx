@@ -1,99 +1,104 @@
+import { getTranslations } from "next-intl/server";
+import { cookies } from "next/headers";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale } from "@/i18n/config";
+
 export const runtime = "nodejs";
-export const metadata = { title: "KVKK Aydınlatma Metni — BonAcademy" };
+
+export async function generateMetadata() {
+  const t = await getTranslations("misc");
+  return { title: t("kvkk.metaTitle") };
+}
 
 // KVKK 6698 sayılı kanun kapsamında aydınlatma metni. Login sayfasından
 // link verilir. Hukuk ekibinin gözden geçirmesi gerekir — bu bir şablondur,
 // son metin Bon Air hukuk/İK tarafından onaylanmadan kullanıcılara duyurulmamalıdır.
 
-export default function KvkkPage() {
+export default async function KvkkPage() {
+  const t = await getTranslations("misc");
+  const store = await cookies();
+  const rawLocale = store.get(LOCALE_COOKIE)?.value;
+  const locale = isLocale(rawLocale) ? rawLocale : DEFAULT_LOCALE;
+  const dateLocale = locale === "tr" ? "tr-TR" : "en-GB";
+  const lastUpdatedDate = new Date().toLocaleDateString(dateLocale);
+
+  const items = t.raw("kvkk.sections.dataCollected.items") as string[];
+  const intro = t("kvkk.intro");
+
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-3xl mx-auto card p-8 space-y-4 text-sm text-slate-700 leading-relaxed">
         <div className="h-1 w-10 bg-brand-600 rounded-full" />
         <h1 className="text-2xl font-semibold text-slate-900">
-          KVKK Aydınlatma Metni
+          {t("kvkk.title")}
         </h1>
-        <p className="text-xs text-slate-500">Son güncelleme: {new Date().toLocaleDateString("tr-TR")}</p>
+        <p className="text-xs text-slate-500">
+          {t("kvkk.lastUpdated", { date: lastUpdatedDate })}
+        </p>
+
+        {intro && <p>{intro}</p>}
 
         <section>
-          <h2 className="font-semibold text-slate-900 mt-2">1. Veri Sorumlusu</h2>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.controller.heading")}
+          </h2>
           <p>
-            Bon Air Havacılık Sanayi ve Ticaret A.Ş. (“Bon Air”), 6698 sayılı Kişisel
-            Verilerin Korunması Kanunu (“KVKK”) kapsamında veri sorumlusu sıfatıyla
-            hareket eder. İletişim: <a className="underline" href="mailto:kvkk@bonair.com.tr">kvkk@bonair.com.tr</a>.
+            {t("kvkk.sections.controller.body")}
+            <a className="underline" href="mailto:kvkk@bonair.com.tr">kvkk@bonair.com.tr</a>.
           </p>
         </section>
 
         <section>
-          <h2 className="font-semibold text-slate-900 mt-2">2. İşlenen Kişisel Veriler</h2>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.dataCollected.heading")}
+          </h2>
           <ul className="list-disc pl-5 space-y-1">
-            <li>Kimlik: ad, soyad, doğum tarihi, doğum yeri</li>
-            <li>İletişim: kurumsal e-posta adresi</li>
-            <li>Çalışan bilgisi: departman, yönetici, rol</li>
-            <li>Eğitim/sınav kayıtları: SCORM ilerleme verisi (CMI), sınav cevapları, skorlar, sertifikalar</li>
-            <li>Denetim kayıtları: giriş/çıkış zamanları, yönetici eylem logları (audit log), IP adresi</li>
+            {items.map((item, i) => (
+              <li key={i}>{item}</li>
+            ))}
           </ul>
         </section>
 
         <section>
-          <h2 className="font-semibold text-slate-900 mt-2">3. İşleme Amaçları ve Hukuki Sebep</h2>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.purpose.heading")}
+          </h2>
+          <p>{t("kvkk.sections.purpose.body")}</p>
+        </section>
+
+        <section>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.transfer.heading")}
+          </h2>
+          <p>{t("kvkk.sections.transfer.body")}</p>
+        </section>
+
+        <section>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.retention.heading")}
+          </h2>
+          <p>{t("kvkk.sections.retention.body")}</p>
+        </section>
+
+        <section>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.rights.heading")}
+          </h2>
           <p>
-            Kişisel verileriniz; (a) zorunlu eğitimlerin planlanması, takibi ve
-            yasal uyum (SHGM, EASA vb. havacılık mevzuatı) yükümlülüklerinin
-            yerine getirilmesi, (b) sertifikaların üretilmesi ve doğrulanması,
-            (c) bilgi güvenliği ve denetim kayıtlarının tutulması amaçlarıyla
-            işlenir. Hukuki sebep: KVKK m.5/2-(a) kanunlarda açıkça öngörülmesi,
-            m.5/2-(c) sözleşmenin kurulması/ifası, m.5/2-(ç) hukuki yükümlülük,
-            m.5/2-(f) meşru menfaat.
+            {t("kvkk.sections.rights.body")}
+            <a className="underline" href="mailto:kvkk@bonair.com.tr">kvkk@bonair.com.tr</a>.
           </p>
         </section>
 
         <section>
-          <h2 className="font-semibold text-slate-900 mt-2">4. Aktarım</h2>
-          <p>
-            Veriler; barındırma hizmeti için Vercel Inc. (ABD) ve Neon Inc. (ABD)
-            altyapısında, e-posta gönderimi için Microsoft 365 (Microsoft
-            Ireland Operations Ltd.), güvenlik doğrulaması için Google LLC
-            (reCAPTCHA) ile paylaşılır. Yurt dışına aktarım KVKK m.9 kapsamında
-            açık rıza ve/veya gerekli güvence taahhütnameleri çerçevesinde
-            gerçekleştirilir.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="font-semibold text-slate-900 mt-2">5. Saklama Süresi</h2>
-          <p>
-            Eğitim ve sertifika kayıtları, ilgili havacılık mevzuatının öngördüğü
-            süre boyunca (tipik olarak istihdam süresi + 10 yıl) saklanır. Audit
-            loglar bilgi güvenliği standartları gereği en az 1 yıl tutulur.
-            Süre sonunda veriler silinir, yok edilir veya anonim hâle getirilir.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="font-semibold text-slate-900 mt-2">6. Haklarınız (KVKK m.11)</h2>
-          <p>
-            Kişisel verilerinizin işlenip işlenmediğini öğrenme, işlenmişse
-            bilgi talep etme, düzeltme, silme/yok etme, aktarıldığı üçüncü
-            kişileri öğrenme, işleme itiraz etme ve zarar hâlinde tazminat
-            talep etme haklarına sahipsiniz. Başvurularınızı{" "}
-            <a className="underline" href="mailto:kvkk@bonair.com.tr">kvkk@bonair.com.tr</a>{" "}
-            adresine iletebilirsiniz.
-          </p>
-        </section>
-
-        <section>
-          <h2 className="font-semibold text-slate-900 mt-2">7. Çerezler</h2>
-          <p>
-            Yalnızca oturum açma (authentication session cookie) ve güvenlik
-            doğrulaması (Google reCAPTCHA) için zorunlu çerezler kullanılır.
-            Reklam veya pazarlama amaçlı izleme çerezi kullanılmaz.
-          </p>
+          <h2 className="font-semibold text-slate-900 mt-2">
+            {t("kvkk.sections.cookies.heading")}
+          </h2>
+          <p>{t("kvkk.sections.cookies.body")}</p>
         </section>
 
         <div className="pt-4 text-xs">
           <a href="/login" className="underline hover:text-slate-900">
-            ← Giriş sayfasına dön
+            {t("kvkk.backToLogin")}
           </a>
         </div>
       </div>

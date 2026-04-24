@@ -7,15 +7,17 @@ import { revalidatePath } from "next/cache";
 import { deletePackage } from "@/lib/scorm/storage";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { audit } from "@/lib/audit";
+import { getTranslations } from "next-intl/server";
 
 async function createCourse(formData: FormData) {
   "use server";
+  const t = await getTranslations("adminCourses");
   const admin = await requireRole("ADMIN", "MANAGER");
   const title = String(formData.get("title") || "").trim();
   const ownerManagerId = String(formData.get("ownerManagerId") || "").trim();
   if (!title) return;
   if (!ownerManagerId) {
-    throw new Error("Kurstan sorumlu yönetici seçilmelidir.");
+    throw new Error(t("errors.ownerRequired"));
   }
   // Seçilen kullanıcı gerçekten MANAGER mi? Form manipülasyonuna karşı
   // sunucu tarafında da doğrula.
@@ -24,7 +26,7 @@ async function createCourse(formData: FormData) {
     select: { id: true, role: true, isActive: true },
   });
   if (!owner || owner.role !== "MANAGER" || !owner.isActive) {
-    throw new Error("Geçersiz sorumlu yönetici seçimi.");
+    throw new Error(t("errors.ownerInvalid"));
   }
   // Aynı isimde ikinci bir eğitim oluşturulmasın (büyük/küçük harf
   // duyarsız). Böylece sonradan plan oluştururken aynı ada sahip iki
@@ -34,7 +36,7 @@ async function createCourse(formData: FormData) {
     select: { id: true, title: true },
   });
   if (duplicate) {
-    throw new Error(`Bu isimde bir eğitim zaten var: "${duplicate.title}"`);
+    throw new Error(t("errors.duplicateTitle", { title: duplicate.title }));
   }
   const course = await prisma.course.create({ data: { title, ownerManagerId } });
   await audit({
@@ -93,6 +95,7 @@ async function deleteCourse(formData: FormData) {
 
 export default async function AdminCourses() {
   const user = await requireRole("ADMIN", "MANAGER");
+  const t = await getTranslations("adminCourses");
   const [courses, managers] = await Promise.all([
     prisma.course.findMany({
       orderBy: { createdAt: "desc" },
@@ -108,35 +111,35 @@ export default async function AdminCourses() {
     }),
   ]);
   return (
-    <Shell user={user} title="Kurslar" subtitle="SCORM paketleri ve soru bankaları">
+    <Shell user={user} title={t("pageTitle")} subtitle={t("pageSubtitle")}>
       <div className="flex justify-end mb-3">
         <a
           href="/api/courses/export"
           className="btn-secondary text-xs inline-flex items-center gap-1.5"
           download
         >
-          <span>📊</span> Excel Olarak İndir
+          <span>📊</span> {t("exportExcel")}
         </a>
       </div>
       <form action={createCourse} className="card p-4 mb-6 space-y-3">
-        <h2 className="font-semibold text-slate-900">Yeni Kurs</h2>
+        <h2 className="font-semibold text-slate-900">{t("newCourse")}</h2>
         <label className="text-sm block">
-          Başlık
+          {t("title")}
           <input
             name="title"
-            placeholder="Kurs başlığı"
+            placeholder={t("titlePlaceholder")}
             required
             maxLength={255}
             className="input mt-1 w-full"
           />
         </label>
         <label className="text-sm block">
-          Sorumlu yönetici <span className="text-red-600">*</span>
+          {t("ownerManager")} <span className="text-red-600">*</span>
           <select name="ownerManagerId" required className="input mt-1 w-full" defaultValue="">
             <option value="" disabled>
               {managers.length === 0
-                ? "Önce bir MANAGER kullanıcı tanımlayın"
-                : "Yönetici seçin..."}
+                ? t("defineManagerFirst")
+                : t("selectManager")}
             </option>
             {managers.map((m) => (
               <option key={m.id} value={m.id}>
@@ -145,17 +148,16 @@ export default async function AdminCourses() {
             ))}
           </select>
           <span className="text-[11px] text-slate-500 mt-1 block">
-            Bu kursun sahibi olarak sertifikalarda görünecek ve içerik sorumluluğunu
-            üstlenecek yönetici.
+            {t("ownerManagerHint")}
           </span>
         </label>
         <button className="btn-primary" disabled={managers.length === 0}>
-          Ekle
+          {t("add")}
         </button>
       </form>
       <div className="space-y-2">
         {courses.length === 0 && (
-          <p className="text-sm text-slate-500">Henüz kurs yok.</p>
+          <p className="text-sm text-slate-500">{t("noCourses")}</p>
         )}
         {courses.map((c) => (
           <div
@@ -175,9 +177,9 @@ export default async function AdminCourses() {
                 </span>
               </div>
               <div className="text-xs text-slate-500 mt-0.5">
-                {c.scormPackagePath ? "SCORM yüklü" : "SCORM bekleniyor"}
-                {c._count.plans > 0 && ` · ${c._count.plans} plan`}
-                {c.ownerManager ? ` · Sorumlu: ${c.ownerManager.name}` : " · Sorumlu atanmamış"}
+                {c.scormPackagePath ? t("scormLoaded") : t("scormPending")}
+                {c._count.plans > 0 && ` · ${t("plansCount", { count: c._count.plans })}`}
+                {c.ownerManager ? ` · ${t("owner", { name: c.ownerManager.name })}` : ` · ${t("noOwner")}`}
               </div>
             </Link>
             <div className="flex items-center gap-3 shrink-0">
@@ -185,7 +187,7 @@ export default async function AdminCourses() {
                 href={`/admin/courses/${c.id}`}
                 className="btn-secondary text-xs"
               >
-                Düzenle →
+                {t("edit")} →
               </Link>
               <form action={deleteCourse}>
                 <input type="hidden" name="id" value={c.id} />
@@ -193,11 +195,11 @@ export default async function AdminCourses() {
                   className="text-xs text-red-600 hover:text-red-700 hover:underline px-2 py-1"
                   message={
                     c._count.plans > 0
-                      ? `"${c.title}" kursuna bağlı ${c._count.plans} plan ve tüm atamaları silinecek. Devam edilsin mi?`
-                      : `"${c.title}" kursu silinsin mi?`
+                      ? t("confirmDeleteWithPlans", { title: c.title, count: c._count.plans })
+                      : t("confirmDelete", { title: c.title })
                   }
                 >
-                  Sil
+                  {t("delete")}
                 </ConfirmButton>
               </form>
             </div>

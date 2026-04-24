@@ -1,0 +1,37 @@
+{
+  "adminPlans": {
+    "pageTitle": "Training Plans",
+    "newPlan": "New Plan",
+    "course": "Course",
+    "createNewCourse": "+ Create new course",
+    "noCoursesYet": "No courses yet — please add a course first",
+    "allCoursesPlanned": "All courses already have a plan",
+    "recurrence": "Recurrence interval",
+    "recurrenceOptions": {
+      "NONE": "One-time",
+      "SIX_MONTHS": "Every 6 months",
+      "ONE_YEAR": "Every year",
+      "TWO_YEARS": "Every 2 years"
+    },
+    "startDate": "Start date",
+    "dueInDays": "Completion period (days)",
+    "jobTitlesAuto": "Job titles (auto-assigned)",
+    "extraUsers": "Additional users (optional)",
+    "assignmentHelp": "All users in the selected job titles plus the additional users are assigned together. Users later assigned to a job title are also automatically enrolled.",
+    "createPlan": "Create Plan",
+    "creating": "Creating...",
+    "created": "Created",
+    "existingPlans": "Existing Plans",
+    "noPlans": "No plans yet.",
+    "assignmentsCount": "{count} assignment(s)",
+    "startsOn": "Starts {date}",
+    "jobTitles": "Job titles",
+    "updateNoteLabel": "Note:",
+    "updateNoteBody": " When you add a new job title, assignments are generated only for users who don't yet have one. Existing users' status, attempts and progress are preserved — they continue where they left off. Removing a job title does not delete existing assignments.",
+    "saveChanges": "Save Changes",
+    "deletePlan": "Delete plan",
+    "errors": {
+      "duplicatePlan": "A plan already exists for this course: \"{title}\". Edit the existing plan or delete it first."
+    }
+  }
+}

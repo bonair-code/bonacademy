@@ -1,0 +1,22 @@
+{
+  "ui": {
+    "password": {
+      "show": "Şifreyi göster",
+      "hide": "Şifreyi gizle",
+      "showShort": "Göster",
+      "hideShort": "Gizle"
+    },
+    "submit": {
+      "pending": "Kaydediliyor...",
+      "saved": "Kaydedildi ✓"
+    },
+    "recaptcha": {
+      "notConfigured": "reCAPTCHA yapılandırılmamış (NEXT_PUBLIC_RECAPTCHA_SITE_KEY eksik).",
+      "protectedBy": "Bu site Google reCAPTCHA ile korunmaktadır —",
+      "privacy": "Gizlilik",
+      "and": "ve",
+      "terms": "Şartlar",
+      "apply": "geçerlidir."
+    }
+  }
+}

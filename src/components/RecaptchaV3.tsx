@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 
 // Görünmez Google reCAPTCHA v3. Mount'ta script yükler, token üretir ve
 // gizli input'a yazar. Token ~2 dakika geçerli olduğu için 90 saniyede
@@ -27,6 +28,7 @@ export function RecaptchaV3({
   const siteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
   const inputRef = useRef<HTMLInputElement>(null);
   const [ready, setReady] = useState(false);
+  const t = useTranslations("ui.recaptcha");
 
   useEffect(() => {
     if (!siteKey) return;
@@ -76,7 +78,7 @@ export function RecaptchaV3({
   if (!siteKey) {
     return (
       <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-        reCAPTCHA yapılandırılmamış (NEXT_PUBLIC_RECAPTCHA_SITE_KEY eksik).
+        {t("notConfigured")}
       </p>
     );
   }
@@ -85,25 +87,25 @@ export function RecaptchaV3({
     <>
       <input ref={inputRef} type="hidden" name={name} defaultValue="" />
       <p className="text-[11px] text-slate-400">
-        Bu site Google reCAPTCHA ile korunmaktadır —{" "}
+        {t("protectedBy")}{" "}
         <a
           href="https://policies.google.com/privacy"
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-slate-600"
         >
-          Gizlilik
+          {t("privacy")}
         </a>{" "}
-        ve{" "}
+        {t("and")}{" "}
         <a
           href="https://policies.google.com/terms"
           target="_blank"
           rel="noopener noreferrer"
           className="underline hover:text-slate-600"
         >
-          Şartlar
+          {t("terms")}
         </a>{" "}
-        geçerlidir.
+        {t("apply")}
       </p>
     </>
   );

@@ -1,0 +1,46 @@
+{
+  "exam": {
+    "notDefined": "Bu kurs için sınav tanımlı değil.",
+    "titleSuffix": "Sınav",
+    "resultTitleSuffix": "Sınav Sonucu",
+    "passingAndAttempt": "Geçme notu: %{passingScore}. Deneme: {current}/{total}",
+    "submitting": "Gönderiliyor…",
+    "submit": "Sınavı Gönder",
+    "unanswered": "Lütfen tüm soruları cevaplayın ({count} soru boş).",
+    "result": {
+      "passed": "Başarılı",
+      "failed": "Başarısız",
+      "yourScore": "Puanınız:",
+      "passingScore": "Geçme notu:",
+      "attemptLine": "Deneme #{attemptNo} · Doğru: {correct} / {total} · Yanlış: {wrong}",
+      "downloadCertificate": "Sertifikayı İndir (PDF)",
+      "retakeCourse": "Eğitimi Tekrarla",
+      "tryAgain": "Tekrar Dene",
+      "dashboard": "Gösterge Paneli",
+      "retakeRequiredNote": "İki deneme hakkınızı da kullandınız. Eğitim içeriğini baştan tamamlayıp sınava yeniden girmeniz gerekiyor.",
+      "questionReport": "Soru Karnesi",
+      "correct": "Doğru",
+      "wrong": "Yanlış",
+      "yourAnswer": "sizin cevabınız",
+      "correctAnswer": "doğru cevap"
+    },
+    "attempts": {
+      "previous": "Önceki Denemeler",
+      "records": "{count} kayıt",
+      "close": "Kapat",
+      "empty": "Henüz deneme yok.",
+      "passed": "Geçti",
+      "failed": "Kaldı"
+    },
+    "history": {
+      "title": "Geçmiş Denemeler",
+      "records": "{count} kayıt",
+      "scormSection": "Eğitim içeriği ({count})",
+      "examSection": "Sınav denemeleri ({count})",
+      "inProgress": "devam ediyor",
+      "empty": "Henüz deneme yok.",
+      "passed": "Geçti",
+      "failed": "Kaldı"
+    }
+  }
+}

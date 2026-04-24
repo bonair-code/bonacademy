@@ -9,24 +9,19 @@ import {
   isValidHexColor,
   loadCurrentCertificateTemplate,
 } from "@/lib/certificate/template";
+import { getTranslations } from "next-intl/server";
 
-const OPTION_CATEGORIES: { key: string; title: string; placeholder: string; defaults: string[] }[] = [
+const OPTION_CATEGORIES: { key: "role" | "recurrence" | "scorm"; defaults: string[] }[] = [
   {
     key: "role",
-    title: "Roller",
-    placeholder: "Ör. Admin, Yönetici, Kullanıcı",
     defaults: ["Admin", "Yönetici", "Kullanıcı"],
   },
   {
     key: "recurrence",
-    title: "Tekrar Aralıkları",
-    placeholder: "Ör. 6 Ay, 1 Yıl",
     defaults: ["Tekrar yok", "6 Ay", "1 Yıl", "2 Yıl"],
   },
   {
     key: "scorm",
-    title: "SCORM Sürümleri",
-    placeholder: "Ör. SCORM 1.2",
     defaults: ["SCORM 1.2", "SCORM 2004"],
   },
 ];
@@ -220,6 +215,7 @@ async function saveCertificateTemplate(formData: FormData) {
 }
 
 export default async function SettingsPage() {
+  const t = await getTranslations("admin.settings");
   const user = await requireRole("ADMIN");
   await ensureDefaults();
 
@@ -244,37 +240,36 @@ export default async function SettingsPage() {
   }
 
   return (
-    <Shell user={user} title="Ayarlar" subtitle="Açılır menü seçenekleri ve sistem ayarları">
+    <Shell user={user} title={t("title")} subtitle={t("subtitle")}>
       <p className="text-sm text-slate-500 mb-6">
-        Sistem genelinde açılır menülerde (Departman, Görev tanımı, Rol, Tekrar sıklığı, SCORM sürümü)
-        görünen seçenekleri buradan yönetin.
+        {t("intro")}
       </p>
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Departments */}
         <section className="card p-4">
-          <h2 className="font-semibold mb-3">Departmanlar</h2>
+          <h2 className="font-semibold mb-3">{t("departments")}</h2>
           <form action={createDepartment} className="flex gap-2 mb-4">
-            <input name="name" placeholder="Yeni departman adı" required maxLength={100} className="input flex-1" />
-            <button className="btn-primary">Ekle</button>
+            <input name="name" placeholder={t("newDepartmentPlaceholder")} required maxLength={100} className="input flex-1" />
+            <button className="btn-primary">{t("add")}</button>
           </form>
           <div className="divide-y border rounded-lg">
             {departments.length === 0 && (
-              <p className="p-4 text-slate-500 text-sm">Henüz departman yok.</p>
+              <p className="p-4 text-slate-500 text-sm">{t("noDepartments")}</p>
             )}
             {departments.map((d) => (
               <div key={d.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameDepartment} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={d.id} />
                   <input name="name" defaultValue={d.name} required maxLength={100} className="input" />
-                  <button className="btn-secondary text-xs">Kaydet</button>
+                  <button className="btn-secondary text-xs">{t("save")}</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
-                  {d._count.users} kullanıcı
+                  {t("usersCount", { count: d._count.users })}
                 </span>
                 <form action={deleteDepartment}>
                   <input type="hidden" name="id" value={d.id} />
-                  <button className="text-xs text-red-600 hover:underline">Sil</button>
+                  <button className="text-xs text-red-600 hover:underline">{t("delete")}</button>
                 </form>
               </div>
             ))}
@@ -283,28 +278,28 @@ export default async function SettingsPage() {
 
         {/* Job Titles */}
         <section className="card p-4">
-          <h2 className="font-semibold mb-3">Görev Tanımları</h2>
+          <h2 className="font-semibold mb-3">{t("jobTitles")}</h2>
           <form action={createJobTitle} className="flex gap-2 mb-4">
-            <input name="name" placeholder="Ör. Pilot, Kabin Memuru" required maxLength={100} className="input flex-1" />
-            <button className="btn-primary">Ekle</button>
+            <input name="name" placeholder={t("jobTitlePlaceholder")} required maxLength={100} className="input flex-1" />
+            <button className="btn-primary">{t("add")}</button>
           </form>
           <div className="divide-y border rounded-lg">
             {jobTitles.length === 0 && (
-              <p className="p-4 text-slate-500 text-sm">Henüz görev tanımı yok.</p>
+              <p className="p-4 text-slate-500 text-sm">{t("noJobTitles")}</p>
             )}
             {jobTitles.map((j) => (
               <div key={j.id} className="p-3 flex items-center gap-2 text-sm">
                 <form action={renameJobTitle} className="flex gap-2 flex-1">
                   <input type="hidden" name="id" value={j.id} />
                   <input name="name" defaultValue={j.name} required maxLength={100} className="input" />
-                  <button className="btn-secondary text-xs">Kaydet</button>
+                  <button className="btn-secondary text-xs">{t("save")}</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
-                  {j._count.users}k · {j._count.plans}p
+                  {t("jobTitleCountsShort", { users: j._count.users, plans: j._count.plans })}
                 </span>
                 <form action={deleteJobTitle}>
                   <input type="hidden" name="id" value={j.id} />
-                  <button className="text-xs text-red-600 hover:underline">Sil</button>
+                  <button className="text-xs text-red-600 hover:underline">{t("delete")}</button>
                 </form>
               </div>
             ))}
@@ -318,26 +313,26 @@ export default async function SettingsPage() {
           const items = grouped.get(c.key) ?? [];
           return (
             <section key={c.key} className="card p-4">
-              <h2 className="font-semibold mb-3">{c.title}</h2>
+              <h2 className="font-semibold mb-3">{t(`categories.${c.key}.title` as never)}</h2>
               <form action={createAppOption} className="flex gap-2 mb-4">
                 <input type="hidden" name="category" value={c.key} />
-                <input name="label" placeholder={c.placeholder} className="input flex-1" />
-                <button className="btn-primary">Ekle</button>
+                <input name="label" placeholder={t(`categories.${c.key}.placeholder` as never)} className="input flex-1" />
+                <button className="btn-primary">{t("add")}</button>
               </form>
               <div className="divide-y border rounded-lg">
                 {items.length === 0 && (
-                  <p className="p-4 text-slate-500 text-sm">Seçenek yok.</p>
+                  <p className="p-4 text-slate-500 text-sm">{t("noOption")}</p>
                 )}
                 {items.map((opt) => (
                   <div key={opt.id} className="p-3 flex items-center gap-2 text-sm">
                     <form action={renameAppOption} className="flex gap-2 flex-1">
                       <input type="hidden" name="id" value={opt.id} />
                       <input name="label" defaultValue={opt.label} className="input" />
-                      <button className="btn-secondary text-xs">Kaydet</button>
+                      <button className="btn-secondary text-xs">{t("save")}</button>
                     </form>
                     <form action={deleteAppOption}>
                       <input type="hidden" name="id" value={opt.id} />
-                      <button className="text-xs text-red-600 hover:underline">Sil</button>
+                      <button className="text-xs text-red-600 hover:underline">{t("delete")}</button>
                     </form>
                   </div>
                 ))}
@@ -348,15 +343,13 @@ export default async function SettingsPage() {
       </div>
 
       <p className="text-[11px] text-slate-400 mt-4">
-        Not: Roller, Tekrar Aralıkları ve SCORM Sürümleri için sistem motoru sabit mantık kullanır;
-        buradaki etiketler açılır menülerde görünecek ad/sıra düzenlemesi içindir. Yeni bir rol veya
-        tekrar aralığı türü eklenmek istenirse yazılım güncellemesi gerekir.
+        {t("systemNote")}
       </p>
 
       {/* Sertifika şablonu */}
       <section className="card p-5 mt-8">
         <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-          <h2 className="font-semibold">Sertifika Şablonu</h2>
+          <h2 className="font-semibold">{t("certificate.title")}</h2>
           <div className="flex gap-2">
             <a
               href="/api/admin/certificate-template/preview"
@@ -364,20 +357,17 @@ export default async function SettingsPage() {
               rel="noopener"
               className="btn-secondary text-xs"
             >
-              Mevcut şablonu önizle (PDF)
+              {t("certificate.preview")}
             </a>
           </div>
         </div>
         <p className="text-xs text-slate-500 mb-4">
-          Buradan değiştirilen başlık, renk ve metinler <b>bundan sonra üretilecek</b>{" "}
-          sertifikalarda görünür. Daha önce verilmiş sertifikalar, veriliş anındaki
-          şablonla dondurulur ve yeniden üretildiğinde orijinal haliyle çıkar (yasal
-          kanıt bütünlüğü). Sadece ADMIN bu alanı düzenleyebilir.
+          {t.rich("certificate.intro", { b: (c) => <b>{c}</b> })}
         </p>
 
         <form action={saveCertificateTemplate} className="grid md:grid-cols-2 gap-4">
           <label className="block text-sm md:col-span-2">
-            <span className="block text-slate-600 mb-1">Aksen Rengi (HEX)</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.accentColor")}</span>
             <div className="flex items-center gap-3">
               <input
                 type="color"
@@ -386,13 +376,13 @@ export default async function SettingsPage() {
                 className="h-10 w-16 rounded border border-slate-300 cursor-pointer"
               />
               <span className="text-xs text-slate-500">
-                Sertifikanın üstündeki ince şerit rengi. Varsayılan: {DEFAULT_CERTIFICATE_TEMPLATE.accentColor}
+                {t("certificate.accentColorHelp", { hex: DEFAULT_CERTIFICATE_TEMPLATE.accentColor })}
               </span>
             </div>
           </label>
 
           <label className="block text-sm">
-            <span className="block text-slate-600 mb-1">Başarı Başlığı (TR)</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.titleAchievement")}</span>
             <input
               name="certTitleAchievement"
               defaultValue={certTemplate.titleAchievement}
@@ -401,7 +391,7 @@ export default async function SettingsPage() {
             />
           </label>
           <label className="block text-sm">
-            <span className="block text-slate-600 mb-1">Katılım Başlığı (TR)</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.titleParticipation")}</span>
             <input
               name="certTitleParticipation"
               defaultValue={certTemplate.titleParticipation}
@@ -411,7 +401,7 @@ export default async function SettingsPage() {
           </label>
 
           <label className="block text-sm">
-            <span className="block text-slate-600 mb-1">Başarı Alt Başlığı (EN)</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.subtitleAchievement")}</span>
             <input
               name="certSubtitleAchievement"
               defaultValue={certTemplate.subtitleAchievement}
@@ -420,7 +410,7 @@ export default async function SettingsPage() {
             />
           </label>
           <label className="block text-sm">
-            <span className="block text-slate-600 mb-1">Katılım Alt Başlığı (EN)</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.subtitleParticipation")}</span>
             <input
               name="certSubtitleParticipation"
               defaultValue={certTemplate.subtitleParticipation}
@@ -431,7 +421,7 @@ export default async function SettingsPage() {
 
           <label className="block text-sm md:col-span-2">
             <span className="block text-slate-600 mb-1">
-              Başarı Gövde Metni (&ldquo;… [KURS ADI]&rdquo; sonrası)
+              {t("certificate.bodyAchievement")}
             </span>
             <textarea
               name="certBodyAchievement"
@@ -443,7 +433,7 @@ export default async function SettingsPage() {
           </label>
           <label className="block text-sm md:col-span-2">
             <span className="block text-slate-600 mb-1">
-              Katılım Gövde Metni (&ldquo;… [KURS ADI]&rdquo; sonrası)
+              {t("certificate.bodyParticipation")}
             </span>
             <textarea
               name="certBodyParticipation"
@@ -455,7 +445,7 @@ export default async function SettingsPage() {
           </label>
 
           <label className="block text-sm md:col-span-2">
-            <span className="block text-slate-600 mb-1">Alt Bilgi Satırı</span>
+            <span className="block text-slate-600 mb-1">{t("certificate.footerLine")}</span>
             <input
               name="certFooterLine"
               defaultValue={certTemplate.footerLine}
@@ -466,12 +456,10 @@ export default async function SettingsPage() {
 
           <fieldset className="md:col-span-2 border border-slate-200 rounded-lg p-3">
             <legend className="text-xs font-semibold text-slate-600 px-1">
-              Gösterilecek Alanlar
+              {t("certificate.visibleFieldsLegend")}
             </legend>
             <p className="text-[11px] text-slate-500 mb-2">
-              İşaretli olan alanlar sertifikada görünür. Veri yoksa (örn. kullanıcının
-              doğum tarihi boşsa) satır zaten otomatik gizlenir — bu kutucuklar o alanı
-              hiçbir sertifikada <b>görünmez</b> yapmak içindir.
+              {t.rich("certificate.visibleFieldsHelp", { b: (c) => <b>{c}</b> })}
             </p>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <label className="flex items-center gap-2">
@@ -480,7 +468,7 @@ export default async function SettingsPage() {
                   name="certShowBirthDate"
                   defaultChecked={certTemplate.showBirthDate}
                 />
-                <span>Doğum tarihi</span>
+                <span>{t("certificate.fieldBirthDate")}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input
@@ -488,7 +476,7 @@ export default async function SettingsPage() {
                   name="certShowBirthPlace"
                   defaultChecked={certTemplate.showBirthPlace}
                 />
-                <span>Doğum yeri</span>
+                <span>{t("certificate.fieldBirthPlace")}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input
@@ -496,7 +484,7 @@ export default async function SettingsPage() {
                   name="certShowOwnerManager"
                   defaultChecked={certTemplate.showOwnerManager}
                 />
-                <span>Sorumlu yönetici (imza bloğu)</span>
+                <span>{t("certificate.fieldOwnerManager")}</span>
               </label>
               <label className="flex items-center gap-2">
                 <input
@@ -504,17 +492,17 @@ export default async function SettingsPage() {
                   name="certShowQr"
                   defaultChecked={certTemplate.showQr}
                 />
-                <span>QR doğrulama kodu</span>
+                <span>{t("certificate.fieldQr")}</span>
               </label>
             </div>
           </fieldset>
 
           <div className="md:col-span-2 flex items-center gap-3">
             <button type="submit" className="btn-primary">
-              Kaydet
+              {t("save")}
             </button>
             <span className="text-xs text-slate-500">
-              Kaydettikten sonra &quot;Önizle&quot; butonu yeni şablonu gösterir.
+              {t("certificate.saveHint")}
             </span>
           </div>
         </form>

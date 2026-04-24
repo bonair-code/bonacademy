@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 
 type Cert = {
   id: string;
@@ -10,6 +11,7 @@ type Cert = {
 };
 
 export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
+  const t = useTranslations("user");
   const [open, setOpen] = useState(false);
 
   // Esc ile kapat.
@@ -53,10 +55,10 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
           >
             <path d="M9 12l2 2 4-4M5 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4l-3 4-3-4H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
           </svg>
-          <span className="font-semibold text-slate-900">Sertifikalarım</span>
+          <span className="font-semibold text-slate-900">{t("certificatesDrawer.title")}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">{certs.length} kayıt</span>
+          <span className="text-xs text-slate-400">{t("certificatesDrawer.recordsCount", { count: certs.length })}</span>
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -96,13 +98,13 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
             >
               <path d="M9 12l2 2 4-4M5 4h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-4l-3 4-3-4H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
             </svg>
-            <h3 className="font-semibold text-slate-900">Sertifikalarım</h3>
+            <h3 className="font-semibold text-slate-900">{t("certificatesDrawer.title")}</h3>
             <span className="text-xs text-slate-400">({certs.length})</span>
           </div>
           <button
             onClick={() => setOpen(false)}
             className="h-8 w-8 rounded-full hover:bg-slate-100 text-slate-500 flex items-center justify-center"
-            aria-label="Kapat"
+            aria-label={t("certificatesDrawer.close")}
           >
             ✕
           </button>
@@ -110,7 +112,7 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
         <div className="overflow-y-auto flex-1 divide-y divide-slate-100">
           {certs.length === 0 && (
             <p className="p-8 text-center text-slate-400 text-sm">
-              Henüz sertifikanız yok.
+              {t("certificatesDrawer.empty")}
             </p>
           )}
           {certs.map((c) => (
@@ -124,7 +126,7 @@ export function CertificatesDrawer({ certs }: { certs: Cert[] }) {
                   {c.courseTitle}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  Seri No: {c.serialNo}
+                  {t("certificatesDrawer.serialNo", { serial: c.serialNo })}
                 </div>
               </div>
               <span className="text-xs text-slate-500 shrink-0">

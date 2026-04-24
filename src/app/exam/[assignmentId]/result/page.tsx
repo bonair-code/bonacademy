@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Shell } from "@/components/Shell";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { getTranslations } from "next-intl/server";
 
 export default async function ExamResultPage({
   params,
@@ -12,6 +13,7 @@ export default async function ExamResultPage({
   searchParams?: Promise<{ attempt?: string; retake?: string }>;
 }) {
   const user = await requireUser();
+  const t = await getTranslations("exam");
   const { assignmentId } = await params;
   const sp = (await searchParams) || {};
   const attemptNo = sp.attempt ? Number(sp.attempt) : undefined;
@@ -60,7 +62,7 @@ export default async function ExamResultPage({
   const correctCount = askedQuestions.length - wrongCount;
 
   return (
-    <Shell user={user} title={`${a.plan.course.title} — Sınav Sonucu`}>
+    <Shell user={user} title={`${a.plan.course.title} — ${t("resultTitleSuffix")}`}>
       <div
         className={`card p-5 mb-5 border-l-4 ${
           attempt.passed
@@ -75,15 +77,13 @@ export default async function ExamResultPage({
                 attempt.passed ? "text-emerald-700" : "text-red-700"
               }`}
             >
-              {attempt.passed ? "Başarılı" : "Başarısız"}
+              {attempt.passed ? t("result.passed") : t("result.failed")}
             </div>
             <div className="text-sm text-slate-700 mt-1">
-              Puanınız: <strong>%{Math.round(attempt.score)}</strong> · Geçme notu: %
-              {passingScore}
+              {t("result.yourScore")} <strong>{Math.round(attempt.score)}%</strong> · {t("result.passingScore")} {passingScore}%
             </div>
             <div className="text-xs text-slate-600 mt-1">
-              Deneme #{attempt.attemptNo} · Doğru: {correctCount} / {askedQuestions.length}
-              {" "}· Yanlış: {wrongCount}
+              {t("result.attemptLine", { attemptNo: attempt.attemptNo, correct: correctCount, total: askedQuestions.length, wrong: wrongCount })}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -92,33 +92,32 @@ export default async function ExamResultPage({
                 href={`/api/certificate/${a.certificate.id}`}
                 className="btn-primary"
               >
-                Sertifikayı İndir (PDF)
+                {t("result.downloadCertificate")}
               </a>
             )}
             {!attempt.passed && sp.retake === "1" && (
               <Link href={`/course/${a.id}`} className="btn-primary">
-                Eğitimi Tekrarla
+                {t("result.retakeCourse")}
               </Link>
             )}
             {!attempt.passed && sp.retake !== "1" && (
               <Link href={`/exam/${a.id}`} className="btn-primary">
-                Tekrar Dene
+                {t("result.tryAgain")}
               </Link>
             )}
             <Link href="/dashboard" className="btn-secondary">
-              Gösterge Paneli
+              {t("result.dashboard")}
             </Link>
           </div>
         </div>
         {!attempt.passed && sp.retake === "1" && (
           <p className="text-sm text-red-800 mt-3">
-            İki deneme hakkınızı da kullandınız. Eğitim içeriğini baştan
-            tamamlayıp sınava yeniden girmeniz gerekiyor.
+            {t("result.retakeRequiredNote")}
           </p>
         )}
       </div>
 
-      <h2 className="font-semibold text-slate-900 mb-2">Soru Karnesi</h2>
+      <h2 className="font-semibold text-slate-900 mb-2">{t("result.questionReport")}</h2>
       <div className="space-y-3">
         {askedQuestions.map((q, i) => {
           const picked = new Set(answersMap[q.id] || []);
@@ -146,7 +145,7 @@ export default async function ExamResultPage({
                       : "bg-emerald-100 text-emerald-700"
                   }`}
                 >
-                  {isWrong ? "Yanlış" : "Doğru"}
+                  {isWrong ? t("result.wrong") : t("result.correct")}
                 </span>
               </div>
               <ul className="space-y-1 text-sm">
@@ -169,12 +168,12 @@ export default async function ExamResultPage({
                       <span>{o.text}</span>
                       {isPicked && (
                         <span className="text-[10px] uppercase tracking-wide text-slate-500">
-                          sizin cevabınız
+                          {t("result.yourAnswer")}
                         </span>
                       )}
                       {isCorrect && !isPicked && (
                         <span className="text-[10px] uppercase tracking-wide text-emerald-600">
-                          doğru cevap
+                          {t("result.correctAnswer")}
                         </span>
                       )}
                     </li>

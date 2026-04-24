@@ -1,0 +1,117 @@
+{
+  "misc": {
+    "manager": {
+      "titleAdmin": "Employee Training",
+      "titleManager": "My Team",
+      "subtitleAdmin": "Training status of all employees · {count} people",
+      "subtitleManager": "{count} people",
+      "downloadPdf": "Download as PDF",
+      "noTeam": "No users registered in your team.",
+      "noName": "(no name)",
+      "completedOf": "{completed}/{total} completed",
+      "overdueCount": "{count} overdue",
+      "noAssignments": "No assignments.",
+      "cycle": "Cycle {number}",
+      "dueDate": "Due date",
+      "requestRetake": "Request retake →",
+      "requestRetakeButton": "Request Retake",
+      "reason": "Reason",
+      "reasonPlaceholder": "E.g. Regulation changed, course must be retaken.",
+      "dueDateLabel": "Due date",
+      "status": {
+        "pending": "Pending",
+        "inProgress": "In Progress",
+        "scormCompleted": "Awaiting Exam",
+        "examPassed": "Exam Passed",
+        "examFailed": "Exam Failed",
+        "retakeRequired": "Retake Required",
+        "completed": "Completed",
+        "overdue": "Overdue"
+      }
+    },
+    "coursesPublic": {
+      "title": "Courses",
+      "subtitle": "Defined training list",
+      "total": "Total {count} courses.",
+      "downloadExcel": "Download as Excel",
+      "noCourses": "No courses yet.",
+      "inactive": "inactive",
+      "scormUploaded": "SCORM uploaded",
+      "scormPending": "SCORM pending",
+      "planCount": " · {count} plans",
+      "owner": " · Owner: {name}",
+      "noOwner": " · No owner assigned"
+    },
+    "verify": {
+      "tooManyTitle": "Too Many Requests",
+      "tooManyBody": "Please try again in a minute.",
+      "notVerifiedTitle": "Certificate Could Not Be Verified",
+      "notVerifiedBody": "No valid certificate record was found for this serial number:",
+      "empty": "(empty)",
+      "footer": "Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy",
+      "verifiedLabel": "VERIFIED",
+      "verifiedTitle": "Valid Certificate",
+      "fullName": "Full Name",
+      "training": "Training",
+      "type": "Type",
+      "achievementCert": "Certificate of Achievement",
+      "participationCert": "Certificate of Attendance",
+      "issuedAt": "Issue Date",
+      "serialNo": "Serial No",
+      "owner": "Owner",
+      "recordNote": "This record is stored in the BonAcademy database.",
+      "company": "Bon Air Havacılık Sanayi ve Ticaret A.Ş.",
+      "metaTitle": "Certificate Verification · {serialNo}"
+    },
+    "kvkk": {
+      "metaTitle": "Privacy Notice — BonAcademy",
+      "title": "Privacy Notice",
+      "lastUpdated": "Last updated: {date}",
+      "intro": "This notice explains how Bon Air Havacılık Sanayi ve Ticaret A.Ş. (\"Bon Air\") collects, uses, and protects personal data in the BonAcademy learning platform.",
+      "sections": {
+        "controller": {
+          "heading": "1. Data Controller",
+          "body": "Bon Air Havacılık Sanayi ve Ticaret A.Ş. (\"Bon Air\") acts as the data controller for personal data processed through BonAcademy. You may contact us at "
+        },
+        "dataCollected": {
+          "heading": "2. Personal Data We Process",
+          "items": [
+            "Identity: first name, last name, date of birth, place of birth",
+            "Contact: corporate email address",
+            "Employment information: department, manager, role",
+            "Training and exam records: SCORM progress data (CMI), exam answers, scores, certificates",
+            "Audit records: sign-in and sign-out times, administrator action logs (audit log), IP address"
+          ]
+        },
+        "purpose": {
+          "heading": "3. Purposes and Legal Basis of Processing",
+          "body": "We process your personal data to (a) plan and track mandatory training and to meet regulatory compliance obligations (such as DGCA, EASA and other aviation regulations), (b) issue and verify certificates, and (c) maintain information security and audit records. The legal bases include compliance with legal obligations, performance of the employment relationship, and our legitimate interests in operating a compliant training programme."
+        },
+        "transfer": {
+          "heading": "4. Data Transfers",
+          "body": "Personal data is processed on hosting infrastructure provided by Vercel Inc. (USA) and Neon Inc. (USA), with email delivery through Microsoft 365 (Microsoft Ireland Operations Ltd.) and bot protection through Google LLC (reCAPTCHA). Cross-border transfers are carried out under applicable safeguards."
+        },
+        "retention": {
+          "heading": "5. Retention Period",
+          "body": "Training and certificate records are retained for the period required by applicable aviation regulations (typically the duration of employment plus 10 years). Audit logs are retained for at least 1 year in line with information-security standards. At the end of the retention period, data is deleted, destroyed, or anonymised."
+        },
+        "rights": {
+          "heading": "6. Your Rights",
+          "body": "You have the right to learn whether your personal data is being processed, request information about such processing, request correction or deletion, learn the third parties to which it has been transferred, object to processing, and request compensation if you suffer harm from unlawful processing. You may submit requests to "
+        },
+        "cookies": {
+          "heading": "7. Cookies",
+          "body": "Only strictly necessary cookies are used for authentication sessions and security verification (Google reCAPTCHA). No advertising or marketing tracking cookies are used."
+        }
+      },
+      "backToLogin": "← Back to sign-in"
+    },
+    "forbidden": {
+      "title": "403 — Access denied",
+      "body": "You do not have permission to view this page."
+    },
+    "root": {
+      "redirecting": "Redirecting..."
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "coursePlayer": {
+    "noPackage": "No SCORM package has been uploaded for this course yet.",
+    "packageMissingTitle": "SCORM package not found",
+    "packageMissingBody": "This course's SCORM content is not currently in storage. It was most likely uploaded before we moved to persistent cloud storage (Vercel Blob) and was removed together with the ephemeral server file.",
+    "packageMissingAdmin": "An administrator must re-upload the SCORM package for this course from <b>/admin/courses</b>. Once re-uploaded, the content will be stored persistently.",
+    "assignmentVersion": "Assignment: v{rev}",
+    "currentVersion": "Current version: v{rev}",
+    "outdatedNotice": "A newer version (v{rev}) of this course has been published. The new version will be assigned automatically in the next cycle.",
+    "needsCompletion": "You must complete the training content in full before you can take the exam.",
+    "retakeRequired": "You have failed the exam twice. You need to complete the training content from the beginning and then retake the exam.",
+    "progressLabel": "Progress: {label}",
+    "progressPercent": "{pct}%",
+    "progressAria": "Progress {pct} percent",
+    "progressHint": "Progress is updated approximately every 30 seconds; refresh the page to see the latest value.",
+    "examHint": "Complete the training content first to unlock the exam.",
+    "startExam": "Start Exam →",
+    "completeFirstTitle": "Complete the training first"
+  }
+}

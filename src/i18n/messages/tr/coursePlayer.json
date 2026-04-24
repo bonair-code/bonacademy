@@ -1,0 +1,20 @@
+{
+  "coursePlayer": {
+    "noPackage": "Bu kurs için henüz SCORM paketi yüklenmemiş.",
+    "packageMissingTitle": "SCORM paketi bulunamadı",
+    "packageMissingBody": "Bu kursun SCORM içeriği şu anda depolama alanında değil. Büyük ihtimalle paket, kalıcı bulut depolamaya (Vercel Blob) geçmeden önce yüklendi ve geçici sunucu dosyasıyla birlikte silindi.",
+    "packageMissingAdmin": "Yönetici <b>/admin/courses</b> sayfasından bu kurs için SCORM paketini yeniden yüklemelidir. Tekrar yüklendiğinde içerik kalıcı olarak saklanacak.",
+    "assignmentVersion": "Atama: v{rev}",
+    "currentVersion": "Mevcut sürüm: v{rev}",
+    "outdatedNotice": "Bu kursun daha güncel bir sürümü (v{rev}) yayınlandı. Bir sonraki döngüde yeni sürüm otomatik atanacak.",
+    "needsCompletion": "Sınava geçebilmek için önce eğitim içeriğini sonuna kadar tamamlamanız gerekir.",
+    "retakeRequired": "Sınavda iki kez başarısız oldunuz. Eğitim içeriğini baştan tamamlamanız ve ardından sınava yeniden girmeniz gerekiyor.",
+    "progressLabel": "İlerleme: {label}",
+    "progressPercent": "%{pct}",
+    "progressAria": "İlerleme yüzde {pct}",
+    "progressHint": "İlerleme her ~30 saniyede bir güncellenir; sayfayı yenileyerek en son değeri görebilirsiniz.",
+    "examHint": "Sınavı açmak için önce eğitim içeriğini tamamlayın.",
+    "startExam": "Sınava Başla →",
+    "completeFirstTitle": "Önce eğitimi tamamlayın"
+  }
+}
