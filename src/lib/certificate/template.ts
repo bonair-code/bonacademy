@@ -13,6 +13,11 @@ export type CertificateTemplate = {
   bodyAchievement: string;
   bodyParticipation: string;
   footerLine: string;
+  // Görünürlük bayrakları — hangi opsiyonel bloğun sertifikada basılacağı.
+  showBirthDate: boolean;
+  showBirthPlace: boolean;
+  showOwnerManager: boolean;
+  showQr: boolean;
 };
 
 // Fabrika default — DB'de henüz satır yoksa veya snapshot'ta alan eksikse
@@ -28,6 +33,10 @@ export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplate = {
   bodyParticipation:
     "eğitimine katıldığını belgelemek üzere düzenlenmiştir.",
   footerLine: "Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy",
+  showBirthDate: true,
+  showBirthPlace: true,
+  showOwnerManager: true,
+  showQr: true,
 };
 
 /** Admin formdan gelen hex renk doğrulaması — PDF render'ını bozmasın. */
@@ -50,6 +59,10 @@ export async function loadCurrentCertificateTemplate(): Promise<CertificateTempl
     bodyAchievement: row.certBodyAchievement,
     bodyParticipation: row.certBodyParticipation,
     footerLine: row.certFooterLine,
+    showBirthDate: row.certShowBirthDate,
+    showBirthPlace: row.certShowBirthPlace,
+    showOwnerManager: row.certShowOwnerManager,
+    showQr: row.certShowQr,
   };
 }
 
@@ -94,6 +107,14 @@ export function loadTemplateFromSnapshot(
       typeof s.footerLine === "string"
         ? s.footerLine
         : DEFAULT_CERTIFICATE_TEMPLATE.footerLine,
+    // Boolean alanlar — snapshot'ta yoksa (eski sertifika) default true.
+    showBirthDate:
+      typeof s.showBirthDate === "boolean" ? s.showBirthDate : true,
+    showBirthPlace:
+      typeof s.showBirthPlace === "boolean" ? s.showBirthPlace : true,
+    showOwnerManager:
+      typeof s.showOwnerManager === "boolean" ? s.showOwnerManager : true,
+    showQr: typeof s.showQr === "boolean" ? s.showQr : true,
   };
 }
 

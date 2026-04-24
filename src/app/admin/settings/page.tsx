@@ -189,6 +189,12 @@ async function saveCertificateTemplate(formData: FormData) {
       DEFAULT_CERTIFICATE_TEMPLATE.footerLine,
       TEMPLATE_FIELD_LIMITS.footer
     ),
+    // Görünürlük bayrakları — checkbox form'da yoksa "on" gelmez, o yüzden
+    // undefined/non-"on" → false kabul ediyoruz.
+    certShowBirthDate: formData.get("certShowBirthDate") === "on",
+    certShowBirthPlace: formData.get("certShowBirthPlace") === "on",
+    certShowOwnerManager: formData.get("certShowOwnerManager") === "on",
+    certShowQr: formData.get("certShowQr") === "on",
     updatedById: admin.id,
   };
 
@@ -457,6 +463,51 @@ export default async function SettingsPage() {
               className="input w-full"
             />
           </label>
+
+          <fieldset className="md:col-span-2 border border-slate-200 rounded-lg p-3">
+            <legend className="text-xs font-semibold text-slate-600 px-1">
+              Gösterilecek Alanlar
+            </legend>
+            <p className="text-[11px] text-slate-500 mb-2">
+              İşaretli olan alanlar sertifikada görünür. Veri yoksa (örn. kullanıcının
+              doğum tarihi boşsa) satır zaten otomatik gizlenir — bu kutucuklar o alanı
+              hiçbir sertifikada <b>görünmez</b> yapmak içindir.
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="certShowBirthDate"
+                  defaultChecked={certTemplate.showBirthDate}
+                />
+                <span>Doğum tarihi</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="certShowBirthPlace"
+                  defaultChecked={certTemplate.showBirthPlace}
+                />
+                <span>Doğum yeri</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="certShowOwnerManager"
+                  defaultChecked={certTemplate.showOwnerManager}
+                />
+                <span>Sorumlu yönetici (imza bloğu)</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="certShowQr"
+                  defaultChecked={certTemplate.showQr}
+                />
+                <span>QR doğrulama kodu</span>
+              </label>
+            </div>
+          </fieldset>
 
           <div className="md:col-span-2 flex items-center gap-3">
             <button type="submit" className="btn-primary">

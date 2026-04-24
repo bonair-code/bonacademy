@@ -29,6 +29,9 @@ export async function POST(req: NextRequest) {
 async function renderPreview(template: Awaited<ReturnType<typeof loadCurrentCertificateTemplate>>) {
   return renderCertificatePdf({
     name: "Ali Veli",
+    // Önizlemede görünürlük bayraklarının etkisini görmek için dummy veri.
+    birthDate: new Date("1990-05-15"),
+    birthPlace: "İstanbul",
     courseTitle: "Örnek Eğitim Kursu",
     issuedAt: new Date(),
     serialNo: "BA-PREVIEW-000000",

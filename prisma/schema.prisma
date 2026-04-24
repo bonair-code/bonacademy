@@ -351,6 +351,11 @@ model OrganizationSettings {
   certBodyAchievement        String   @default("eğitimini başarıyla tamamladığını belgelemek üzere düzenlenmiştir.")
   certBodyParticipation      String   @default("eğitimine katıldığını belgelemek üzere düzenlenmiştir.")
   certFooterLine             String   @default("Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy")
+  // Görünürlük bayrakları — hangi opsiyonel alanların sertifikada gösterileceği.
+  certShowBirthDate          Boolean  @default(true)
+  certShowBirthPlace         Boolean  @default(true)
+  certShowOwnerManager       Boolean  @default(true)
+  certShowQr                 Boolean  @default(true)
   updatedAt                  DateTime @updatedAt
   updatedById                String?
 }

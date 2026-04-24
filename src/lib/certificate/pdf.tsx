@@ -197,7 +197,7 @@ export async function renderCertificatePdf(opts: {
   // Hata toleransı H → QR'ın ~%30'u hasar görse bile okunabilir (logo
   // bindirmeleri, yazıcı artefaktları için güvenli seçim).
   let qrDataUrl: string | null = null;
-  if (opts.verifyUrl) {
+  if (opts.verifyUrl && tpl.showQr) {
     try {
       qrDataUrl = await QRCode.toDataURL(opts.verifyUrl, {
         errorCorrectionLevel: "H",
@@ -220,8 +220,10 @@ export async function renderCertificatePdf(opts: {
     kind === "participation" ? tpl.bodyParticipation : tpl.bodyAchievement;
   // "Doğum Tarihi: ... · Doğum Yeri: ..." — ikisinden en az biri varsa göster.
   const birthParts: string[] = [];
-  if (opts.birthDate) birthParts.push(`Doğum Tarihi: ${fmtTrDate(opts.birthDate)}`);
-  if (opts.birthPlace) birthParts.push(`Doğum Yeri: ${opts.birthPlace}`);
+  if (tpl.showBirthDate && opts.birthDate)
+    birthParts.push(`Doğum Tarihi: ${fmtTrDate(opts.birthDate)}`);
+  if (tpl.showBirthPlace && opts.birthPlace)
+    birthParts.push(`Doğum Yeri: ${opts.birthPlace}`);
   const birthLine = birthParts.join("  ·  ");
   const doc = (
     <Document>
@@ -253,7 +255,7 @@ export async function renderCertificatePdf(opts: {
               </Text>
             </View>
           ) : null}
-          {opts.ownerManagerName ? (
+          {tpl.showOwnerManager && opts.ownerManagerName ? (
             <View style={styles.ownerRow}>
               <Text style={styles.ownerLabel}>Sorumlu</Text>
               <Text style={styles.ownerName}>{opts.ownerManagerName}</Text>
