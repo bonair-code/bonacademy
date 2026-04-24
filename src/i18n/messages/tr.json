@@ -72,7 +72,8 @@
     "success": {
       "invited": "Hesabınız hazır. E-posta ve yeni şifrenizle giriş yapın.",
       "reset": "Şifreniz güncellendi. Yeni şifrenizle giriş yapın."
-    }
+    },
+    "privacy": "KVKK Aydınlatma Metni"
   },
   "forgot": {
     "heading": "Şifremi Unuttum",

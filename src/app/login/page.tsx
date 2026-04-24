@@ -216,6 +216,11 @@ export default async function LoginPage({
           </form>
 
           <p className="text-[11px] text-slate-400 text-center mt-8">{tc("support")}</p>
+          <p className="text-[11px] text-center mt-2">
+            <a href="/kvkk" className="text-slate-500 hover:text-brand-700 underline">
+              {t("privacy")}
+            </a>
+          </p>
         </div>
       </div>
     </div>
