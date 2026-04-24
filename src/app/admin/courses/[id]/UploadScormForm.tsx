@@ -6,6 +6,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const MAX_BYTES = 30 * 1024 * 1024;
 
   async function upload(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -13,6 +14,10 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
     const file = (form.elements.namedItem("file") as HTMLInputElement).files?.[0];
     const changeNote = (form.elements.namedItem("changeNote") as HTMLInputElement).value;
     if (!file) return;
+    if (file.size > MAX_BYTES) {
+      setError("Dosya çok büyük (maks 30 MB)");
+      return;
+    }
     setBusy(true);
     setError(null);
     const fd = new FormData();
@@ -51,6 +56,7 @@ export function UploadScormForm({ courseId }: { courseId: string }) {
       />
       <p className="text-[11px] text-slate-500">
         Her yeni SCORM yüklemesi otomatik olarak yeni bir revizyon oluşturur.
+        Maksimum dosya boyutu: 30 MB.
       </p>
     </form>
   );

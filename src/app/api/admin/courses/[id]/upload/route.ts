@@ -12,7 +12,7 @@ import { audit } from "@/lib/audit";
 export const runtime = "nodejs";
 
 // SCORM paketleri büyük olabilir ama sunucuyu korumak için sert bir tavan belirliyoruz.
-const MAX_SCORM_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
+const MAX_SCORM_ZIP_BYTES = 30 * 1024 * 1024; // 30 MB
 const MAX_CHANGE_NOTE_LENGTH = 1000;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

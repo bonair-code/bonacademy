@@ -6,6 +6,7 @@ import { notFound } from "next/navigation";
 import { getFile } from "@/lib/scorm/storage";
 import { AttemptsHistoryDrawer } from "@/components/AttemptsHistoryDrawer";
 import { buildTrainingSteps } from "@/lib/trainingSteps";
+import { computeScormProgress } from "@/lib/scorm/progress";
 
 export default async function CoursePage({
   params,
@@ -105,6 +106,12 @@ export default async function CoursePage({
     : scormAttempts.find((x) => x.finishedAt == null);
   const initialCmi =
     (resumeAttempt?.cmiData as Record<string, unknown> | null) ?? undefined;
+
+  // İlerleme yüzdesi: en son SCORM denemesinin CMI verisinden hesapla.
+  // RETAKE'de yeni boş deneme oluşturduğumuz için 0'dan başlar.
+  const latestCmi =
+    (scormAttempts[0]?.cmiData as Record<string, unknown> | null) ?? null;
+  const progress = computeScormProgress(latestCmi, a.status);
   const examAttempts = a.examAttempts; // already desc
 
   const stampedRev = a.revisionNumber;
@@ -162,6 +169,25 @@ export default async function CoursePage({
           ve ardından sınava yeniden girmeniz gerekiyor.
         </div>
       )}
+      <div className="mb-3">
+        <div className="flex items-center justify-between text-xs text-slate-600 mb-1">
+          <span>İlerleme: {progress.label}</span>
+          <span className="font-medium">%{progress.percent}</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-slate-200 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all ${
+              progress.percent >= 100 ? "bg-emerald-500" : "bg-teal-500"
+            }`}
+            style={{ width: `${progress.percent}%` }}
+            aria-label={`İlerleme yüzde ${progress.percent}`}
+          />
+        </div>
+        <p className="text-[11px] text-slate-500 mt-1">
+          İlerleme her ~30 saniyede bir güncellenir; sayfayı yenileyerek en son
+          değeri görebilirsiniz.
+        </p>
+      </div>
       <ScormPlayer
         assignmentId={a.id}
         contentUrl={contentUrl}
