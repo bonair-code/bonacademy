@@ -87,6 +87,9 @@ model User {
   // Kişisel bilgiler (sertifikada görünür). Opsiyonel — eski kayıtlar null kalır.
   birthDate     DateTime?    @db.Date
   birthPlace    String?
+  // Tercih edilen arayüz/mail dili. LocaleSwitcher DB'yi günceller;
+  // mail gönderirken bu alan okunur. Varsayılan "en" — DEFAULT_LOCALE ile eşleşmeli.
+  locale        String       @default("en")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 

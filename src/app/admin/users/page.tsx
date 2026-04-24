@@ -104,7 +104,7 @@ async function upsertUser(formData: FormData) {
   if (sendInvite) {
     try {
       const token = await createPasswordToken(user.id, "INVITE");
-      await sendInviteEmail(user.email, user.name, token);
+      await sendInviteEmail(user.email, user.name, token, user.locale);
     } catch (err) {
       console.error("[invite] mail failed for", user.email, err);
     }
@@ -177,14 +177,14 @@ async function sendInvite(formData: FormData) {
   const userId = String(formData.get("userId"));
   const u = await prisma.user.findUniqueOrThrow({
     where: { id: userId },
-    select: { id: true, email: true, name: true, role: true, isActive: true },
+    select: { id: true, email: true, name: true, role: true, isActive: true, locale: true },
   });
   if (admin.role !== "ADMIN" && u.role !== "USER") {
     throw new Error("Yönetici yalnızca USER rolüne davet gönderebilir.");
   }
   if (!u.isActive) throw new Error("Pasif kullanıcıya davet gönderilemez.");
   const token = await createPasswordToken(u.id, "INVITE");
-  await sendInviteEmail(u.email, u.name, token);
+  await sendInviteEmail(u.email, u.name, token, u.locale);
   await audit({
     actorId: admin.id,
     action: "user.invite.send",

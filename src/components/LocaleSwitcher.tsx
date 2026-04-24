@@ -15,6 +15,8 @@ import {
 
 async function setLocaleAction(formData: FormData) {
   "use server";
+  const { auth } = await import("@/lib/auth");
+  const { prisma } = await import("@/lib/db");
   const raw = String(formData.get("locale") || "");
   const nextRaw = String(formData.get("next") || "/");
   const locale: Locale = isLocale(raw) ? raw : "en";
@@ -24,6 +26,16 @@ async function setLocaleAction(formData: FormData) {
     maxAge: LOCALE_COOKIE_MAX_AGE,
     sameSite: "lax",
   });
+  // Oturum açıksa kullanıcının tercihini DB'ye de yaz — mail'ler bu dile gidecek.
+  try {
+    const session = await auth();
+    const userId = (session?.user as { id?: string } | undefined)?.id;
+    if (userId) {
+      await prisma.user.update({ where: { id: userId }, data: { locale } });
+    }
+  } catch {
+    // Cookie zaten yazıldı, DB başarısız olsa bile UI çalışsın.
+  }
   // Açık yönlendirme koruması: yalnızca aynı site içi path.
   const safe = nextRaw.startsWith("/") && !nextRaw.startsWith("//") ? nextRaw : "/";
   redirect(safe);

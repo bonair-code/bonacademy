@@ -4,6 +4,32 @@
     "description": "Şirket içi eğitim planlama, gerçekleştirme ve takip sistemi.",
     "brand": "BonAcademy"
   },
+  "shell": {
+    "brandTitle": "BonAcademy",
+    "brandSubtitle": "Eğitim Yönetim Sistemi",
+    "trainingStepsDefault": "Eğitim Adımları",
+    "sectionMain": "Ana Modüller",
+    "sectionOrg": "Kurulum",
+    "nav": {
+      "dashboard": "Gösterge Paneli",
+      "certificates": "Sertifikalarım",
+      "history": "Eğitim Geçmişim",
+      "team": "Ekibim",
+      "teamAdmin": "Çalışan Eğitimleri",
+      "plans": "Eğitim Planları",
+      "courses": "Kurslar",
+      "users": "Kullanıcılar",
+      "reports": "Raporlar",
+      "audit": "Denetim Kayıtları",
+      "settings": "Ayarlar"
+    },
+    "logout": "Çıkış",
+    "logoutTitle": "Çıkış",
+    "roleAdmin": "Admin",
+    "roleManager": "Yönetici",
+    "roleUser": "Kullanıcı",
+    "userFallback": "Kullanıcı"
+  },
   "common": {
     "support": "Sorun yaşıyorsanız BT destek ile iletişime geçin.",
     "copyright": "Bon Air Havacılık"

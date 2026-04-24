@@ -52,20 +52,33 @@ export function appUrl(path = "/"): string {
   return base.replace(/\/$/, "") + path;
 }
 
-export async function sendInviteEmail(to: string, name: string, token: string) {
-  const url = appUrl(`/invite/${token}`);
-  await sendMail({
-    to,
-    subject: "BonAcademy hesabınız oluşturuldu",
-    html: `<p>Merhaba ${name},</p><p>BonAcademy hesabınız oluşturuldu. Şifrenizi belirlemek için aşağıdaki bağlantıyı kullanın (72 saat geçerli):</p><p><a href="${url}">${url}</a></p>`,
-  });
+type Locale = "en" | "tr";
+function normLocale(l?: string | null): Locale {
+  return l === "tr" ? "tr" : "en";
 }
 
-export async function sendResetEmail(to: string, name: string, token: string) {
+export async function sendInviteEmail(to: string, name: string, token: string, locale?: string) {
+  const url = appUrl(`/invite/${token}`);
+  const L = normLocale(locale);
+  const safeName = escapeHtml(name);
+  const subject =
+    L === "tr" ? "BonAcademy hesabınız oluşturuldu" : "Your BonAcademy account has been created";
+  const html =
+    L === "tr"
+      ? `<p>Merhaba ${safeName},</p><p>BonAcademy hesabınız oluşturuldu. Şifrenizi belirlemek için aşağıdaki bağlantıyı kullanın (72 saat geçerli):</p><p><a href="${url}">${url}</a></p>`
+      : `<p>Hi ${safeName},</p><p>Your BonAcademy account has been created. Please use the link below to set your password (valid for 72 hours):</p><p><a href="${url}">${url}</a></p>`;
+  await sendMail({ to, subject, html });
+}
+
+export async function sendResetEmail(to: string, name: string, token: string, locale?: string) {
   const url = appUrl(`/reset/${token}`);
-  await sendMail({
-    to,
-    subject: "BonAcademy şifre sıfırlama",
-    html: `<p>Merhaba ${name},</p><p>Şifrenizi sıfırlamak için aşağıdaki bağlantıyı kullanın (2 saat geçerli):</p><p><a href="${url}">${url}</a></p><p>Bu talebi siz yapmadıysanız e-postayı yok sayabilirsiniz.</p>`,
-  });
+  const L = normLocale(locale);
+  const safeName = escapeHtml(name);
+  const subject =
+    L === "tr" ? "BonAcademy şifre sıfırlama" : "BonAcademy password reset";
+  const html =
+    L === "tr"
+      ? `<p>Merhaba ${safeName},</p><p>Şifrenizi sıfırlamak için aşağıdaki bağlantıyı kullanın (2 saat geçerli):</p><p><a href="${url}">${url}</a></p><p>Bu talebi siz yapmadıysanız e-postayı yok sayabilirsiniz.</p>`
+      : `<p>Hi ${safeName},</p><p>Please use the link below to reset your password (valid for 2 hours):</p><p><a href="${url}">${url}</a></p><p>If you did not request this, you can safely ignore this email.</p>`;
+  await sendMail({ to, subject, html });
 }

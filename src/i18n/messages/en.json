@@ -4,6 +4,32 @@
     "description": "In-house training planning, execution and tracking system.",
     "brand": "BonAcademy"
   },
+  "shell": {
+    "brandTitle": "BonAcademy",
+    "brandSubtitle": "Training Management System",
+    "trainingStepsDefault": "Training Steps",
+    "sectionMain": "Main Modules",
+    "sectionOrg": "Administration",
+    "nav": {
+      "dashboard": "Dashboard",
+      "certificates": "My Certificates",
+      "history": "My Training History",
+      "team": "My Team",
+      "teamAdmin": "Employee Trainings",
+      "plans": "Training Plans",
+      "courses": "Courses",
+      "users": "Users",
+      "reports": "Reports",
+      "audit": "Audit Logs",
+      "settings": "Settings"
+    },
+    "logout": "Sign Out",
+    "logoutTitle": "Sign out",
+    "roleAdmin": "Admin",
+    "roleManager": "Manager",
+    "roleUser": "User",
+    "userFallback": "User"
+  },
   "common": {
     "support": "If you are experiencing issues, please contact IT support.",
     "copyright": "Bon Air Havacılık"

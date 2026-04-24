@@ -7,6 +7,8 @@ import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { PasswordField } from "@/components/PasswordField";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
+import { getTranslations } from "next-intl/server";
 
 export const runtime = "nodejs";
 
@@ -40,19 +42,6 @@ async function resetPassword(formData: FormData) {
   redirect("/login?reset=1");
 }
 
-function errMsg(c?: string) {
-  switch (c) {
-    case "invalid":
-      return "Bağlantı geçersiz veya süresi dolmuş. Yeni bir sıfırlama isteyin.";
-    case "mismatch":
-      return "Şifreler eşleşmiyor.";
-    case "weak":
-      return "Şifre en az 8 karakter olmalı ve harf + rakam içermeli.";
-    default:
-      return null;
-  }
-}
-
 export default async function ResetPage({
   params,
   searchParams,
@@ -63,29 +52,34 @@ export default async function ResetPage({
   const { token } = await params;
   const { error } = await searchParams;
   const row = await verifyPasswordToken(token, "RESET");
-  const err = errMsg(error);
+  const t = await getTranslations("reset");
+  let err: string | null = null;
+  if (error === "invalid") err = t("error.invalid");
+  else if (error === "mismatch") err = t("error.mismatch");
+  else if (error === "weak") err = t("error.weak");
   if (!row && !err) notFound();
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 relative">
+      <div className="absolute top-4 right-4">
+        <LocaleSwitcher nextPath={`/reset/${token}`} />
+      </div>
       <div className="card p-6 max-w-md w-full">
         <div className="h-1 w-10 bg-brand-600 rounded-full mb-3" />
-        <h1 className="text-xl font-semibold text-slate-900 mb-1">
-          Şifre Sıfırlama
-        </h1>
+        <h1 className="text-xl font-semibold text-slate-900 mb-1">{t("heading")}</h1>
         {row ? (
           <>
             <p className="text-sm text-slate-600 mb-4">
-              Merhaba <strong>{row.user.name}</strong>, yeni şifrenizi belirleyin.
+              {t("intro", { name: row.user.name })}
             </p>
             <form action={resetPassword} className="space-y-3">
               <input type="hidden" name="token" value={token} />
               <div>
-                <label className="label">Yeni şifre</label>
+                <label className="label">{t("newPassword")}</label>
                 <PasswordField name="password" required autoComplete="new-password" />
               </div>
               <div>
-                <label className="label">Şifre (tekrar)</label>
+                <label className="label">{t("confirmPassword")}</label>
                 <PasswordField name="confirm" required autoComplete="new-password" />
               </div>
               {err && (
@@ -93,10 +87,8 @@ export default async function ResetPage({
                   {err}
                 </p>
               )}
-              <button className="btn-primary w-full">Şifreyi Güncelle</button>
-              <p className="text-[11px] text-slate-500 text-center">
-                En az 8 karakter, harf ve rakam içermeli.
-              </p>
+              <button className="btn-primary w-full">{t("submit")}</button>
+              <p className="text-[11px] text-slate-500 text-center">{t("hint")}</p>
             </form>
           </>
         ) : (

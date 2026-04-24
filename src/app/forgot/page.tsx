@@ -4,8 +4,10 @@ import { createPasswordToken } from "@/lib/passwordTokens";
 import { sendResetEmail } from "@/lib/notifications/mailer";
 import { verifyRecaptchaToken } from "@/lib/captcha";
 import { RecaptchaV3 } from "@/components/RecaptchaV3";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 import { headers } from "next/headers";
+import { getTranslations } from "next-intl/server";
 
 export const runtime = "nodejs";
 
@@ -29,40 +31,17 @@ async function requestReset(formData: FormData) {
   // E-posta varsa token üret + mail. Yoksa sessizce devam — yanıt aynı.
   const user = await prisma.user.findUnique({
     where: { email },
-    select: { id: true, name: true, isActive: true },
+    select: { id: true, name: true, isActive: true, locale: true },
   });
   if (user && user.isActive) {
     try {
       const token = await createPasswordToken(user.id, "RESET");
-      await sendResetEmail(email, user.name, token);
+      await sendResetEmail(email, user.name, token, user.locale);
     } catch (err) {
       console.error("[forgot] mail failed for", email, err);
     }
   }
   redirect("/forgot?sent=1");
-}
-
-function msg(error?: string, sent?: string) {
-  if (sent === "1")
-    return {
-      type: "ok" as const,
-      text:
-        "Eğer bu e-posta sistemimizde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi. " +
-        "Bağlantı 2 saat geçerlidir. Mailinizi kontrol edin (spam dahil).",
-    };
-  switch (error) {
-    case "captcha":
-      return { type: "err" as const, text: "Güvenlik doğrulaması başarısız." };
-    case "empty":
-      return { type: "err" as const, text: "E-posta adresinizi girin." };
-    case "rate":
-      return {
-        type: "err" as const,
-        text: "Çok fazla istek. 15 dakika sonra tekrar deneyin.",
-      };
-    default:
-      return null;
-  }
 }
 
 export default async function ForgotPage({
@@ -71,54 +50,57 @@ export default async function ForgotPage({
   searchParams: Promise<{ error?: string; sent?: string }>;
 }) {
   const { error, sent } = await searchParams;
-  const m = msg(error, sent);
+  const t = await getTranslations("forgot");
+
+  let msg: { type: "ok" | "err"; text: string } | null = null;
+  if (sent === "1") msg = { type: "ok", text: t("sent") };
+  else if (error === "captcha") msg = { type: "err", text: t("error.captcha") };
+  else if (error === "empty") msg = { type: "err", text: t("error.empty") };
+  else if (error === "rate") msg = { type: "err", text: t("error.rate") };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6 relative">
+      <div className="absolute top-4 right-4">
+        <LocaleSwitcher nextPath="/forgot" />
+      </div>
       <div className="card p-6 max-w-md w-full">
         <div className="h-1 w-10 bg-brand-600 rounded-full mb-3" />
-        <h1 className="text-xl font-semibold text-slate-900 mb-1">
-          Şifremi Unuttum
-        </h1>
-        <p className="text-sm text-slate-600 mb-4">
-          Hesabınıza ait e-postayı girin. Size 2 saat geçerli bir sıfırlama
-          bağlantısı göndereceğiz. Hesabınız kilitliyse de aynı bağlantıyla
-          açılır.
-        </p>
+        <h1 className="text-xl font-semibold text-slate-900 mb-1">{t("heading")}</h1>
+        <p className="text-sm text-slate-600 mb-4">{t("intro")}</p>
 
-        {m && (
+        {msg && (
           <p
             className={`text-xs rounded-lg px-3 py-2 mb-3 ${
-              m.type === "ok"
+              msg.type === "ok"
                 ? "text-emerald-800 bg-emerald-50 border border-emerald-200"
                 : "text-brand-700 bg-brand-50 border border-brand-200"
             }`}
           >
-            {m.text}
+            {msg.text}
           </p>
         )}
 
         {sent !== "1" && (
           <form action={requestReset} className="space-y-3">
             <div>
-              <label className="label">E-posta</label>
+              <label className="label">{t("email")}</label>
               <input
                 name="email"
                 type="email"
                 required
                 autoComplete="email"
                 className="input mt-1"
-                placeholder="ad.soyad@bonair.com.tr"
+                placeholder={t("emailPlaceholder")}
               />
             </div>
             <RecaptchaV3 action="forgot" />
-            <button className="btn-primary w-full">Sıfırlama Bağlantısı Gönder</button>
+            <button className="btn-primary w-full">{t("submit")}</button>
           </form>
         )}
 
         <p className="text-[11px] text-slate-400 text-center mt-6">
           <a href="/login" className="underline hover:text-slate-600">
-            Giriş sayfasına dön
+            {t("backToLogin")}
           </a>
         </p>
       </div>

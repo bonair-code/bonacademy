@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { signOut } from "@/lib/auth";
 import type { Role } from "@prisma/client";
+import { getTranslations } from "next-intl/server";
+import { LocaleSwitcher } from "@/components/LocaleSwitcher";
 
 type IconTone = "teal" | "violet" | "amber" | "red" | "green" | "sky" | "slate";
 
@@ -77,7 +79,7 @@ export type TrainingStep = {
   href?: string;
 };
 
-export function Shell({
+export async function Shell({
   user,
   children,
   title,
@@ -89,70 +91,60 @@ export function Shell({
   children: React.ReactNode;
   title?: string;
   subtitle?: string;
-  // Eğitim/sınav sayfalarında soldaki nav'ın üstünde, o atamaya özel
-  // ilerleme adımlarını gösterir. Verilmezse eski görünüm aynen kalır.
   trainingSteps?: TrainingStep[];
   trainingTitle?: string;
 }) {
+  const t = await getTranslations("shell");
   const main: NavItem[] = [
-    { href: "/dashboard", label: "Gösterge Paneli", icon: "dashboard", iconTone: "teal" },
-    { href: "/certificates", label: "Sertifikalarım", icon: "cert", iconTone: "green" },
-    { href: "/my-trainings/history", label: "Eğitim Geçmişim", icon: "checklist", iconTone: "teal" },
+    { href: "/dashboard", label: t("nav.dashboard"), icon: "dashboard", iconTone: "teal" },
+    { href: "/certificates", label: t("nav.certificates"), icon: "cert", iconTone: "green" },
+    { href: "/my-trainings/history", label: t("nav.history"), icon: "checklist", iconTone: "teal" },
   ];
   if (user.role === "MANAGER" || user.role === "ADMIN") {
     main.push({
       href: "/manager/team",
-      // Admin için "Ekibim" yanıltıcı — tüm şirketi görüyor. Yönetici kendi
-      // raporlayanlarını gördüğü için "Ekibim" uygun.
-      label: user.role === "ADMIN" ? "Çalışan Eğitimleri" : "Ekibim",
+      label: user.role === "ADMIN" ? t("nav.teamAdmin") : t("nav.team"),
       icon: "users",
       iconTone: "green",
     });
   }
-  // MANAGER için salt okunur Kurslar sekmesi — /courses Excel dışa aktarımını
-  // da sağlar. ADMIN'in "Kurslar" sekmesi /admin/courses'a gittiği için burada
-  // tekrar eklemiyoruz.
   if (user.role === "MANAGER") {
-    // Yönetici artık kurs oluşturabiliyor → admin kurs sayfasına yönlendir.
-    // Salt okunur /courses hâlâ dışa aktarım için kullanılabilir ama ana
-    // menüde kurs oluşturma/düzenleme yolunu ön plana çıkarıyoruz.
     main.push(
-      { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar", iconTone: "violet" },
-      { href: "/admin/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
+      { href: "/admin/plans", label: t("nav.plans"), icon: "calendar", iconTone: "violet" },
+      { href: "/admin/courses", label: t("nav.courses"), icon: "book", iconTone: "amber" }
     );
   }
   if (user.role === "ADMIN") {
     main.push(
-      { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar", iconTone: "violet" },
-      { href: "/admin/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
+      { href: "/admin/plans", label: t("nav.plans"), icon: "calendar", iconTone: "violet" },
+      { href: "/admin/courses", label: t("nav.courses"), icon: "book", iconTone: "amber" }
     );
   }
 
   const org: NavItem[] = [];
   if (user.role === "MANAGER") {
-    // Yönetici yalnızca USER rolündeki kullanıcıları görür ve yönetir.
     org.push({
       href: "/admin/users",
-      label: "Kullanıcılar",
+      label: t("nav.users"),
       icon: "users",
       iconTone: "sky",
     });
   }
   if (user.role === "ADMIN") {
     org.push(
-      { href: "/admin/users", label: "Kullanıcılar", icon: "users", iconTone: "sky" },
-      { href: "/admin/reports", label: "Raporlar", icon: "report", iconTone: "red" },
-      { href: "/admin/audit", label: "Denetim Kayıtları", icon: "report", iconTone: "slate" },
-      { href: "/admin/settings", label: "Ayarlar", icon: "cog", iconTone: "slate" }
+      { href: "/admin/users", label: t("nav.users"), icon: "users", iconTone: "sky" },
+      { href: "/admin/reports", label: t("nav.reports"), icon: "report", iconTone: "red" },
+      { href: "/admin/audit", label: t("nav.audit"), icon: "report", iconTone: "slate" },
+      { href: "/admin/settings", label: t("nav.settings"), icon: "cog", iconTone: "slate" }
     );
   }
 
   const roleLabel =
     user.role === "ADMIN"
-      ? "Admin"
+      ? t("roleAdmin")
       : user.role === "MANAGER"
-      ? "Yönetici"
-      : "Kullanıcı";
+      ? t("roleManager")
+      : t("roleUser");
 
   const initials = (user.name || "")
     .split(" ")
@@ -187,9 +179,9 @@ export function Shell({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/Logo.png" alt="Bon Air" className="h-9 w-auto mb-2" />
             <p className="text-[10px] text-slate-400 tracking-[0.14em] uppercase text-center leading-tight">
-              BonAcademy
+              {t("brandTitle")}
               <br />
-              Eğitim Yönetim Sistemi
+              {t("brandSubtitle")}
             </p>
           </div>
         </div>
@@ -198,7 +190,7 @@ export function Shell({
           {trainingSteps && trainingSteps.length > 0 && (
             <div className="mb-3">
               <div className="nav-section">
-                {trainingTitle ?? "Eğitim Adımları"}
+                {trainingTitle ?? t("trainingStepsDefault")}
               </div>
               <ol className="space-y-1 px-1">
                 {trainingSteps.map((s, i) => {
@@ -298,11 +290,11 @@ export function Shell({
               </ol>
             </div>
           )}
-          <div className="nav-section">Ana Modüller</div>
+          <div className="nav-section">{t("sectionMain")}</div>
           <div className="space-y-1">{main.map(renderItem)}</div>
           {org.length > 0 && (
             <>
-              <div className="nav-section">Kurulum</div>
+              <div className="nav-section">{t("sectionOrg")}</div>
               <div className="space-y-1">{org.map(renderItem)}</div>
             </>
           )}
@@ -317,7 +309,7 @@ export function Shell({
           >
             <button className="w-full flex items-center justify-center gap-2 border border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg px-3 py-2.5 text-sm font-medium transition">
               <Icon d={ICONS.logout} className="h-4 w-4" />
-              Çıkış
+              {t("logout")}
             </button>
           </form>
         </div>
@@ -337,13 +329,14 @@ export function Shell({
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            <LocaleSwitcher />
             <div className="flex items-center gap-3 bg-white border border-slate-200 rounded-full pl-1.5 pr-4 py-1.5">
               <div className="h-8 w-8 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-xs font-semibold">
                 {initials || "?"}
               </div>
               <div className="leading-tight">
                 <div className="text-sm font-semibold text-slate-900">
-                  {user.name || "Kullanıcı"}
+                  {user.name || t("userFallback")}
                 </div>
                 <div className="text-[11px] text-slate-500">{roleLabel}</div>
               </div>
@@ -356,7 +349,7 @@ export function Shell({
             >
               <button
                 className="h-10 w-10 rounded-full border border-slate-200 bg-white hover:bg-slate-50 text-slate-500 hover:text-slate-800 flex items-center justify-center transition"
-                title="Çıkış"
+                title={t("logoutTitle")}
               >
                 <Icon d={ICONS.logout} className="h-4 w-4" />
               </button>
