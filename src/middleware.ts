@@ -1,6 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/api/auth", "/403", "/logo.png", "/favicon.ico", "/verify"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/forgot",
+  "/invite",
+  "/reset",
+  "/api/auth",
+  "/403",
+  "/logo.png",
+  "/favicon.ico",
+  "/verify",
+];
 
 // Edge-safe: only check for the session cookie's presence. Full session
 // validation (incl. Prisma role/dept lookup) happens in requireUser/requireRole

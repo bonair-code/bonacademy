@@ -5,7 +5,7 @@ import {
   sendOverdueMails,
   cleanupOldNotifications,
 } from "@/lib/notifications/dispatcher";
-import { markOverdue } from "@/lib/scheduler/assignments";
+import { markOverdue, rollForwardRecurringAssignments } from "@/lib/scheduler/assignments";
 import { cleanupOldAuditLogs } from "@/lib/audit-retention";
 
 export const runtime = "nodejs";
@@ -36,6 +36,10 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ error: "Yetkisiz" }, { status: 401 });
   }
   const started = Date.now();
+  // Sıra önemli: önce tekrar eden eğitimlerin sonraki döngülerini üret
+  // (yeni atama → mail kuyruğuna düşer), sonra süresi geçenleri işaretle,
+  // ardından bekleyen mailleri gönder, en sonda eski kayıtları temizle.
+  const recurrenceResult = await rollForwardRecurringAssignments();
   const overdueResult = await markOverdue();
   await sendNewAssignmentMails();
   await sendDueReminders();
@@ -46,6 +50,7 @@ async function handle(req: NextRequest) {
   return NextResponse.json({
     ok: true,
     ms: Date.now() - started,
+    recurrence: recurrenceResult.created,
     ...overdueResult,
     ...cleanup,
     ...auditCleanup,

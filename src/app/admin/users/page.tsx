@@ -6,6 +6,8 @@ import type { Role } from "@prisma/client";
 import { enrollUserIntoJobTitlePlans } from "@/lib/scheduler/assignments";
 import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { audit } from "@/lib/audit";
+import { createPasswordToken } from "@/lib/passwordTokens";
+import { sendInviteEmail } from "@/lib/notifications/mailer";
 
 async function upsertUser(formData: FormData) {
   "use server";
@@ -54,6 +56,8 @@ async function upsertUser(formData: FormData) {
     if (err) throw new Error(err);
     passwordHash = await hashPassword(password);
   }
+  // Yeni kullanıcı + şifre yoksa: davet maili göndereceğiz (akış aşağıda).
+  const sendInvite = !id && !password;
 
   // Mevcut durumu audit meta için yakala (rol/manager değişimlerini izleyebilmek üzere).
   const before = id
@@ -92,6 +96,18 @@ async function upsertUser(formData: FormData) {
 
   if (autoEnroll) {
     await enrollUserIntoJobTitlePlans(user.id);
+  }
+
+  // Şifre belirlenmediyse davet maili at — kullanıcı kendi şifresini kursun.
+  // Mail başarısız olsa bile kullanıcı oluşturuldu; admin sonradan tekrar
+  // davet butonu üzerinden tetikleyebilir.
+  if (sendInvite) {
+    try {
+      const token = await createPasswordToken(user.id, "INVITE");
+      await sendInviteEmail(user.email, user.name, token);
+    } catch (err) {
+      console.error("[invite] mail failed for", user.email, err);
+    }
   }
 
   // Rol ve yönetici değişiklikleri hassas: ayrı audit action'larıyla izlenir.
@@ -155,6 +171,30 @@ async function setPassword(formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+async function sendInvite(formData: FormData) {
+  "use server";
+  const admin = await requireRole("ADMIN", "MANAGER");
+  const userId = String(formData.get("userId"));
+  const u = await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { id: true, email: true, name: true, role: true, isActive: true },
+  });
+  if (admin.role !== "ADMIN" && u.role !== "USER") {
+    throw new Error("Yönetici yalnızca USER rolüne davet gönderebilir.");
+  }
+  if (!u.isActive) throw new Error("Pasif kullanıcıya davet gönderilemez.");
+  const token = await createPasswordToken(u.id, "INVITE");
+  await sendInviteEmail(u.email, u.name, token);
+  await audit({
+    actorId: admin.id,
+    action: "user.invite.send",
+    entity: "User",
+    entityId: u.id,
+    metadata: { email: u.email },
+  });
+  revalidatePath("/admin/users");
+}
+
 async function unlockUser(formData: FormData) {
   "use server";
   await requireRole("ADMIN", "MANAGER");
@@ -211,8 +251,10 @@ export default async function AdminUsers() {
       <section className="card p-5 mb-6">
         <h2 className="font-semibold mb-3">Yeni / Güncelle Kullanıcı</h2>
         <p className="text-xs text-slate-500 mb-3">
-          Yeni kullanıcıda şifre zorunludur. Mevcut kullanıcıyı güncellerken şifre alanını boş
-          bırakırsanız mevcut şifre korunur. Şifre en az 8 karakter olmalı ve harf + rakam içermelidir.
+          <strong>Şifre alanını boş bırakın</strong> — kullanıcıya 72 saat geçerli bir davet
+          maili gider, kendisi şifre kurar (önerilen). Şifre yazarsanız doğrudan o şifreyle
+          oluşturulur (en az 8 karakter, harf + rakam). Mevcut kullanıcıda boş bırakırsanız
+          şifre korunur.
         </p>
         <form action={upsertUser} className="grid grid-cols-2 gap-3 items-end text-sm">
           <input name="email" type="email" placeholder="E-posta" required maxLength={255} className="input" />
@@ -247,7 +289,7 @@ export default async function AdminUsers() {
           <input
             name="password"
             type="password"
-            placeholder="Başlangıç şifresi"
+            placeholder="Başlangıç şifresi (boş = davet maili gönder)"
             className="input"
             autoComplete="new-password"
           />
@@ -339,6 +381,21 @@ export default async function AdminUsers() {
                   <form action={unlockUser}>
                     <input type="hidden" name="userId" value={u.id} />
                     <button className="btn-secondary text-xs py-1.5">Kilidi Kaldır</button>
+                  </form>
+                )}
+                {u.isActive && (
+                  <form action={sendInvite}>
+                    <input type="hidden" name="userId" value={u.id} />
+                    <button
+                      className="btn-secondary text-xs py-1.5"
+                      title={
+                        u.passwordHash
+                          ? "Yeniden davet maili gönder (eski şifre korunur, yeni link 72 saat geçerli)"
+                          : "Davet maili gönder"
+                      }
+                    >
+                      {u.passwordHash ? "Daveti Yenile" : "Davet Gönder"}
+                    </button>
                   </form>
                 )}
               </div>

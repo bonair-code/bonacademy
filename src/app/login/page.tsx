@@ -77,16 +77,27 @@ function errorText(code?: string, left?: string): string | null {
   }
 }
 
+function successText(invited?: string, reset?: string): string | null {
+  if (invited === "1")
+    return "Hesabınız hazır. E-posta ve yeni şifrenizle giriş yapın.";
+  if (reset === "1")
+    return "Şifreniz güncellendi. Yeni şifrenizle giriş yapın.";
+  return null;
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
   searchParams: Promise<{
     error?: string;
     left?: string;
+    invited?: string;
+    reset?: string;
   }>;
 }) {
-  const { error, left } = await searchParams;
+  const { error, left, invited, reset } = await searchParams;
   const msg = errorText(error, left);
+  const ok = successText(invited, reset);
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
@@ -198,15 +209,29 @@ export default async function LoginPage({
 
             <RecaptchaV3 action="login" />
 
-            <label className="flex items-center gap-2 text-xs text-slate-600">
-              <input
-                name="remember"
-                type="checkbox"
-                defaultChecked
-                className="accent-brand-600"
-              />
-              Beni hatırla
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 text-xs text-slate-600">
+                <input
+                  name="remember"
+                  type="checkbox"
+                  defaultChecked
+                  className="accent-brand-600"
+                />
+                Beni hatırla
+              </label>
+              <a
+                href="/forgot"
+                className="text-xs text-brand-700 hover:text-brand-800 underline"
+              >
+                Şifremi unuttum?
+              </a>
+            </div>
+
+            {ok && (
+              <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                {ok}
+              </p>
+            )}
 
             {msg && (
               <p className="text-xs text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">

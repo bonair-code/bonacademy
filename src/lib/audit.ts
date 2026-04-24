@@ -24,7 +24,10 @@ export type AuditAction =
   | "revision.create"
   | "certificate.template.update"
   | "assignment.voluntary-retake"
-  | "assignment.manager-retake";
+  | "assignment.manager-retake"
+  | "user.invite.send"
+  | "user.invite.complete"
+  | "user.password.reset";
 
 // Audit yazımı silent fail — kritik işin sonrasında çağrılır, hata çalışmayı
 // durdurmamalı. Yine de console'a düşer ki izlensin.

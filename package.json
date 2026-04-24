@@ -13,7 +13,6 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "jobs:worker": "tsx src/jobs/worker.ts",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
@@ -31,7 +30,6 @@
     "next": "^15.1.6",
     "next-auth": "5.0.0-beta.25",
     "nodemailer": "^6.9.16",
-    "pg-boss": "^10.1.6",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
