@@ -27,6 +27,11 @@ async function upsertUser(formData: FormData) {
     : null;
   const birthPlaceRaw = String(formData.get("birthPlace") || "").trim();
   const birthPlace = birthPlaceRaw ? birthPlaceRaw.slice(0, 120) : null;
+  // Görev tanımına göre otomatik plan ataması yapılsın mı? Checkbox işaretliyse
+  // "on" gelir; aksi halde alan form'a hiç eklenmez. Admin işaretini kaldırırsa
+  // bu kayıtta enroll çalışmaz → admin sonradan /admin/plans üzerinden manuel
+  // atama yapabilir.
+  const autoEnroll = String(formData.get("autoEnroll") || "") === "on";
 
   let passwordHash: string | undefined;
   if (password) {
@@ -70,7 +75,9 @@ async function upsertUser(formData: FormData) {
     });
   }
 
-  await enrollUserIntoJobTitlePlans(user.id);
+  if (autoEnroll) {
+    await enrollUserIntoJobTitlePlans(user.id);
+  }
 
   // Rol ve yönetici değişiklikleri hassas: ayrı audit action'larıyla izlenir.
   if (id && before) {
@@ -112,7 +119,7 @@ async function upsertUser(formData: FormData) {
       action: "user.create",
       entity: "User",
       entityId: user.id,
-      metadata: { email, role, departmentId, managerId, jobTitleIds },
+      metadata: { email, role, departmentId, managerId, jobTitleIds, autoEnroll },
     });
   }
   revalidatePath("/admin/users");
@@ -245,6 +252,27 @@ export default async function AdminUsers() {
                 </option>
               ))}
             </select>
+          </label>
+          <label className="col-span-2 flex items-start gap-2 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-lg p-3">
+            <input
+              type="checkbox"
+              name="autoEnroll"
+              defaultChecked
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">
+                Görev tanımına göre otomatik eğitim ataması yap
+              </span>
+              <br />
+              <span className="text-slate-500">
+                İşaretliyse, kullanıcının seçtiğiniz görev tanımları için aktif
+                olan tüm eğitim planları anında atanır. İşareti kaldırırsanız
+                atama yapılmaz — eğitimleri sonradan{" "}
+                <span className="font-medium">Eğitim Planları</span>{" "}
+                sayfasından manuel olarak ekleyebilirsiniz.
+              </span>
+            </span>
           </label>
           <button className="btn-primary col-span-2 w-max">Kaydet</button>
         </form>
@@ -381,6 +409,13 @@ export default async function AdminUsers() {
                         </option>
                       ))}
                     </select>
+                  </label>
+                  <label className="col-span-2 flex items-center gap-2 text-xs text-slate-600">
+                    <input type="checkbox" name="autoEnroll" />
+                    Görev tanımı değişikliğine göre eksik eğitimleri otomatik ata
+                    <span className="text-slate-400">
+                      (işaretlenmezse atama yapılmaz — zaten var olanlar korunur)
+                    </span>
                   </label>
                   <button className="btn-primary col-span-2 w-max text-xs py-1.5">
                     Bilgileri Kaydet
