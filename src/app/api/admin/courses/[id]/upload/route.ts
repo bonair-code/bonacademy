@@ -16,7 +16,7 @@ const MAX_SCORM_ZIP_BYTES = 200 * 1024 * 1024; // 200 MB
 const MAX_CHANGE_NOTE_LENGTH = 1000;
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const { id } = await params;
   const form = await req.formData();
   const file = form.get("file");

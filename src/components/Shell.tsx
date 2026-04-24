@@ -96,9 +96,12 @@ export function Shell({
   // da sağlar. ADMIN'in "Kurslar" sekmesi /admin/courses'a gittiği için burada
   // tekrar eklemiyoruz.
   if (user.role === "MANAGER") {
+    // Yönetici artık kurs oluşturabiliyor → admin kurs sayfasına yönlendir.
+    // Salt okunur /courses hâlâ dışa aktarım için kullanılabilir ama ana
+    // menüde kurs oluşturma/düzenleme yolunu ön plana çıkarıyoruz.
     main.push(
       { href: "/admin/plans", label: "Eğitim Planları", icon: "calendar", iconTone: "violet" },
-      { href: "/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
+      { href: "/admin/courses", label: "Kurslar", icon: "book", iconTone: "amber" }
     );
   }
   if (user.role === "ADMIN") {

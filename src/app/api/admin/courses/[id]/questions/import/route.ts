@@ -30,7 +30,7 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const { id: courseId } = await params;
   const form = await req.formData();
   const file = form.get("file");

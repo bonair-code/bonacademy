@@ -10,7 +10,7 @@ import { audit } from "@/lib/audit";
 
 async function createCourse(formData: FormData) {
   "use server";
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const title = String(formData.get("title") || "").trim();
   const ownerManagerId = String(formData.get("ownerManagerId") || "").trim();
   if (!title) return;
@@ -53,7 +53,7 @@ async function createCourse(formData: FormData) {
 
 async function deleteCourse(formData: FormData) {
   "use server";
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const id = String(formData.get("id"));
   const course = await prisma.course.findUnique({
     where: { id },
@@ -92,7 +92,7 @@ async function deleteCourse(formData: FormData) {
 }
 
 export default async function AdminCourses() {
-  const user = await requireRole("ADMIN");
+  const user = await requireRole("ADMIN", "MANAGER");
   const [courses, managers] = await Promise.all([
     prisma.course.findMany({
       orderBy: { createdAt: "desc" },

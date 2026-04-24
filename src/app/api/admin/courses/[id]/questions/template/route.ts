@@ -10,7 +10,7 @@ export const runtime = "nodejs";
  * "Doğru" kolonuna 1/0 veya X / boş yazılır.
  */
 export async function GET() {
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Sorular");
   ws.columns = [

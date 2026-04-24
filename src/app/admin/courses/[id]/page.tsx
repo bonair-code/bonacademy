@@ -10,7 +10,7 @@ import { audit } from "@/lib/audit";
 
 async function addQuestion(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const text = String(formData.get("text") || "").trim();
   // Tek doğru cevap seçimi: radio "correct" değeri hangi indeks doğruysa onu verir.
@@ -52,7 +52,7 @@ async function addQuestion(formData: FormData) {
 
 async function deleteQuestion(formData: FormData) {
   "use server";
-  await requireRole("ADMIN");
+  await requireRole("ADMIN", "MANAGER");
   const id = String(formData.get("id"));
   const courseId = String(formData.get("courseId"));
   await prisma.question.delete({ where: { id } });
@@ -61,7 +61,7 @@ async function deleteQuestion(formData: FormData) {
 
 async function saveCourseMeta(formData: FormData) {
   "use server";
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const title = String(formData.get("title") || "").trim();
   const description = String(formData.get("description") || "").trim();
@@ -156,7 +156,7 @@ async function saveCourseMeta(formData: FormData) {
 
 async function createManualRevision(formData: FormData) {
   "use server";
-  const admin = await requireRole("ADMIN");
+  const admin = await requireRole("ADMIN", "MANAGER");
   const courseId = String(formData.get("courseId"));
   const changeNote = String(formData.get("changeNote") || "").trim();
   if (!changeNote) return;
@@ -171,7 +171,7 @@ export default async function CourseDetail({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const user = await requireRole("ADMIN");
+  const user = await requireRole("ADMIN", "MANAGER");
   const { id } = await params;
   const [course, managers] = await Promise.all([
     prisma.course.findUnique({
