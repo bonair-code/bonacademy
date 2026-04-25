@@ -12,6 +12,7 @@ import {
 } from "@/lib/certificate/template";
 import { getLocale, getTranslations } from "next-intl/server";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
+import { flashToast } from "@/lib/flash";
 
 async function currentLocale(): Promise<Locale> {
   const l = await getLocale();
@@ -55,6 +56,7 @@ async function createDepartment(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await prisma.department.upsert({ where: { name }, update: {}, create: { name } });
+  await flashToast("added");
   revalidatePath("/admin/settings");
 }
 
@@ -65,6 +67,7 @@ async function renameDepartment(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await prisma.department.update({ where: { id }, data: { name } });
+  await flashToast("saved");
   revalidatePath("/admin/settings");
 }
 
@@ -73,6 +76,7 @@ async function deleteDepartment(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   await prisma.department.delete({ where: { id } });
+  await flashToast("deleted");
   revalidatePath("/admin/settings");
 }
 
@@ -82,6 +86,7 @@ async function createJobTitle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await prisma.jobTitle.upsert({ where: { name }, update: {}, create: { name } });
+  await flashToast("added");
   revalidatePath("/admin/settings");
 }
 
@@ -92,6 +97,7 @@ async function renameJobTitle(formData: FormData) {
   const name = String(formData.get("name") || "").trim();
   if (!name) return;
   await prisma.jobTitle.update({ where: { id }, data: { name } });
+  await flashToast("saved");
   revalidatePath("/admin/settings");
 }
 
@@ -100,6 +106,7 @@ async function deleteJobTitle(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   await prisma.jobTitle.delete({ where: { id } });
+  await flashToast("deleted");
   revalidatePath("/admin/settings");
 }
 
@@ -118,6 +125,7 @@ async function createAppOption(formData: FormData) {
     update: {},
     create: { category, label, sortOrder: (max._max.sortOrder ?? -1) + 1 },
   });
+  await flashToast("added");
   revalidatePath("/admin/settings");
 }
 
@@ -128,6 +136,7 @@ async function renameAppOption(formData: FormData) {
   const label = String(formData.get("label") || "").trim();
   if (!label) return;
   await prisma.appOption.update({ where: { id }, data: { label } });
+  await flashToast("saved");
   revalidatePath("/admin/settings");
 }
 
@@ -136,6 +145,7 @@ async function deleteAppOption(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   await prisma.appOption.delete({ where: { id } });
+  await flashToast("deleted");
   revalidatePath("/admin/settings");
 }
 
@@ -221,6 +231,7 @@ async function saveCertificateTemplate(formData: FormData) {
     entityId: "singleton",
     metadata: { before: before ?? null, after: data },
   });
+  await flashToast("saved");
   revalidatePath("/admin/settings");
 }
 

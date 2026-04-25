@@ -11,6 +11,7 @@ import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { audit } from "@/lib/audit";
 import { getTranslations } from "next-intl/server";
+import { flashToast } from "@/lib/flash";
 
 async function createPlan(formData: FormData) {
   "use server";
@@ -73,6 +74,7 @@ async function createPlan(formData: FormData) {
       targetCount: targets.length,
     },
   });
+  await flashToast("added");
   revalidatePath("/admin/plans");
 }
 
@@ -121,6 +123,7 @@ async function updatePlan(formData: FormData) {
     entityId: planId,
     metadata: { recurrence, dueInDays, jobTitleIds, extraUserIds },
   });
+  await flashToast("saved");
   revalidatePath("/admin/plans");
 }
 
@@ -138,6 +141,7 @@ async function deletePlan(formData: FormData) {
     entity: "TrainingPlan",
     entityId: planId,
   });
+  await flashToast("deleted");
   revalidatePath("/admin/plans");
 }
 

@@ -30,6 +30,15 @@
     "roleUser": "User",
     "userFallback": "User"
   },
+  "toast": {
+    "saved": "Saved successfully.",
+    "added": "Added successfully.",
+    "deleted": "Deleted successfully.",
+    "updated": "Updated successfully.",
+    "sent": "Sent successfully.",
+    "uploaded": "Uploaded successfully.",
+    "error": "Operation failed. Please try again."
+  },
   "cookie": {
     "message": "This site uses cookies that are strictly necessary for login, language preference and security (Google reCAPTCHA). No advertising or tracking cookies are used.",
     "learnMore": "Privacy Notice",

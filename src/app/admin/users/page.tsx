@@ -9,6 +9,7 @@ import { audit } from "@/lib/audit";
 import { createPasswordToken } from "@/lib/passwordTokens";
 import { sendInviteEmail } from "@/lib/notifications/mailer";
 import { getTranslations } from "next-intl/server";
+import { flashToast } from "@/lib/flash";
 
 async function upsertUser(formData: FormData) {
   "use server";
@@ -140,6 +141,7 @@ async function upsertUser(formData: FormData) {
       metadata: { email, role, departmentId, managerId, jobTitleIds, autoEnroll },
     });
   }
+  await flashToast("saved");
   revalidatePath("/admin/users");
 }
 
@@ -155,6 +157,7 @@ async function setPassword(formData: FormData) {
     where: { id: userId },
     data: { passwordHash, failedLoginAttempts: 0, lockedAt: null },
   });
+  await flashToast("saved");
   revalidatePath("/admin/users");
 }
 
@@ -180,6 +183,7 @@ async function sendInvite(formData: FormData) {
     entityId: u.id,
     metadata: { email: u.email },
   });
+  await flashToast("sent");
   revalidatePath("/admin/users");
 }
 
@@ -191,6 +195,7 @@ async function unlockUser(formData: FormData) {
     where: { id: userId },
     data: { failedLoginAttempts: 0, lockedAt: null },
   });
+  await flashToast("updated");
   revalidatePath("/admin/users");
 }
 
@@ -198,7 +203,10 @@ async function createDepartment(formData: FormData) {
   "use server";
   await requireRole("ADMIN", "MANAGER");
   const name = String(formData.get("name")).trim();
-  if (name) await prisma.department.create({ data: { name } });
+  if (name) {
+    await prisma.department.create({ data: { name } });
+    await flashToast("added");
+  }
   revalidatePath("/admin/users");
 }
 

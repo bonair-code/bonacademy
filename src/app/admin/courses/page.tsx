@@ -8,6 +8,7 @@ import { deletePackage } from "@/lib/scorm/storage";
 import { ConfirmButton } from "@/components/ConfirmButton";
 import { audit } from "@/lib/audit";
 import { getTranslations } from "next-intl/server";
+import { flashToast } from "@/lib/flash";
 
 async function createCourse(formData: FormData) {
   "use server";
@@ -46,6 +47,7 @@ async function createCourse(formData: FormData) {
     entityId: course.id,
     metadata: { title, ownerManagerId },
   });
+  await flashToast("added");
   revalidatePath("/admin/courses");
   revalidatePath("/courses");
   // Yeni oluşturulan kursun detay sayfasına yönlendir ki admin hemen
@@ -89,6 +91,7 @@ async function deleteCourse(formData: FormData) {
     entityId: id,
     metadata: { title: course.title, planCount: planIds.length },
   });
+  await flashToast("deleted");
   revalidatePath("/admin/courses");
   revalidatePath("/courses");
 }

@@ -30,6 +30,15 @@
     "roleUser": "Kullanıcı",
     "userFallback": "Kullanıcı"
   },
+  "toast": {
+    "saved": "Başarıyla kaydedildi.",
+    "added": "Başarıyla eklendi.",
+    "deleted": "Başarıyla silindi.",
+    "updated": "Başarıyla güncellendi.",
+    "sent": "Başarıyla gönderildi.",
+    "uploaded": "Başarıyla yüklendi.",
+    "error": "İşlem başarısız oldu. Lütfen tekrar deneyin."
+  },
   "cookie": {
     "message": "Bu site; oturum, dil tercihi ve güvenlik (Google reCAPTCHA) için zorunlu çerezler kullanır. Reklam veya takip çerezi kullanılmaz.",
     "learnMore": "KVKK Aydınlatma Metni",
