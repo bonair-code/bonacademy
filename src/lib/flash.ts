@@ -14,13 +14,17 @@ const FLASH_COOKIE = "bonacademy_flash";
 export type FlashKind = "success" | "error" | "info";
 
 export type FlashPayload = {
+  id: string;
   message: string;
   kind: FlashKind;
 };
 
 export async function setFlash(message: string, kind: FlashKind = "success") {
   const store = await cookies();
-  store.set(FLASH_COOKIE, JSON.stringify({ message, kind }), {
+  // Her toast'a benzersiz id ver — client'taki Toaster bunu key olarak kullanır,
+  // aynı içerikli iki ardışık toast bile farklı id ile yeniden tetiklenir.
+  const id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  store.set(FLASH_COOKIE, JSON.stringify({ id, message, kind }), {
     path: "/",
     // 10 saniye yeter — bir sonraki render'da okuyup silineceğiz; uzun TTL'in
     // yarısı bile gerekmez. Kullanıcı sekmeyi kapatırsa toast da kaybolur.
@@ -45,7 +49,8 @@ export async function readFlash(): Promise<FlashPayload | null> {
     if (typeof parsed.message !== "string") return null;
     const kind: FlashKind =
       parsed.kind === "error" || parsed.kind === "info" ? parsed.kind : "success";
-    return { message: parsed.message, kind };
+    const id = typeof parsed.id === "string" ? parsed.id : Math.random().toString(36).slice(2);
+    return { id, message: parsed.message, kind };
   } catch {
     return null;
   }

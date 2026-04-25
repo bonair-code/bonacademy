@@ -11,6 +11,15 @@ export function Toaster({ initial }: { initial: FlashPayload | null }) {
   const [toast, setToast] = useState<FlashPayload | null>(initial);
   const [closing, setClosing] = useState(false);
 
+  // Server her başarılı action'da yeni id'li flash gönderir. useEffect prop'u
+  // izleyerek state'i sync tutar — useState(initial) sadece ilk mount'ta
+  // çalıştığı için Server Action sonrası gelen yeni flash'lar görünmüyordu.
+  useEffect(() => {
+    if (initial && initial.id !== toast?.id) {
+      setToast(initial);
+    }
+  }, [initial, toast?.id]);
+
   useEffect(() => {
     if (!toast) return;
     setClosing(false);
