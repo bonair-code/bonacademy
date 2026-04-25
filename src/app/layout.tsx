@@ -32,7 +32,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <NextIntlClientProvider locale={locale} messages={messages}>
           {children}
           <CookieBanner />
-          <Toaster initial={flash} />
+          {/* key={flash.id} → her yeni flash'ta Toaster tamamen yeniden mount
+              olur ve useState initial değerini taze prop ile alır. id yoksa
+              sabit bir key kullanırız ki gereksiz remount olmasın. */}
+          <Toaster key={flash?.id ?? "no-flash"} initial={flash} />
         </NextIntlClientProvider>
       </body>
     </html>
