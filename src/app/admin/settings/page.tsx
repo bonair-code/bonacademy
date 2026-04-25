@@ -6,10 +6,17 @@ import { audit } from "@/lib/audit";
 import {
   DEFAULT_CERTIFICATE_TEMPLATE,
   TEMPLATE_FIELD_LIMITS,
+  getDefaultCertificateTemplate,
   isValidHexColor,
   loadCurrentCertificateTemplate,
 } from "@/lib/certificate/template";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
+
+async function currentLocale(): Promise<Locale> {
+  const l = await getLocale();
+  return isLocale(l) ? l : DEFAULT_LOCALE;
+}
 
 const OPTION_CATEGORIES: { key: "role" | "recurrence" | "scorm"; defaults: string[] }[] = [
   {
@@ -135,53 +142,56 @@ async function deleteAppOption(formData: FormData) {
 async function saveCertificateTemplate(formData: FormData) {
   "use server";
   const admin = await requireRole("ADMIN");
+  const locale = await currentLocale();
+  // Boş gönderilen alanlarda admin'in arayüz dilindeki varsayılana düşülür.
+  const fallback = getDefaultCertificateTemplate(locale);
 
-  const get = (k: string, fallback: string, max: number) => {
+  const get = (k: string, fb: string, max: number) => {
     const v = String(formData.get(k) ?? "").trim();
-    if (!v) return fallback;
+    if (!v) return fb;
     return v.slice(0, max);
   };
 
   const accent = String(formData.get("certAccentColor") ?? "").trim();
   const certAccentColor = isValidHexColor(accent)
     ? accent
-    : DEFAULT_CERTIFICATE_TEMPLATE.accentColor;
+    : fallback.accentColor;
 
   const data = {
     certAccentColor,
     certTitleAchievement: get(
       "certTitleAchievement",
-      DEFAULT_CERTIFICATE_TEMPLATE.titleAchievement,
+      fallback.titleAchievement,
       TEMPLATE_FIELD_LIMITS.title
     ),
     certTitleParticipation: get(
       "certTitleParticipation",
-      DEFAULT_CERTIFICATE_TEMPLATE.titleParticipation,
+      fallback.titleParticipation,
       TEMPLATE_FIELD_LIMITS.title
     ),
     certSubtitleAchievement: get(
       "certSubtitleAchievement",
-      DEFAULT_CERTIFICATE_TEMPLATE.subtitleAchievement,
+      fallback.subtitleAchievement,
       TEMPLATE_FIELD_LIMITS.subtitle
     ),
     certSubtitleParticipation: get(
       "certSubtitleParticipation",
-      DEFAULT_CERTIFICATE_TEMPLATE.subtitleParticipation,
+      fallback.subtitleParticipation,
       TEMPLATE_FIELD_LIMITS.subtitle
     ),
     certBodyAchievement: get(
       "certBodyAchievement",
-      DEFAULT_CERTIFICATE_TEMPLATE.bodyAchievement,
+      fallback.bodyAchievement,
       TEMPLATE_FIELD_LIMITS.body
     ),
     certBodyParticipation: get(
       "certBodyParticipation",
-      DEFAULT_CERTIFICATE_TEMPLATE.bodyParticipation,
+      fallback.bodyParticipation,
       TEMPLATE_FIELD_LIMITS.body
     ),
     certFooterLine: get(
       "certFooterLine",
-      DEFAULT_CERTIFICATE_TEMPLATE.footerLine,
+      fallback.footerLine,
       TEMPLATE_FIELD_LIMITS.footer
     ),
     // Görünürlük bayrakları — checkbox form'da yoksa "on" gelmez, o yüzden
@@ -216,6 +226,7 @@ async function saveCertificateTemplate(formData: FormData) {
 
 export default async function SettingsPage() {
   const t = await getTranslations("admin.settings");
+  const locale = await currentLocale();
   const user = await requireRole("ADMIN");
   await ensureDefaults();
 
@@ -229,7 +240,7 @@ export default async function SettingsPage() {
       orderBy: { name: "asc" },
     }),
     prisma.appOption.findMany({ orderBy: [{ category: "asc" }, { sortOrder: "asc" }] }),
-    loadCurrentCertificateTemplate(),
+    loadCurrentCertificateTemplate(locale),
   ]);
 
   const grouped = new Map<string, typeof options>();

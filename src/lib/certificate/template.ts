@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import type { Locale } from "@/i18n/config";
 
 // Sertifika şablonunun PDF render'ına aktarılacak dondurulmuş biçimi.
 // Bu shape değiştiğinde: (1) eski snapshot'larla geriye dönük uyum bozulur,
@@ -22,7 +23,9 @@ export type CertificateTemplate = {
 
 // Fabrika default — DB'de henüz satır yoksa veya snapshot'ta alan eksikse
 // bu değerler kullanılır. Prisma schema default'larıyla eşit tutulmalı.
-export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplate = {
+// İki dilli varsayılanlar tutuluyor: admin paneli aktif locale'e göre uygun
+// olanı önerir; kaydet'e basıldığında DB'deki tek satır o değerle yazılır.
+export const DEFAULT_CERTIFICATE_TEMPLATE_TR: CertificateTemplate = {
   accentColor: "#e30613",
   titleAchievement: "BAŞARI SERTİFİKASI",
   titleParticipation: "KATILIM SERTİFİKASI",
@@ -39,17 +42,52 @@ export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplate = {
   showQr: true,
 };
 
+export const DEFAULT_CERTIFICATE_TEMPLATE_EN: CertificateTemplate = {
+  accentColor: "#e30613",
+  titleAchievement: "CERTIFICATE OF ACHIEVEMENT",
+  titleParticipation: "CERTIFICATE OF ATTENDANCE",
+  subtitleAchievement: "BAŞARI SERTİFİKASI",
+  subtitleParticipation: "KATILIM SERTİFİKASI",
+  bodyAchievement:
+    "is awarded in recognition of successfully completing the training.",
+  bodyParticipation: "is presented in recognition of attending the training.",
+  footerLine: "Bon Air Havacılık Sanayi ve Ticaret A.Ş. · BonAcademy",
+  showBirthDate: true,
+  showBirthPlace: true,
+  showOwnerManager: true,
+  showQr: true,
+};
+
+// Geriye dönük uyum: snapshot loader ve eski kodlar bu sembolü kullanıyor.
+// Kanonik fallback olarak Türkçe seti tutuluyor (Prisma schema default'larıyla eşit).
+export const DEFAULT_CERTIFICATE_TEMPLATE: CertificateTemplate =
+  DEFAULT_CERTIFICATE_TEMPLATE_TR;
+
+export function getDefaultCertificateTemplate(
+  locale: Locale
+): CertificateTemplate {
+  return locale === "en"
+    ? DEFAULT_CERTIFICATE_TEMPLATE_EN
+    : DEFAULT_CERTIFICATE_TEMPLATE_TR;
+}
+
 /** Admin formdan gelen hex renk doğrulaması — PDF render'ını bozmasın. */
 export function isValidHexColor(s: string): boolean {
   return /^#[0-9a-fA-F]{6}$/.test(s);
 }
 
-/** DB'deki OrganizationSettings satırını okur; yoksa default döner. */
-export async function loadCurrentCertificateTemplate(): Promise<CertificateTemplate> {
+/**
+ * DB'deki OrganizationSettings satırını okur; yoksa default döner.
+ * locale verilirse satır yokken o dile uygun varsayılan döner; admin paneli
+ * ilk kez şablon düzenliyorken aktif arayüz dilinde örnek metin görür.
+ */
+export async function loadCurrentCertificateTemplate(
+  locale?: Locale
+): Promise<CertificateTemplate> {
   const row = await prisma.organizationSettings.findUnique({
     where: { id: "singleton" },
   });
-  if (!row) return DEFAULT_CERTIFICATE_TEMPLATE;
+  if (!row) return locale ? getDefaultCertificateTemplate(locale) : DEFAULT_CERTIFICATE_TEMPLATE;
   return {
     accentColor: row.certAccentColor,
     titleAchievement: row.certTitleAchievement,
