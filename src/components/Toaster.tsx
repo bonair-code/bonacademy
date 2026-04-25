@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { FlashPayload } from "@/lib/flash";
+import { clearFlash } from "@/app/actions/clearFlash";
 
 // Sağ alt köşe toast — layout flash cookie'sini okur, varsa initial olarak
 // geçer; bu component bir kez gösterip 4 saniye sonra fade-out ile kaldırır.
@@ -13,6 +14,8 @@ export function Toaster({ initial }: { initial: FlashPayload | null }) {
   useEffect(() => {
     if (!toast) return;
     setClosing(false);
+    // Cookie'yi hemen temizle ki sayfa yenilendiğinde toast tekrar gözükmesin.
+    void clearFlash().catch(() => {});
     const fade = setTimeout(() => setClosing(true), 3500);
     const remove = setTimeout(() => setToast(null), 4000);
     return () => {

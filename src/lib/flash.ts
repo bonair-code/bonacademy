@@ -30,15 +30,16 @@ export async function setFlash(message: string, kind: FlashKind = "success") {
   });
 }
 
-export async function readAndClearFlash(): Promise<FlashPayload | null> {
+/**
+ * Sadece okur — silmez. Server component (layout) bunu çağırır; cookie
+ * mutasyonu Next.js 15'te server component'ten yasak. Silme işini Toaster
+ * client component'i mount sonrası `clearFlash` server action'ı ile yapar.
+ * Cookie zaten 10 saniye TTL'li olduğu için unutulsa bile hızla kaybolur.
+ */
+export async function readFlash(): Promise<FlashPayload | null> {
   const store = await cookies();
   const raw = store.get(FLASH_COOKIE)?.value;
   if (!raw) return null;
-  // Hemen sil — bir sonraki sayfa yüklemede tekrar gösterilmesin.
-  store.set(FLASH_COOKIE, "", {
-    path: "/",
-    maxAge: 0,
-  });
   try {
     const parsed = JSON.parse(raw) as Partial<FlashPayload>;
     if (typeof parsed.message !== "string") return null;

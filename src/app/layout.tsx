@@ -5,7 +5,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { CookieBanner } from "@/components/CookieBanner";
 import { Toaster } from "@/components/Toaster";
-import { readAndClearFlash } from "@/lib/flash";
+import { readFlash } from "@/lib/flash";
 
 const inter = Inter({
   subsets: ["latin", "latin-ext"],
@@ -25,7 +25,7 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const locale = await getLocale();
   const messages = await getMessages();
-  const flash = await readAndClearFlash();
+  const flash = await readFlash();
   return (
     <html lang={locale} className={inter.variable}>
       <body className="min-h-screen font-sans">
