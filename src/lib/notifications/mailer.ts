@@ -7,7 +7,10 @@ export function mailer() {
   cached = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT || 587),
+    // M365 / Office 365 SMTP submission: port 587 + STARTTLS upgrade.
+    // secure:false ile başla, requireTLS:true ile sunucuyu STARTTLS'e zorla.
     secure: false,
+    requireTLS: true,
     auth:
       process.env.SMTP_USER && process.env.SMTP_PASS
         ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
