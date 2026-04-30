@@ -8,6 +8,7 @@ import {
 } from "@/lib/courseRevisions";
 import { deletePackage } from "@/lib/scorm/storage";
 import { audit } from "@/lib/audit";
+import { flashToast } from "@/lib/flash";
 
 export const runtime = "nodejs";
 
@@ -85,5 +86,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     },
   });
 
+  await flashToast("uploaded");
   return NextResponse.json(course);
 }

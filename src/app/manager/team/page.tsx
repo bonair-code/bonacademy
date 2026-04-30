@@ -5,6 +5,7 @@ import { addDays, format } from "date-fns";
 import { revalidatePath } from "next/cache";
 import { createRetakeAssignment, canRequestRetakeFor } from "@/lib/scheduler/retake";
 import { getTranslations } from "next-intl/server";
+import { flashToast } from "@/lib/flash";
 
 const STATUS_CLS: Record<string, string> = {
   PENDING: "bg-slate-100 text-slate-600",
@@ -255,5 +256,6 @@ async function managerRetakeAction(formData: FormData) {
     reason: reason.slice(0, 500),
     customDueDate: customDue,
   });
+  await flashToast("saved");
   revalidatePath("/manager/team");
 }

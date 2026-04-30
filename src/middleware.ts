@@ -12,6 +12,8 @@ const PUBLIC_PATHS = [
   "/verify",
   "/kvkk",
   "/icon",
+  "/api/health",
+  "/api/cron",
 ];
 
 // Edge-safe: only check for the session cookie's presence. Full session

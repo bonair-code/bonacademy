@@ -8,6 +8,7 @@ import { BulkQuestionImport } from "./BulkQuestionImport";
 import { createCourseRevision, ensureBaselineRevision } from "@/lib/courseRevisions";
 import { audit } from "@/lib/audit";
 import { getTranslations } from "next-intl/server";
+import { flashToast } from "@/lib/flash";
 
 async function addQuestion(formData: FormData) {
   "use server";
@@ -48,6 +49,7 @@ async function addQuestion(formData: FormData) {
   await prisma.question.create({
     data: { bankId: bank.id, text, options: { create: opts } },
   });
+  await flashToast("added");
   revalidatePath(`/admin/courses/${courseId}`);
 }
 
@@ -57,6 +59,7 @@ async function deleteQuestion(formData: FormData) {
   const id = String(formData.get("id"));
   const courseId = String(formData.get("courseId"));
   await prisma.question.delete({ where: { id } });
+  await flashToast("deleted");
   revalidatePath(`/admin/courses/${courseId}`);
 }
 
@@ -151,6 +154,7 @@ async function saveCourseMeta(formData: FormData) {
     });
   }
 
+  await flashToast("saved");
   revalidatePath(`/admin/courses/${courseId}`);
   revalidatePath("/admin/courses");
   revalidatePath("/courses");
@@ -165,6 +169,7 @@ async function createManualRevision(formData: FormData) {
   const existing = await prisma.course.findUniqueOrThrow({ where: { id: courseId } });
   await ensureBaselineRevision(existing, admin.id);
   await createCourseRevision(courseId, admin.id, changeNote);
+  await flashToast("added");
   revalidatePath(`/admin/courses/${courseId}`);
 }
 
