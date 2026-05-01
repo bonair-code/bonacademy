@@ -86,7 +86,8 @@
     },
     "success": {
       "invited": "Your account is ready. Sign in with your email and new password.",
-      "reset": "Your password has been updated. Sign in with your new password."
+      "reset": "Your password has been updated. Sign in with your new password.",
+      "setup": "Administrator account created. Sign in to continue."
     },
     "privacy": "Privacy Notice"
   },

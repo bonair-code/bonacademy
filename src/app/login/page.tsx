@@ -61,9 +61,10 @@ export default async function LoginPage({
     left?: string;
     invited?: string;
     reset?: string;
+    setup?: string;
   }>;
 }) {
-  const { error, left, invited, reset } = await searchParams;
+  const { error, left, invited, reset, setup } = await searchParams;
   const t = await getTranslations("login");
   const tc = await getTranslations("common");
 
@@ -77,6 +78,7 @@ export default async function LoginPage({
   let okMsg: string | null = null;
   if (invited === "1") okMsg = t("success.invited");
   else if (reset === "1") okMsg = t("success.reset");
+  else if (setup === "ok") okMsg = t("success.setup");
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2">
