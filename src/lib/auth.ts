@@ -1,5 +1,4 @@
 import NextAuth, { type DefaultSession } from "next-auth";
-import AzureAD from "next-auth/providers/microsoft-entra-id";
 import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
@@ -11,24 +10,10 @@ declare module "next-auth" {
   }
 }
 
-const azureConfigured =
-  !!process.env.AUTH_AZURE_AD_CLIENT_ID &&
-  !!process.env.AUTH_AZURE_AD_CLIENT_SECRET &&
-  !!process.env.AUTH_AZURE_AD_TENANT_ID;
-
 const MAX_ATTEMPTS = 3;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
-    ...(azureConfigured
-      ? [
-          AzureAD({
-            clientId: process.env.AUTH_AZURE_AD_CLIENT_ID!,
-            clientSecret: process.env.AUTH_AZURE_AD_CLIENT_SECRET!,
-            issuer: `https://login.microsoftonline.com/${process.env.AUTH_AZURE_AD_TENANT_ID}/v2.0`,
-          }),
-        ]
-      : []),
     Credentials({
       id: "password",
       name: "E-posta + Şifre",
@@ -71,27 +56,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   session: { strategy: "jwt" },
   callbacks: {
-    // Azure AD / başka bir provider ile başarılı giriş yapıldığında,
-    // credentials yolunda kilitlenmiş (failedLoginAttempts >= 3, lockedAt set)
-    // bir hesabın sayaçlarını sıfırla. Aksi halde SSO ile giren kullanıcı
-    // arka planda hâlâ kilitli sayılır ve credentials'a düşerse giremez.
-    async signIn({ user, account }) {
-      if (!user?.email) return true;
-      if (account?.provider && account.provider !== "password") {
-        try {
-          await prisma.user.updateMany({
-            where: {
-              email: user.email.toLowerCase(),
-              OR: [{ failedLoginAttempts: { gt: 0 } }, { lockedAt: { not: null } }],
-            },
-            data: { failedLoginAttempts: 0, lockedAt: null },
-          });
-        } catch (err) {
-          console.error("[auth] SSO unlock failed", err);
-        }
-      }
-      return true;
-    },
     async jwt({ token, user }) {
       if (user?.id) token.sub = user.id;
       if (token.sub) {

@@ -8,10 +8,6 @@ import { redirect } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 
 const MAX_ATTEMPTS = 3;
-const azureConfigured =
-  !!process.env.AUTH_AZURE_AD_CLIENT_ID &&
-  !!process.env.AUTH_AZURE_AD_CLIENT_SECRET &&
-  !!process.env.AUTH_AZURE_AD_TENANT_ID;
 
 async function loginAction(formData: FormData) {
   "use server";
@@ -145,25 +141,6 @@ export default async function LoginPage({
             </h1>
             <p className="text-sm text-slate-500 mt-1">{t("subheading")}</p>
           </div>
-
-          {azureConfigured && (
-            <form
-              action={async () => {
-                "use server";
-                await signIn("microsoft-entra-id", { redirectTo: "/dashboard" });
-              }}
-              className="mb-4"
-            >
-              <button className="btn-secondary w-full">{t("withMicrosoft")}</button>
-              <div className="flex items-center gap-3 my-4">
-                <div className="flex-1 h-px bg-slate-200" />
-                <span className="text-[11px] uppercase tracking-wider text-slate-400">
-                  {t("or")}
-                </span>
-                <div className="flex-1 h-px bg-slate-200" />
-              </div>
-            </form>
-          )}
 
           <form action={loginAction} className="space-y-4">
             <div>

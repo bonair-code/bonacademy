@@ -29,11 +29,6 @@ export async function GET() {
   const env: Record<string, boolean> = {};
   for (const k of REQUIRED_ENV) env[k] = !!process.env[k];
 
-  const azureSso =
-    !!process.env.AUTH_AZURE_AD_CLIENT_ID &&
-    !!process.env.AUTH_AZURE_AD_CLIENT_SECRET &&
-    !!process.env.AUTH_AZURE_AD_TENANT_ID;
-
   let dbOk = false;
   let dbError: string | null = null;
   try {
@@ -51,7 +46,6 @@ export async function GET() {
       ok: overallOk,
       db: { ok: dbOk, error: dbError },
       env,
-      azureSsoConfigured: azureSso,
       storageBackend: activeBackend(),
       timestamp: new Date().toISOString(),
     },

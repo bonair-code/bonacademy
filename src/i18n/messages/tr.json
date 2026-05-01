@@ -57,8 +57,6 @@
   "login": {
     "heading": "Hesabınıza giriş yapın",
     "subheading": "BonAcademy — Eğitim Yönetim Sistemi",
-    "withMicrosoft": "Microsoft 365 ile Giriş Yap",
-    "or": "veya",
     "email": "E-posta",
     "emailPlaceholder": "ad.soyad@bonair.com.tr",
     "password": "Şifre",
