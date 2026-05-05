@@ -15,7 +15,6 @@ const PUBLIC_PATHS = [
   "/api/health",
   "/api/cron",
   "/setup",
-  "/api/admin/reset-admin",
 ];
 
 // Edge-safe: only check for the session cookie's presence. Full session
