@@ -50,7 +50,15 @@
         "managerOnlyUsers": "Yönetici yalnızca USER rolündeki kullanıcıları düzenleyebilir.",
         "managerInviteOnlyUsers": "Yönetici yalnızca USER rolüne davet gönderebilir.",
         "inactiveInvite": "Pasif kullanıcıya davet gönderilemez."
-      }
+      },
+      "bulkImportTitle": "Toplu Kullanıcı Yükle (CSV)",
+      "bulkImportHelp": "Sütunlar: email, name, role (USER/MANAGER), department, jobTitles (noktalı virgülle ayır), managerEmail. Mevcut e-postalı kullanıcılar güncellenir, yenileri eklenir; varsa departman ve görev tanımları otomatik oluşturulur.",
+      "bulkImportTemplate": "Şablon İndir",
+      "bulkImportSendInvites": "Yeni kullanıcılara davet maili gönder",
+      "bulkImportSubmit": "Yükle",
+      "bulkImportUploading": "Yükleniyor...",
+      "bulkImportResult": "{created} eklendi · {updated} güncellendi · {invites} davet gönderildi",
+      "bulkImportErrorsCount": "{count} hata var (göster)"
     },
     "jobTitles": {},
     "reports": {

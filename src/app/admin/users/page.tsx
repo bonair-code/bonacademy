@@ -10,6 +10,7 @@ import { createPasswordToken } from "@/lib/passwordTokens";
 import { sendInviteEmail } from "@/lib/notifications/mailer";
 import { getTranslations } from "next-intl/server";
 import { flashToast } from "@/lib/flash";
+import { BulkUserImport } from "./BulkUserImport";
 
 async function upsertUser(formData: FormData) {
   "use server";
@@ -523,6 +524,8 @@ export default async function AdminUsers() {
           </div>
         ))}
       </div>
+
+      <BulkUserImport />
     </Shell>
   );
 }

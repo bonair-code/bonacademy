@@ -50,7 +50,15 @@
         "managerOnlyUsers": "A manager can only edit users with the USER role.",
         "managerInviteOnlyUsers": "A manager can only send invitations to USER role accounts.",
         "inactiveInvite": "Invitations cannot be sent to inactive users."
-      }
+      },
+      "bulkImportTitle": "Bulk User Upload (CSV)",
+      "bulkImportHelp": "Columns: email, name, role (USER/MANAGER), department, jobTitles (separated by ;), managerEmail. Existing emails are updated, new ones are created; missing departments and job titles are created automatically.",
+      "bulkImportTemplate": "Download Template",
+      "bulkImportSendInvites": "Send invitation email to newly created users",
+      "bulkImportSubmit": "Upload",
+      "bulkImportUploading": "Uploading...",
+      "bulkImportResult": "{created} created · {updated} updated · {invites} invitations sent",
+      "bulkImportErrorsCount": "{count} errors (show)"
     },
     "jobTitles": {},
     "reports": {
