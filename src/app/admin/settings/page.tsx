@@ -54,8 +54,13 @@ async function createDepartment(formData: FormData) {
   "use server";
   await requireRole("ADMIN");
   const name = String(formData.get("name") || "").trim();
+  const nameEn = String(formData.get("nameEn") || "").trim() || null;
   if (!name) return;
-  await prisma.department.upsert({ where: { name }, update: {}, create: { name } });
+  await prisma.department.upsert({
+    where: { name },
+    update: { nameEn },
+    create: { name, nameEn },
+  });
   await flashToast("added");
   revalidatePath("/admin/settings");
 }
@@ -65,8 +70,9 @@ async function renameDepartment(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   const name = String(formData.get("name") || "").trim();
+  const nameEn = String(formData.get("nameEn") || "").trim() || null;
   if (!name) return;
-  await prisma.department.update({ where: { id }, data: { name } });
+  await prisma.department.update({ where: { id }, data: { name, nameEn } });
   await flashToast("saved");
   revalidatePath("/admin/settings");
 }
@@ -84,8 +90,13 @@ async function createJobTitle(formData: FormData) {
   "use server";
   await requireRole("ADMIN");
   const name = String(formData.get("name") || "").trim();
+  const nameEn = String(formData.get("nameEn") || "").trim() || null;
   if (!name) return;
-  await prisma.jobTitle.upsert({ where: { name }, update: {}, create: { name } });
+  await prisma.jobTitle.upsert({
+    where: { name },
+    update: { nameEn },
+    create: { name, nameEn },
+  });
   await flashToast("added");
   revalidatePath("/admin/settings");
 }
@@ -95,8 +106,9 @@ async function renameJobTitle(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   const name = String(formData.get("name") || "").trim();
+  const nameEn = String(formData.get("nameEn") || "").trim() || null;
   if (!name) return;
-  await prisma.jobTitle.update({ where: { id }, data: { name } });
+  await prisma.jobTitle.update({ where: { id }, data: { name, nameEn } });
   await flashToast("saved");
   revalidatePath("/admin/settings");
 }
@@ -115,6 +127,7 @@ async function createAppOption(formData: FormData) {
   await requireRole("ADMIN");
   const category = String(formData.get("category") || "").trim();
   const label = String(formData.get("label") || "").trim();
+  const labelEn = String(formData.get("labelEn") || "").trim() || null;
   if (!category || !label) return;
   const max = await prisma.appOption.aggregate({
     where: { category },
@@ -122,8 +135,8 @@ async function createAppOption(formData: FormData) {
   });
   await prisma.appOption.upsert({
     where: { category_label: { category, label } },
-    update: {},
-    create: { category, label, sortOrder: (max._max.sortOrder ?? -1) + 1 },
+    update: { labelEn },
+    create: { category, label, labelEn, sortOrder: (max._max.sortOrder ?? -1) + 1 },
   });
   await flashToast("added");
   revalidatePath("/admin/settings");
@@ -134,8 +147,9 @@ async function renameAppOption(formData: FormData) {
   await requireRole("ADMIN");
   const id = String(formData.get("id"));
   const label = String(formData.get("label") || "").trim();
+  const labelEn = String(formData.get("labelEn") || "").trim() || null;
   if (!label) return;
-  await prisma.appOption.update({ where: { id }, data: { label } });
+  await prisma.appOption.update({ where: { id }, data: { label, labelEn } });
   await flashToast("saved");
   revalidatePath("/admin/settings");
 }
@@ -271,8 +285,9 @@ export default async function SettingsPage() {
         {/* Departments */}
         <section className="card p-4">
           <h2 className="font-semibold mb-3">{t("departments")}</h2>
-          <form action={createDepartment} className="flex gap-2 mb-4">
-            <input name="name" placeholder={t("newDepartmentPlaceholder")} required maxLength={100} className="input flex-1" />
+          <form action={createDepartment} className="flex flex-col sm:flex-row gap-2 mb-4">
+            <input name="name" placeholder={`TR — ${t("newDepartmentPlaceholder")}`} required maxLength={100} className="input flex-1" />
+            <input name="nameEn" placeholder="EN — name (optional)" maxLength={100} className="input flex-1" />
             <button className="btn-primary">{t("add")}</button>
           </form>
           <div className="divide-y border rounded-lg">
@@ -280,10 +295,11 @@ export default async function SettingsPage() {
               <p className="p-4 text-slate-500 text-sm">{t("noDepartments")}</p>
             )}
             {departments.map((d) => (
-              <div key={d.id} className="p-3 flex items-center gap-2 text-sm">
-                <form action={renameDepartment} className="flex gap-2 flex-1">
+              <div key={d.id} className="p-3 flex items-center gap-2 text-sm flex-wrap">
+                <form action={renameDepartment} className="flex flex-col sm:flex-row gap-2 flex-1">
                   <input type="hidden" name="id" value={d.id} />
-                  <input name="name" defaultValue={d.name} required maxLength={100} className="input" />
+                  <input name="name" defaultValue={d.name} required maxLength={100} className="input flex-1" placeholder="TR" />
+                  <input name="nameEn" defaultValue={d.nameEn ?? ""} maxLength={100} className="input flex-1" placeholder="EN" />
                   <button className="btn-secondary text-xs">{t("save")}</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
@@ -301,8 +317,9 @@ export default async function SettingsPage() {
         {/* Job Titles */}
         <section className="card p-4">
           <h2 className="font-semibold mb-3">{t("jobTitles")}</h2>
-          <form action={createJobTitle} className="flex gap-2 mb-4">
-            <input name="name" placeholder={t("jobTitlePlaceholder")} required maxLength={100} className="input flex-1" />
+          <form action={createJobTitle} className="flex flex-col sm:flex-row gap-2 mb-4">
+            <input name="name" placeholder={`TR — ${t("jobTitlePlaceholder")}`} required maxLength={100} className="input flex-1" />
+            <input name="nameEn" placeholder="EN — name (optional)" maxLength={100} className="input flex-1" />
             <button className="btn-primary">{t("add")}</button>
           </form>
           <div className="divide-y border rounded-lg">
@@ -310,10 +327,11 @@ export default async function SettingsPage() {
               <p className="p-4 text-slate-500 text-sm">{t("noJobTitles")}</p>
             )}
             {jobTitles.map((j) => (
-              <div key={j.id} className="p-3 flex items-center gap-2 text-sm">
-                <form action={renameJobTitle} className="flex gap-2 flex-1">
+              <div key={j.id} className="p-3 flex items-center gap-2 text-sm flex-wrap">
+                <form action={renameJobTitle} className="flex flex-col sm:flex-row gap-2 flex-1">
                   <input type="hidden" name="id" value={j.id} />
-                  <input name="name" defaultValue={j.name} required maxLength={100} className="input" />
+                  <input name="name" defaultValue={j.name} required maxLength={100} className="input flex-1" placeholder="TR" />
+                  <input name="nameEn" defaultValue={j.nameEn ?? ""} maxLength={100} className="input flex-1" placeholder="EN" />
                   <button className="btn-secondary text-xs">{t("save")}</button>
                 </form>
                 <span className="text-xs text-slate-500 whitespace-nowrap">
@@ -336,9 +354,10 @@ export default async function SettingsPage() {
           return (
             <section key={c.key} className="card p-4">
               <h2 className="font-semibold mb-3">{t(`categories.${c.key}.title` as never)}</h2>
-              <form action={createAppOption} className="flex gap-2 mb-4">
+              <form action={createAppOption} className="flex flex-col gap-2 mb-4">
                 <input type="hidden" name="category" value={c.key} />
-                <input name="label" placeholder={t(`categories.${c.key}.placeholder` as never)} className="input flex-1" />
+                <input name="label" placeholder={`TR — ${t(`categories.${c.key}.placeholder` as never)}`} className="input" required />
+                <input name="labelEn" placeholder="EN — label (optional)" className="input" />
                 <button className="btn-primary">{t("add")}</button>
               </form>
               <div className="divide-y border rounded-lg">
@@ -346,13 +365,16 @@ export default async function SettingsPage() {
                   <p className="p-4 text-slate-500 text-sm">{t("noOption")}</p>
                 )}
                 {items.map((opt) => (
-                  <div key={opt.id} className="p-3 flex items-center gap-2 text-sm">
-                    <form action={renameAppOption} className="flex gap-2 flex-1">
+                  <div key={opt.id} className="p-3 text-sm">
+                    <form action={renameAppOption} className="flex flex-col gap-2">
                       <input type="hidden" name="id" value={opt.id} />
-                      <input name="label" defaultValue={opt.label} className="input" />
-                      <button className="btn-secondary text-xs">{t("save")}</button>
+                      <input name="label" defaultValue={opt.label} className="input" placeholder="TR" required />
+                      <input name="labelEn" defaultValue={opt.labelEn ?? ""} className="input" placeholder="EN" />
+                      <div className="flex gap-2 justify-end">
+                        <button className="btn-secondary text-xs">{t("save")}</button>
+                      </div>
                     </form>
-                    <form action={deleteAppOption}>
+                    <form action={deleteAppOption} className="mt-1 flex justify-end">
                       <input type="hidden" name="id" value={opt.id} />
                       <button className="text-xs text-red-600 hover:underline">{t("delete")}</button>
                     </form>

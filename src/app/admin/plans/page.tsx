@@ -10,8 +10,12 @@ import type { Recurrence } from "@prisma/client";
 import Link from "next/link";
 import { SubmitButton } from "@/components/SubmitButton";
 import { audit } from "@/lib/audit";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { flashToast } from "@/lib/flash";
+
+function localizedName(item: { name: string; nameEn: string | null }, locale: string) {
+  return locale === "en" && item.nameEn ? item.nameEn : item.name;
+}
 
 async function createPlan(formData: FormData) {
   "use server";
@@ -148,6 +152,7 @@ async function deletePlan(formData: FormData) {
 export default async function AdminPlans() {
   const user = await requireRole("ADMIN", "MANAGER");
   const t = await getTranslations("adminPlans");
+  const locale = await getLocale();
   const [courses, users, jobTitles, plans] = await Promise.all([
     prisma.course.findMany({ orderBy: { title: "asc" } }),
     // Yalnızca USER rolündeki aktif kişiler ek kullanıcı olarak seçilebilir.
@@ -248,7 +253,7 @@ export default async function AdminPlans() {
             >
               {jobTitles.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.name}
+                  {localizedName(j, locale)}
                 </option>
               ))}
             </select>
@@ -295,7 +300,7 @@ export default async function AdminPlans() {
                     {t("assignmentsCount", { count: p._count.assignments })} ·{" "}
                     {t("startsOn", { date: new Date(p.startDate).toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" }) })}
                     {p.jobTitles.length > 0 && (
-                      <> · {p.jobTitles.map((j) => j.jobTitle.name).join(", ")}</>
+                      <> · {p.jobTitles.map((j) => localizedName(j.jobTitle, locale)).join(", ")}</>
                     )}
                   </div>
                 </div>
@@ -351,7 +356,7 @@ export default async function AdminPlans() {
                     >
                       {jobTitles.map((j) => (
                         <option key={j.id} value={j.id}>
-                          {j.name}
+                          {localizedName(j, locale)}
                         </option>
                       ))}
                     </select>

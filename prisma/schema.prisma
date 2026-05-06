@@ -112,6 +112,9 @@ model User {
 model JobTitle {
   id        String                 @id @default(cuid())
   name      String                 @unique
+  // İsteğe bağlı İngilizce karşılığı. Arayüz dili EN ise bu gösterilir;
+  // boşsa TR alanı (name) fallback olarak kullanılır.
+  nameEn    String?
   users     UserJobTitle[]
   plans     TrainingPlanJobTitle[]
   createdAt DateTime               @default(now())
@@ -141,6 +144,7 @@ model TrainingPlanJobTitle {
 model Department {
   id        String  @id @default(cuid())
   name      String  @unique
+  nameEn    String?
   users     User[]
   createdAt DateTime @default(now())
 }
@@ -367,6 +371,7 @@ model AppOption {
   id        String   @id @default(cuid())
   category  String
   label     String
+  labelEn   String?
   sortOrder Int      @default(0)
   createdAt DateTime @default(now())
 

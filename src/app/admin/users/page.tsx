@@ -8,9 +8,14 @@ import { hashPassword, validatePasswordStrength } from "@/lib/password";
 import { audit } from "@/lib/audit";
 import { createPasswordToken } from "@/lib/passwordTokens";
 import { sendInviteEmail } from "@/lib/notifications/mailer";
-import { getTranslations } from "next-intl/server";
+import { getLocale, getTranslations } from "next-intl/server";
 import { flashToast } from "@/lib/flash";
 import { BulkUserImport } from "./BulkUserImport";
+
+// Bir Department/JobTitle için aktif arayüz dilindeki etiketi döndürür.
+function localizedName(item: { name: string; nameEn: string | null }, locale: string) {
+  return locale === "en" && item.nameEn ? item.nameEn : item.name;
+}
 
 async function upsertUser(formData: FormData) {
   "use server";
@@ -213,6 +218,7 @@ async function createDepartment(formData: FormData) {
 
 export default async function AdminUsers() {
   const t = await getTranslations("admin.users");
+  const locale = await getLocale();
   const user = await requireRole("ADMIN", "MANAGER");
   const listFilter = user.role === "ADMIN" ? {} : { role: "USER" as const };
   const [users, departments, jobTitles, managers] = await Promise.all([
@@ -267,7 +273,7 @@ export default async function AdminUsers() {
             <option value="">{t("departmentSelect")}</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {localizedName(d, locale)}
               </option>
             ))}
           </select>
@@ -308,7 +314,7 @@ export default async function AdminUsers() {
             >
               {jobTitles.map((j) => (
                 <option key={j.id} value={j.id}>
-                  {j.name}
+                  {localizedName(j, locale)}
                 </option>
               ))}
             </select>
@@ -346,9 +352,9 @@ export default async function AdminUsers() {
                   <span className="text-slate-500 font-normal">· {u.email}</span>
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  {u.role} · {u.department?.name ?? t("noDepartment")} · {t("managerLabel")}: {u.manager?.name ?? "—"}
+                  {u.role} · {u.department ? localizedName(u.department, locale) : t("noDepartment")} · {t("managerLabel")}: {u.manager?.name ?? "—"}
                   {u.jobTitles.length > 0 && (
-                    <> · {u.jobTitles.map((jt) => jt.jobTitle.name).join(", ")}</>
+                    <> · {u.jobTitles.map((jt) => localizedName(jt.jobTitle, locale)).join(", ")}</>
                   )}
                 </div>
                 <div className="mt-1 flex gap-2 flex-wrap">
@@ -431,7 +437,7 @@ export default async function AdminUsers() {
                     <option value="">{t("departmentNone")}</option>
                     {departments.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name}
+                        {localizedName(d, locale)}
                       </option>
                     ))}
                   </select>
@@ -482,7 +488,7 @@ export default async function AdminUsers() {
                     >
                       {jobTitles.map((j) => (
                         <option key={j.id} value={j.id}>
-                          {j.name}
+                          {localizedName(j, locale)}
                         </option>
                       ))}
                     </select>
