@@ -96,6 +96,12 @@ export default async function LoginPage({
       <div className="relative z-10 min-h-screen grid lg:grid-cols-2 items-center px-6 py-10 lg:px-16 gap-8">
         {/* Left — marketing overlay (hidden on small screens) */}
         <div className="hidden lg:flex flex-col text-white max-w-xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/Logo-white.png"
+            alt="Bon Air"
+            className="h-16 w-auto mb-8 select-none"
+          />
           <div className="text-xs tracking-[0.25em] uppercase text-slate-300 mb-3">
             {t("subheading")}
           </div>
