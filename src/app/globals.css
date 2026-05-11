@@ -8,6 +8,12 @@
   --accent: #14b8a6;
 }
 
+/* reCAPTCHA v3 floating badge — hidden per Google ToS because the inline
+   "protected by reCAPTCHA / Privacy / Terms" notice is shown in-form. */
+.grecaptcha-badge {
+  visibility: hidden !important;
+}
+
 @layer base {
   body {
     @apply antialiased text-slate-800 bg-slate-50;
