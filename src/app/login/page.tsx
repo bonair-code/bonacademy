@@ -81,7 +81,7 @@ export default async function LoginPage({
       {/* Background image — supplied at public/login-bg.jpg */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: "url('/login-bg.png')" }}
+        style={{ backgroundImage: "url('/login-bg.jpg')" }}
         aria-hidden
       />
       {/* Dark overlay for legibility */}
