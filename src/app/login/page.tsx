@@ -87,11 +87,6 @@ export default async function LoginPage({
       {/* Dark overlay for legibility */}
       <div className="absolute inset-0 bg-slate-900/55" aria-hidden />
 
-      {/* Locale switcher — top right */}
-      <div className="absolute top-4 right-4 z-20">
-        <LocaleSwitcher nextPath="/login" />
-      </div>
-
       {/* Foreground grid */}
       <div className="relative z-10 min-h-screen grid lg:grid-cols-2 items-center px-6 py-10 lg:px-16 gap-8">
         {/* Left — marketing overlay (hidden on small screens) */}
@@ -131,7 +126,10 @@ export default async function LoginPage({
 
         {/* Right — floating white card */}
         <div className="flex justify-center lg:justify-end">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl px-8 py-8">
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl px-8 py-8">
+            <div className="absolute top-4 right-4">
+              <LocaleSwitcher nextPath="/login" />
+            </div>
             <div className="flex justify-center mb-6">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/Logo.png" alt="Bon Air" className="h-12 w-auto" />
