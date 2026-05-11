@@ -77,129 +77,129 @@ export default async function LoginPage({
   else if (setup === "ok") okMsg = t("success.setup");
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      {/* Left — brand panel */}
-      <div className="hidden lg:flex relative overflow-hidden bg-slate-900 text-white px-12 pt-8 pb-6 flex-col gap-6 lg:h-screen">
-        <div
-          className="absolute inset-0 opacity-[0.08]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 20%, #e31e24 0%, transparent 45%), radial-gradient(circle at 80% 70%, #e31e24 0%, transparent 40%)",
-          }}
-        />
-        <div className="relative z-10">
-          <div className="inline-flex items-center gap-3 bg-white rounded-xl px-5 py-4 shadow">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/Logo.png" alt="Bon Air" className="h-16 w-auto" />
-          </div>
-        </div>
-        <div className="relative z-10 max-w-md flex-1">
-          <div className="h-1 w-14 bg-brand-600 rounded-full mb-4" />
-          <h2 className="text-3xl font-semibold tracking-tight leading-tight mb-2">
-            {t("tagline")}
-          </h2>
-          <p className="text-slate-300 text-sm leading-relaxed">{t("blurb")}</p>
-          <div className="mt-5 grid grid-cols-2 gap-3 text-xs">
-            <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">{t("card.scorm")}</div>
-              <div className="text-slate-400">{t("card.scormSub")}</div>
-            </div>
-            <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">{t("card.auto")}</div>
-              <div className="text-slate-400">{t("card.autoSub")}</div>
-            </div>
-            <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">{t("card.cert")}</div>
-              <div className="text-slate-400">{t("card.certSub")}</div>
-            </div>
-            <div className="border border-white/10 rounded-lg p-3">
-              <div className="text-brand-400 font-semibold text-lg">{t("card.qr")}</div>
-              <div className="text-slate-400">{t("card.qrSub")}</div>
-            </div>
-          </div>
-        </div>
-        <div className="relative z-10 text-[11px] text-slate-500 tracking-wide">
-          © {new Date().getFullYear()} {tc("copyright")}
-        </div>
+    <div className="relative min-h-screen w-full overflow-hidden">
+      {/* Background image — supplied at public/login-bg.jpg */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: "url('/login-bg.png')" }}
+        aria-hidden
+      />
+      {/* Dark overlay for legibility */}
+      <div className="absolute inset-0 bg-slate-900/55" aria-hidden />
+
+      {/* Locale switcher — top right */}
+      <div className="absolute top-4 right-4 z-20">
+        <LocaleSwitcher nextPath="/login" />
       </div>
 
-      {/* Right — form */}
-      <div className="flex items-center justify-center p-6 bg-white relative">
-        <div className="absolute top-4 right-4">
-          <LocaleSwitcher nextPath="/login" />
+      {/* Foreground grid */}
+      <div className="relative z-10 min-h-screen grid lg:grid-cols-2 items-center px-6 py-10 lg:px-16 gap-8">
+        {/* Left — marketing overlay (hidden on small screens) */}
+        <div className="hidden lg:flex flex-col text-white max-w-xl">
+          <div className="text-xs tracking-[0.25em] uppercase text-slate-300 mb-3">
+            {t("subheading")}
+          </div>
+          <div className="h-1 w-14 bg-brand-600 rounded-full mb-5" />
+          <h2 className="text-3xl xl:text-4xl font-semibold leading-tight mb-4">
+            {t("tagline")}
+          </h2>
+          <p className="text-sm text-slate-200/90 leading-relaxed mb-6 max-w-md">
+            {t("blurb")}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {[t("card.scorm"), t("card.auto"), t("card.cert"), t("card.qr")].map(
+              (label) => (
+                <span
+                  key={label}
+                  className="inline-flex items-center rounded-full bg-white/10 backdrop-blur border border-white/15 px-3 py-1.5 text-xs text-white"
+                >
+                  {label}
+                </span>
+              ),
+            )}
+          </div>
+          <div className="mt-8 text-[11px] text-slate-300/80 tracking-wide">
+            © {new Date().getFullYear()} {tc("copyright")}
+          </div>
         </div>
-        <div className="w-full max-w-md">
-          <div className="lg:hidden flex flex-col items-center mb-8">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/Logo.png" alt="Bon Air" className="h-20 w-auto mb-2" />
-          </div>
 
-          <div className="mb-8">
-            <div className="h-1 w-10 bg-brand-600 rounded-full mb-3" />
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-              {t("heading")}
-            </h1>
-            <p className="text-sm text-slate-500 mt-1">{t("subheading")}</p>
-          </div>
-
-          <form action={loginAction} className="space-y-4">
-            <div>
-              <label className="label">{t("email")}</label>
-              <input
-                name="email"
-                type="email"
-                required
-                autoComplete="username"
-                className="input mt-1"
-                placeholder={t("emailPlaceholder")}
-              />
-            </div>
-            <div>
-              <label className="label">{t("password")}</label>
-              <PasswordField name="password" required autoComplete="current-password" />
+        {/* Right — floating white card */}
+        <div className="flex justify-center lg:justify-end">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl px-8 py-8">
+            <div className="flex justify-center mb-6">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/Logo.png" alt="Bon Air" className="h-12 w-auto" />
             </div>
 
-            <RecaptchaV3 action="login" />
+            <div className="mb-6">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+                {t("heading")}
+              </h1>
+              <p className="text-sm text-slate-500 mt-1">{t("subheading")}</p>
+            </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 text-xs text-slate-600">
+            <form action={loginAction} className="space-y-4">
+              <div>
+                <label className="label">{t("email")}</label>
                 <input
-                  name="remember"
-                  type="checkbox"
-                  defaultChecked
-                  className="accent-brand-600"
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="username"
+                  className="input mt-1"
+                  placeholder={t("emailPlaceholder")}
                 />
-                {t("remember")}
-              </label>
+              </div>
+              <div>
+                <label className="label">{t("password")}</label>
+                <PasswordField name="password" required autoComplete="current-password" />
+              </div>
+
+              <RecaptchaV3 action="login" />
+
+              <div className="flex items-center">
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    name="remember"
+                    type="checkbox"
+                    defaultChecked
+                    className="accent-brand-600"
+                  />
+                  {t("remember")}
+                </label>
+              </div>
+
+              {okMsg && (
+                <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                  {okMsg}
+                </p>
+              )}
+
+              {errorMsg && (
+                <p className="text-xs text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
+                  {errorMsg}
+                </p>
+              )}
+
+              <button className="btn-dark w-full py-2.5">{t("submit")}</button>
+            </form>
+
+            <p className="text-center mt-5">
               <a
                 href="/forgot"
-                className="text-xs text-brand-700 hover:text-brand-800 underline"
+                className="text-xs font-medium text-brand-700 hover:text-brand-800 underline"
               >
                 {t("forgot")}
               </a>
-            </div>
+            </p>
 
-            {okMsg && (
-              <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-                {okMsg}
-              </p>
-            )}
-
-            {errorMsg && (
-              <p className="text-xs text-brand-700 bg-brand-50 border border-brand-200 rounded-lg px-3 py-2">
-                {errorMsg}
-              </p>
-            )}
-
-            <button className="btn-primary w-full py-2.5">{t("submit")}</button>
-          </form>
-
-          <p className="text-[11px] text-slate-400 text-center mt-8">{tc("support")}</p>
-          <p className="text-[11px] text-center mt-2">
-            <a href="/kvkk" className="text-slate-500 hover:text-brand-700 underline">
-              {t("privacy")}
-            </a>
-          </p>
+            <p className="text-[11px] text-slate-400 text-center mt-6">{tc("support")}</p>
+            <p className="text-[11px] text-center mt-2">
+              <a href="/kvkk" className="text-slate-500 hover:text-brand-700 underline">
+                {t("privacy")}
+              </a>
+            </p>
+          </div>
         </div>
       </div>
     </div>
