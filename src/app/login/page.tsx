@@ -95,7 +95,7 @@ export default async function LoginPage({
           <img
             src="/Logo-white.png"
             alt="Bon Air"
-            className="h-16 w-auto mb-8 select-none"
+            className="h-14 w-auto self-start mb-8 select-none"
           />
           <div className="text-xs tracking-[0.25em] uppercase text-slate-300 mb-3">
             {t("subheading")}
@@ -198,11 +198,19 @@ export default async function LoginPage({
             </p>
 
             <p className="text-[11px] text-slate-400 text-center mt-6">{tc("support")}</p>
-            <p className="text-[11px] text-center mt-2">
-              <a href="/kvkk" className="text-slate-500 hover:text-brand-700 underline">
-                {t("privacy")}
+            <div className="flex items-center justify-center gap-3 text-[11px] text-slate-500 mt-3">
+              <a href="/privacy" className="hover:text-slate-900 hover:underline">
+                {t("footer.privacy")}
               </a>
-            </p>
+              <span className="text-slate-300">·</span>
+              <a href="/terms" className="hover:text-slate-900 hover:underline">
+                {t("footer.terms")}
+              </a>
+              <span className="text-slate-300">·</span>
+              <a href="/contact" className="hover:text-slate-900 hover:underline">
+                {t("footer.contact")}
+              </a>
+            </div>
           </div>
         </div>
       </div>

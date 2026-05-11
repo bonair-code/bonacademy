@@ -87,7 +87,12 @@
       "reset": "Your password has been updated. Sign in with your new password.",
       "setup": "Administrator account created. Sign in to continue."
     },
-    "privacy": "Privacy Notice"
+    "privacy": "Privacy Notice",
+    "footer": {
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Use",
+      "contact": "Contact"
+    }
   },
   "forgot": {
     "heading": "Forgot Password",

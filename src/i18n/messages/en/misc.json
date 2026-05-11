@@ -106,6 +106,106 @@
       },
       "backToLogin": "← Back to sign-in"
     },
+    "privacy": {
+      "metaTitle": "Privacy Policy — BonAcademy",
+      "title": "Privacy Policy",
+      "lastUpdated": "Last updated: {date}",
+      "intro": "BonAcademy is the internal training-management system of Bon Air Havacılık Sanayi ve Ticaret A.Ş. This policy summarises our general approach to employee personal data. For the formal disclosure required under the Turkish KVKK, please see the ",
+      "kvkkLink": "KVKK Privacy Notice",
+      "introCont": " page.",
+      "sections": {
+        "collection": {
+          "heading": "1. Data We Collect",
+          "body": "We process only work-related data: identity, corporate e-mail, department/role, training & exam records, audit logs (sign-in time, IP address)."
+        },
+        "use": {
+          "heading": "2. Purposes of Use",
+          "body": "Data is used to plan mandatory training, issue certificates, meet aviation regulatory obligations (SHGM/EASA) and ensure information security. We do not process data for marketing."
+        },
+        "sharing": {
+          "heading": "3. Third Parties",
+          "body": "Data is shared with infrastructure providers (Vercel, Neon, Microsoft 365) and a security-verification provider (Google reCAPTCHA) under contractual safeguards. Data is never sold to advertisers or analytics third parties."
+        },
+        "retention": {
+          "heading": "4. Retention",
+          "body": "Training and certification records are kept for the period required by aviation regulations (typically employment + 10 years). Audit logs are kept for at least 1 year."
+        },
+        "security": {
+          "heading": "5. Security",
+          "body": "Data is transmitted over encrypted connections (HTTPS); access is role-restricted. Passwords are hashed with bcrypt."
+        },
+        "rights": {
+          "heading": "6. Your Rights",
+          "body": "To access, correct or delete your data, contact "
+        },
+        "contact": {
+          "heading": "7. Contact",
+          "body": "For privacy questions, contact "
+        }
+      },
+      "backToLogin": "← Back to sign-in"
+    },
+    "terms": {
+      "metaTitle": "Terms of Use — BonAcademy",
+      "title": "Terms of Use",
+      "lastUpdated": "Last updated: {date}",
+      "intro": "These Terms of Use apply to Bon Air employees accessing the BonAcademy internal training-management system. By using the platform you agree to these terms.",
+      "sections": {
+        "scope": {
+          "heading": "1. Scope",
+          "body": "BonAcademy is an internal Learning Management System (LMS) of Bon Air Havacılık Sanayi ve Ticaret A.Ş. and is reserved for designated users. The system may not be opened to third parties for commercial purposes."
+        },
+        "account": {
+          "heading": "2. Account Responsibility",
+          "body": "You are responsible for the security of your account. Do not share your password. Report suspected unauthorised access to IT support immediately."
+        },
+        "use": {
+          "heading": "3. Acceptable Use",
+          "body": "Use the system only for assigned training, exams and certification. Automated scraping, reverse engineering, unauthorised data extraction, and any activity that may affect other users are prohibited."
+        },
+        "records": {
+          "heading": "4. Training Records",
+          "body": "Training, exam and certification records are kept per aviation regulations. Both the user and the manager are jointly responsible for their accuracy and currency."
+        },
+        "ip": {
+          "heading": "5. Intellectual Property",
+          "body": "All platform content (SCORM packages, question banks, certificate templates, brand assets) belongs to Bon Air or its licensors. No reproduction or distribution is permitted without consent."
+        },
+        "termination": {
+          "heading": "6. Termination of Access",
+          "body": "Access may be terminated upon end of employment, role change, or breach of these terms. Records required by regulation will continue to be retained."
+        },
+        "law": {
+          "heading": "7. Governing Law",
+          "body": "These terms are governed by Turkish law. The courts and enforcement offices of Istanbul shall have jurisdiction over any disputes."
+        }
+      },
+      "backToLogin": "← Back to sign-in"
+    },
+    "contact": {
+      "metaTitle": "Contact — BonAcademy",
+      "title": "Contact",
+      "intro": "Use the channels below for any BonAcademy-related queries.",
+      "sections": {
+        "company": {
+          "heading": "Company",
+          "name": "Bon Air Havacılık Sanayi ve Ticaret A.Ş."
+        },
+        "support": {
+          "heading": "IT Support",
+          "body": "For technical issues with the platform: "
+        },
+        "kvkk": {
+          "heading": "KVKK / Privacy",
+          "body": "For personal-data requests and privacy questions: "
+        },
+        "training": {
+          "heading": "Training Administration",
+          "body": "For assignments, plans or content requests, contact your department manager or HR."
+        }
+      },
+      "backToLogin": "← Back to sign-in"
+    },
     "forbidden": {
       "title": "403 — Access denied",
       "body": "You do not have permission to view this page."

@@ -84,7 +84,7 @@ export async function LocaleSwitcher({
             aria-pressed={active}
             className={
               active
-                ? "px-3 py-1 rounded-full bg-teal-500 text-white font-semibold transition-colors"
+                ? "px-3 py-1 rounded-full bg-slate-900 text-white font-semibold transition-colors"
                 : "px-3 py-1 rounded-full text-slate-600 font-semibold hover:text-slate-900 transition-colors"
             }
           >

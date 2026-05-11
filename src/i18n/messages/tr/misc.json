@@ -106,6 +106,106 @@
       },
       "backToLogin": "← Giriş sayfasına dön"
     },
+    "privacy": {
+      "metaTitle": "Gizlilik Politikası — BonAcademy",
+      "title": "Gizlilik Politikası",
+      "lastUpdated": "Son güncelleme: {date}",
+      "intro": "BonAcademy, Bon Air Havacılık Sanayi ve Ticaret A.Ş.'nin iç eğitim yönetim sistemidir. Bu politika çalışan kişisel verilerine genel yaklaşımımızı özetler. KVKK kapsamındaki yasal aydınlatma metni için ",
+      "kvkkLink": "KVKK Aydınlatma Metni",
+      "introCont": " sayfasını inceleyin.",
+      "sections": {
+        "collection": {
+          "heading": "1. Topladığımız Veriler",
+          "body": "Yalnızca işle ilgili veriler işlenir: kimlik bilgileri, kurumsal e-posta, departman/rol, eğitim ve sınav kayıtları, denetim logları (giriş zamanı, IP adresi)."
+        },
+        "use": {
+          "heading": "2. Kullanım Amaçları",
+          "body": "Veriler zorunlu eğitimlerin planlanması, sertifika üretimi, mevzuat uyumu (SHGM/EASA) ve bilgi güvenliği için kullanılır. Pazarlama amaçlı işleme yapılmaz."
+        },
+        "sharing": {
+          "heading": "3. Üçüncü Taraflar",
+          "body": "Veriler; altyapı sağlayıcılar (Vercel, Neon, Microsoft 365) ve güvenlik doğrulaması (Google reCAPTCHA) ile sözleşmesel güvenceler çerçevesinde paylaşılır. Reklam ya da analitik amacıyla satılmaz."
+        },
+        "retention": {
+          "heading": "4. Saklama",
+          "body": "Eğitim ve sertifika kayıtları havacılık mevzuatının gerektirdiği süre boyunca (tipik olarak istihdam süresi + 10 yıl) saklanır. Audit loglar en az 1 yıl tutulur."
+        },
+        "security": {
+          "heading": "5. Güvenlik",
+          "body": "Veriler şifreli bağlantı (HTTPS) ile aktarılır, erişim rol bazlı sınırlandırılmıştır. Şifreler bcrypt ile hash'lenir."
+        },
+        "rights": {
+          "heading": "6. Haklarınız",
+          "body": "Verilerinize erişim, düzeltme ve silme talepleriniz için "
+        },
+        "contact": {
+          "heading": "7. İletişim",
+          "body": "Gizlilik ile ilgili sorularınız için "
+        }
+      },
+      "backToLogin": "← Giriş sayfasına dön"
+    },
+    "terms": {
+      "metaTitle": "Kullanım Koşulları — BonAcademy",
+      "title": "Kullanım Koşulları",
+      "lastUpdated": "Son güncelleme: {date}",
+      "intro": "Bu Kullanım Koşulları, BonAcademy iç eğitim yönetim sistemine erişen Bon Air çalışanları için geçerlidir. Sistemi kullanmaya başlamanız bu koşulları kabul ettiğiniz anlamına gelir.",
+      "sections": {
+        "scope": {
+          "heading": "1. Kapsam",
+          "body": "BonAcademy, Bon Air Havacılık Sanayi ve Ticaret A.Ş.'nin iç kullanımına yönelik bir Eğitim Yönetim Sistemi (LMS) olup yalnızca tanımlı kullanıcılar tarafından kullanılır. Sistem ticari amaçla üçüncü taraflara açılamaz."
+        },
+        "account": {
+          "heading": "2. Hesap Sorumluluğu",
+          "body": "Hesabınızın güvenliği size aittir. Şifrenizi kimseyle paylaşmayın. Şüpheli erişim durumunda BT destek ekibine ivedilikle bildirimde bulunun."
+        },
+        "use": {
+          "heading": "3. Kabul Edilebilir Kullanım",
+          "body": "Sistemi yalnızca tanımlı eğitim, sınav ve sertifikasyon süreçleri için kullanın. Otomatik kazıma, tersine mühendislik, izinsiz veri çıkarma ve diğer kullanıcıları etkileyebilecek hareketler yasaktır."
+        },
+        "records": {
+          "heading": "4. Eğitim Kayıtları",
+          "body": "Eğitim, sınav ve sertifika kayıtları havacılık mevzuatı gereği saklanır. Kayıtların doğruluğundan ve güncelliğinden hem kullanıcı hem yönetici müştereken sorumludur."
+        },
+        "ip": {
+          "heading": "5. Fikri Mülkiyet",
+          "body": "Platform'daki tüm içerik (SCORM paketleri, soru bankası, sertifika şablonları, marka unsurları) Bon Air veya lisans verenlerine aittir. İzinsiz çoğaltılamaz veya dağıtılamaz."
+        },
+        "termination": {
+          "heading": "6. Erişim Sonlandırma",
+          "body": "İş ilişkisinin sona ermesi, görev değişikliği veya bu koşulların ihlali durumunda hesap erişimi sonlandırılabilir. Mevzuat gereği saklanması gereken kayıtlar muhafaza edilmeye devam edilir."
+        },
+        "law": {
+          "heading": "7. Uygulanacak Hukuk",
+          "body": "Bu koşullar Türk Hukuku'na tabidir. Uyuşmazlıklarda İstanbul mahkemeleri ve icra daireleri yetkilidir."
+        }
+      },
+      "backToLogin": "← Giriş sayfasına dön"
+    },
+    "contact": {
+      "metaTitle": "İletişim — BonAcademy",
+      "title": "İletişim",
+      "intro": "BonAcademy ile ilgili sorularınız için aşağıdaki kanalları kullanabilirsiniz.",
+      "sections": {
+        "company": {
+          "heading": "Kurumsal",
+          "name": "Bon Air Havacılık Sanayi ve Ticaret A.Ş."
+        },
+        "support": {
+          "heading": "BT Destek",
+          "body": "Platform ile ilgili teknik sorunlar için: "
+        },
+        "kvkk": {
+          "heading": "KVKK / Gizlilik",
+          "body": "Kişisel veri başvuruları ve gizlilik soruları için: "
+        },
+        "training": {
+          "heading": "Eğitim Yönetimi",
+          "body": "Atamalar, planlar veya içerik talepleri için departman yöneticinize ya da İK birimine ulaşın."
+        }
+      },
+      "backToLogin": "← Giriş sayfasına dön"
+    },
     "forbidden": {
       "title": "403 — Yetkisiz",
       "body": "Bu sayfaya erişim yetkiniz yok."

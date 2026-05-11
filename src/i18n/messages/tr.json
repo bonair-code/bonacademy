@@ -87,7 +87,12 @@
       "reset": "Şifreniz güncellendi. Yeni şifrenizle giriş yapın.",
       "setup": "Yönetici hesabı oluşturuldu. Devam etmek için giriş yapın."
     },
-    "privacy": "KVKK Aydınlatma Metni"
+    "privacy": "KVKK Aydınlatma Metni",
+    "footer": {
+      "privacy": "Gizlilik Politikası",
+      "terms": "Kullanım Koşulları",
+      "contact": "İletişim"
+    }
   },
   "forgot": {
     "heading": "Şifremi Unuttum",
