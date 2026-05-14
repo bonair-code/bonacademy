@@ -73,7 +73,33 @@ export async function handleTrainingRecords(req: NextRequest) {
 
   const records = rows.map((r) => {
     const latestExam = r.examAttempts[0] ?? null;
+    // BonAcademy'de kurs kodu alanı yok — şimdilik başlığı kod olarak kullan.
+    const code = r.plan.course.title;
+    const dueDateStr = r.dueDate.toISOString().slice(0, 10);
+    const completedStr = r.completedAt?.toISOString().slice(0, 10) ?? null;
+    // BonFlight'ın CSV hücre modeli: geçerlilik tarihi / marker / boş.
+    // Tamamlandıysa tamamlanma tarihi, değilse son tarih.
+    const value = completedStr ?? dueDateStr;
+    const certificate = r.certificate
+      ? {
+          serialNo: r.certificate.serialNo,
+          issuedAt: r.certificate.issuedAt.toISOString(),
+          verifyUrl: `${APP_URL}/verify/${r.certificate.serialNo}`,
+        }
+      : null;
+    const exam = latestExam
+      ? {
+          attemptNo: latestExam.attemptNo,
+          score: latestExam.score,
+          passed: latestExam.passed,
+        }
+      : null;
+
+    // NOT: Bu kayıt geçici olarak hem iç içe hem düz alan adlarıyla
+    // (çoklu konvansiyon) döndürülüyor — BonFlight'ın hangi şekli beklediği
+    // netleşene kadar tanı amaçlı. Sözleşme netleşince sadeleştirilecek.
     return {
+      // --- iç içe (orijinal) ---
       assignmentId: r.id,
       employee: {
         id: r.user.id,
@@ -86,28 +112,51 @@ export async function handleTrainingRecords(req: NextRequest) {
       training: {
         courseId: r.plan.course.id,
         courseTitle: r.plan.course.title,
+        courseCode: code,
         planId: r.planId,
       },
+      latestExam: exam,
+      certificate,
+      // --- düz: kimlik ---
+      email: r.user.email,
+      employeeEmail: r.user.email,
+      employee_email: r.user.email,
+      employee_no: null,
+      employeeNo: null,
+      name: r.user.name,
+      employeeName: r.user.name,
+      employee_name: r.user.name,
+      department: r.user.department?.name ?? null,
+      jobTitles: r.user.jobTitles.map((j) => j.jobTitle.name),
+      isActive: r.user.isActive,
+      // --- düz: eğitim/kurs ---
+      code,
+      courseCode: code,
+      course_code: code,
+      trainingCode: code,
+      training_code: code,
+      courseTitle: r.plan.course.title,
+      courseName: r.plan.course.title,
+      course: r.plan.course.title,
+      courseId: r.plan.course.id,
+      planId: r.planId,
+      // --- düz: durum & tarihler ---
       status: r.status,
       cycleNumber: r.cycleNumber,
       revisionNumber: r.revisionNumber,
       dueDate: r.dueDate.toISOString(),
+      due_date: dueDateStr,
       startedAt: r.startedAt?.toISOString() ?? null,
       completedAt: r.completedAt?.toISOString() ?? null,
-      latestExam: latestExam
-        ? {
-            attemptNo: latestExam.attemptNo,
-            score: latestExam.score,
-            passed: latestExam.passed,
-          }
-        : null,
-      certificate: r.certificate
-        ? {
-            serialNo: r.certificate.serialNo,
-            issuedAt: r.certificate.issuedAt.toISOString(),
-            verifyUrl: `${APP_URL}/verify/${r.certificate.serialNo}`,
-          }
-        : null,
+      completed_at: completedStr,
+      completionDate: completedStr,
+      completion_date: completedStr,
+      validUntil: value,
+      valid_until: value,
+      expiryDate: value,
+      expiry_date: value,
+      value,
+      date: value,
     };
   });
 
@@ -117,12 +166,24 @@ export async function handleTrainingRecords(req: NextRequest) {
     summary[r.status] = (summary[r.status] ?? 0) + 1;
   }
 
+  // Tanı amaçlı çoklu-konvansiyon yanıt: dizi birçok yaygın anahtar altında.
+  // BonFlight'ın "Alındı: 0" sorunu yanıt şekli uyumsuzluğundan; hangi anahtarı
+  // okuduğu netleşince yanıt tek temiz şekle indirilecek.
   return NextResponse.json(
     {
+      ok: true,
+      success: true,
       generatedAt: new Date().toISOString(),
       count: records.length,
       summary,
       records,
+      data: records,
+      items: records,
+      results: records,
+      rows: records,
+      trainingRecords: records,
+      training_records: records,
+      assignments: records,
     },
     { headers: { "Cache-Control": "no-store" } },
   );
