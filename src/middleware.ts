@@ -14,6 +14,7 @@ const PUBLIC_PATHS = [
   "/icon",
   "/api/health",
   "/api/cron",
+  "/api/integration",
   "/setup",
 ];
 
