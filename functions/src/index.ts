@@ -1,0 +1,1082 @@
+import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { initializeApp } from "firebase-admin/app";
+import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { getAuth } from "firebase-admin/auth";
+import { getStorage } from "firebase-admin/storage";
+import { randomBytes } from "crypto";
+
+// firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
+// giriş noktaları kullanılıyor.
+initializeApp();
+
+// CUSTOMER: dışarıdan eğitim alan müşteri. Personel değil — yetki kapsamı
+// taşımaz, kurum uyum raporlarına girmez, yalnızca kendi eğitimine erişir.
+const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
+
+/**
+ * Admin, yeni bir kullanıcı (Auth hesabı + users/{uid} profili) oluşturur.
+ * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
+ */
+export const createUser = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
+  if (caller.data()?.role !== "ADMIN")
+    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+
+  const d = req.data || {};
+  const email = String(d.email || "").trim().toLowerCase();
+  const name = String(d.name || "").trim();
+  if (!email || !name) throw new HttpsError("invalid-argument", "E-posta ve ad zorunlu.");
+  const role = ROLES.includes(d.role) ? d.role : "USER";
+  const departmentId = d.departmentId ? String(d.departmentId) : null;
+  const jobTitleIds: string[] = Array.isArray(d.jobTitleIds) ? d.jobTitleIds.map(String) : [];
+  // Kapsam altındaki tikli alt yetkiler — kendi gerekli eğitimlerini getirir.
+  const subScopeIds: string[] = Array.isArray(d.subScopeIds) ? d.subScopeIds.map(String) : [];
+  // Sertifikada "PLACE & DATE of BIRTH" satırı için gerekli.
+  const birthPlace = d.birthPlace ? String(d.birthPlace).trim() : null;
+  const birthDate = d.birthDate ? String(d.birthDate).trim() : null; // YYYY-MM-DD
+  // Müşteri hangi kuruma bağlı — "X şirketinin aldığı eğitimler" raporu için.
+  const company = d.company ? String(d.company).trim() : null;
+  const password = d.password ? String(d.password) : randomBytes(9).toString("base64") + "Aa1!";
+
+  let userRecord;
+  try {
+    userRecord = await getAuth().createUser({ email, password, displayName: name });
+  } catch (e) {
+    throw new HttpsError("already-exists", "Kullanıcı oluşturulamadı: " + (e as Error).message);
+  }
+  // Rolü custom claim'e de yaz (ileride claim-tabanlı kurallara geçiş için hazır).
+  await getAuth().setCustomUserClaims(userRecord.uid, { role, departmentId });
+  await getFirestore().doc(`users/${userRecord.uid}`).set({
+    email,
+    name,
+    role,
+    departmentId,
+    jobTitleIds,
+    subScopeIds,
+    birthPlace,
+    birthDate,
+    company,
+    // Admin geçici şifre verdi; kullanıcı ilk girişte değiştirmek zorunda.
+    mustChangePassword: true,
+    isActive: true,
+    locale: "tr",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { uid: userRecord.uid };
+});
+
+/** Çağıranın ADMIN olduğunu doğrular, değilse hata fırlatır. */
+async function assertAdmin(uid: string | undefined) {
+  if (!uid) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const caller = await getFirestore().doc(`users/${uid}`).get();
+  if (caller.data()?.role !== "ADMIN")
+    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+}
+
+/**
+ * Kullanıcı profilini günceller. Rol/departman değişince custom claim'i de
+ * yeniler — aksi halde token eski rolü taşımaya devam eder (Storage kuralları
+ * ve arayüz claim'e bakıyor).
+ */
+export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
+  await assertAdmin(req.auth?.uid);
+
+  const uid = String(req.data?.uid || "");
+  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  const snap = await getFirestore().doc(`users/${uid}`).get();
+  if (!snap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+
+  const d = req.data || {};
+  const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  if (typeof d.name === "string" && d.name.trim()) patch.name = d.name.trim();
+  if (ROLES.includes(d.role)) patch.role = d.role;
+  if (d.departmentId !== undefined) patch.departmentId = d.departmentId ? String(d.departmentId) : null;
+  if (Array.isArray(d.jobTitleIds)) patch.jobTitleIds = d.jobTitleIds.map(String);
+  if (Array.isArray(d.subScopeIds)) patch.subScopeIds = d.subScopeIds.map(String);
+  if (d.birthPlace !== undefined) patch.birthPlace = d.birthPlace ? String(d.birthPlace).trim() : null;
+  if (d.birthDate !== undefined) patch.birthDate = d.birthDate ? String(d.birthDate).trim() : null;
+  if (d.company !== undefined) patch.company = d.company ? String(d.company).trim() : null;
+  if (typeof d.isActive === "boolean") patch.isActive = d.isActive;
+
+  await snap.ref.update(patch);
+
+  const role = (patch.role as string) ?? snap.data()?.role ?? "USER";
+  const departmentId =
+    patch.departmentId !== undefined ? patch.departmentId : snap.data()?.departmentId ?? null;
+  await getAuth().setCustomUserClaims(uid, { role, departmentId });
+
+  // Pasifleştirilen kullanıcı Auth tarafında da giriş yapamasın.
+  if (typeof d.isActive === "boolean") {
+    await getAuth().updateUser(uid, { disabled: !d.isActive });
+  }
+  return { ok: true };
+});
+
+/**
+ * Kullanıcıyı siler: Auth hesabı + users/{uid} profili. Eğitim kayıtları
+ * (assignments/certificates) BİLEREK silinmez — havacılık eğitim kayıtları
+ * saklanmak zorunda; kayıt silmek gerekirse ayrı ve bilinçli bir iş olmalı.
+ */
+export const deleteUser = onCall({ region: "europe-west3" }, async (req) => {
+  await assertAdmin(req.auth?.uid);
+
+  const uid = String(req.data?.uid || "");
+  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  if (uid === req.auth!.uid)
+    throw new HttpsError("failed-precondition", "Kendi hesabını silemezsin.");
+
+  try {
+    await getAuth().deleteUser(uid);
+  } catch {
+    // Auth kaydı zaten yoksa profili temizlemeye devam et.
+  }
+  await getFirestore().doc(`users/${uid}`).delete();
+  return { ok: true };
+});
+
+/**
+ * Kursu yayınlar ve revizyonu bir artırır. Her yayın, o anki kurs halinin
+ * anlık kopyasını courses/{cid}/revisions/{n} altına yazar — güvenlik kuralları
+ * bu koleksiyona client yazmasına izin vermiyor (denetim izi bozulmasın).
+ */
+export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const db = getFirestore();
+  const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
+
+  const courseId = String(req.data?.courseId || "");
+  if (!courseId) throw new HttpsError("invalid-argument", "courseId gerekli.");
+  const ref = db.doc(`courses/${courseId}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Kurs bulunamadı.");
+  const c = snap.data() as any;
+
+  // Admin her kursu, eğitmen yalnızca sahibi olduğu kursu yayınlayabilir.
+  const isOwner = c.ownerInstructorId === req.auth.uid;
+  if (caller?.role !== "ADMIN" && !isOwner)
+    throw new HttpsError("permission-denied", "Bu kursu yayınlama yetkin yok.");
+
+  // Revizyon numarası ELLE girilir (kurs formundaki Revision No alanı).
+  // Function numarayı üretmez; yalnızca o anki halin kopyasını arşivler.
+  const revisionNo = String(c.revisionNo ?? "").trim();
+  if (!revisionNo)
+    throw new HttpsError(
+      "failed-precondition",
+      "Revision No boş — yayınlamadan önce General Information'da doldur."
+    );
+  const note = req.data?.note ? String(req.data.note).trim().slice(0, 500) : null;
+
+  const [sections, questions] = await Promise.all([
+    db.collection(`courses/${courseId}/sections`).get(),
+    db.collection(`courses/${courseId}/questions`).get(),
+  ]);
+
+  // Append-only arşiv: aynı revizyon numarası tekrar yayınlanabilir, her yayın
+  // ayrı kayıt olur — denetim izi bozulmasın.
+  await db.collection(`courses/${courseId}/revisions`).add({
+    revisionNo,
+    revisionDate: c.revisionDate ?? null,
+    note,
+    publishedById: req.auth.uid,
+    publishedByName: caller?.name || "",
+    publishedAt: FieldValue.serverTimestamp(),
+    // Anlık kopya — kurs sonradan değişse de bu revizyonun içeriği sabit kalır.
+    snapshot: {
+      title: c.title ?? "",
+      category: c.category ?? null,
+      durationHours: c.durationHours ?? null,
+      delivery: c.delivery ?? "ONLINE",
+      recurrenceEvery: c.recurrenceEvery ?? null,
+      recurrenceUnit: c.recurrenceUnit ?? "NONE",
+      revisionNo,
+      revisionDate: c.revisionDate ?? null,
+      passingScore: c.passingScore ?? null,
+      isActive: c.isActive ?? false,
+      exam: c.exam ?? null,
+      sectionCount: sections.size,
+      questionCount: questions.size,
+      sectionTitles: sections.docs
+        .map((d) => ({ order: (d.data() as any).order ?? 0, title: (d.data() as any).title ?? "" }))
+        .sort((a, b) => a.order - b.order)
+        .map((x) => x.title),
+    },
+  });
+
+  await ref.update({
+    lastPublishedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return { revisionNo };
+});
+
+/**
+ * Bir personele eğitim(ler) atar. Atama durum geçişleri güvenlik gereği
+ * yalnızca Function tarafından yazılır. Deterministik id ({userId}_{courseId})
+ * → aynı eğitim ikinci kez atanmaz (idempotent).
+ */
+export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
+  const callerRole = caller.data()?.role;
+  if (callerRole !== "ADMIN" && callerRole !== "MANAGER")
+    throw new HttpsError("permission-denied", "Bu işlem admin/müdür içindir.");
+
+  const userId = String(req.data?.userId || "");
+  const courseIds: string[] = Array.isArray(req.data?.courseIds)
+    ? req.data.courseIds.map(String)
+    : [];
+  if (!userId || courseIds.length === 0)
+    throw new HttpsError("invalid-argument", "userId ve courseIds gerekli.");
+
+  const db = getFirestore();
+  const userSnap = await db.doc(`users/${userId}`).get();
+  if (!userSnap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+  const userDepartmentId = userSnap.data()?.departmentId ?? null;
+
+  const now = Timestamp.now();
+  const dueDate = Timestamp.fromMillis(now.toMillis() + 30 * 24 * 3600 * 1000);
+
+  let created = 0;
+  for (const courseId of courseIds) {
+    const courseSnap = await db.doc(`courses/${courseId}`).get();
+    if (!courseSnap.exists) continue;
+    const id = `${userId}_${courseId}`;
+    const ref = db.doc(`assignments/${id}`);
+    if ((await ref.get()).exists) continue; // idempotent
+    await ref.set({
+      userId,
+      userDepartmentId,
+      courseId,
+      courseTitle: courseSnap.data()?.title || "",
+      status: "PENDING",
+      cycleNumber: 1,
+      sectionsDone: [],
+      dueDate,
+      triggeredBy: "MANAGER_REQUESTED",
+      triggeredById: req.auth.uid,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    created++;
+  }
+  return { created };
+});
+
+/**
+ * Dışarıdan alınan eğitim, aynı kursun açık atamasını kapatır — kişi o eğitimi
+ * zaten aldıysa sistemde tekrar yapmasına gerek yok.
+ *
+ * BonAir sertifikası ÜRETİLMEZ: eğitimi biz vermedik, elimizde onların belgesi
+ * var. Durum COMPLETED ama completedVia = EXTERNAL olarak işaretlenir.
+ */
+export const closeAssignmentExternally = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const db = getFirestore();
+  const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
+  const role = caller?.role;
+  if (role !== "ADMIN" && role !== "MANAGER")
+    throw new HttpsError("permission-denied", "Bu işlem admin/müdür içindir.");
+
+  const userId = String(req.data?.userId || "");
+  const courseId = String(req.data?.courseId || "");
+  const externalTrainingId = req.data?.externalTrainingId
+    ? String(req.data.externalTrainingId)
+    : null;
+  if (!userId || !courseId)
+    throw new HttpsError("invalid-argument", "userId ve courseId gerekli.");
+
+  // Müdür yalnızca kendi departmanındaki personel için.
+  const target = (await db.doc(`users/${userId}`).get()).data();
+  if (role === "MANAGER" && target?.departmentId !== caller?.departmentId)
+    throw new HttpsError("permission-denied", "Bu personel senin departmanında değil.");
+
+  const ref = db.doc(`assignments/${userId}_${courseId}`);
+  const snap = await ref.get();
+  if (!snap.exists) return { closed: false, reason: "no-assignment" };
+
+  const a = snap.data() as any;
+  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+    return { closed: false, reason: "already-complete" };
+
+  await ref.update({
+    status: "COMPLETED",
+    completedAt: FieldValue.serverTimestamp(),
+    completedVia: "EXTERNAL",
+    externalTrainingId,
+  });
+  return { closed: true };
+});
+
+// ─────────────────────────────────────────────────────────────
+// ÖĞRENCI AKIŞI — ilerleme, sınav, sertifika (server-authoritative)
+// ─────────────────────────────────────────────────────────────
+
+async function loadOwnedAssignment(uid: string, assignmentId: string) {
+  const db = getFirestore();
+  const snap = await db.doc(`assignments/${assignmentId}`).get();
+  if (!snap.exists) throw new HttpsError("not-found", "Atama bulunamadı.");
+  const a = snap.data() as any;
+  if (a.userId !== uid) throw new HttpsError("permission-denied", "Bu atama sana ait değil.");
+  return { ref: snap.ref, a };
+}
+
+async function courseQuestions(courseId: string) {
+  const snap = await getFirestore().collection(`courses/${courseId}/questions`).get();
+  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+}
+
+type ExamInfo = { required: boolean; score?: number | null; passingScore?: number | null };
+
+/**
+ * TEK sertifika numarası kaynağı.
+ *
+ * Eskiden iki ayrı seri vardı: online tamamlamalar `BA-00001`, sınıf eğitimi
+ * ise oturumda elle girilen ön ek + başlangıç numarası. Aynı sicilde iki farklı
+ * numaralandırma denetimde savunulamaz — artık ikisi de buradan alıyor.
+ *
+ * Biçim `counters/certificates` dokümanından gelir:
+ *   { prefix: "25", next: 144, pad: 3 }  →  "25-144"
+ * Ön ek boşsa yalnızca sayı üretilir. Numara transaction ile artar, aynı anda
+ * iki sertifika üretilse bile çakışmaz.
+ */
+async function nextSerialNo(count = 1): Promise<string[]> {
+  const db = getFirestore();
+  const ref = db.doc("counters/certificates");
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const d = (snap.data() as any) || {};
+    // Eski sayaç yalnızca `value` tutuyordu; ilk geçişte ondan devam et.
+    const start = Number(d.next ?? (d.value ?? 0) + 1) || 1;
+    const prefix = d.prefix === undefined ? "BA" : String(d.prefix ?? "");
+    const pad = Number(d.pad) || 3;
+    const out: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const n = start + i;
+      out.push(prefix ? `${prefix}-${String(n).padStart(pad, "0")}` : String(n));
+    }
+    tx.set(ref, { prefix, pad, next: start + count }, { merge: true });
+    return out;
+  });
+}
+
+async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo) {
+  const db = getFirestore();
+  const certRef = db.doc(`certificates/${assignmentId}`);
+  if ((await certRef.get()).exists) return;
+  const userSnap = await db.doc(`users/${a.userId}`).get();
+  const user = userSnap.data() || {};
+  const userName = user.name || "";
+
+  // Sertifika bir KAYITTIR: kurs sonradan düzenlense bile belge değişmemeli,
+  // bu yüzden gerekli tüm alanlar burada dondurulur.
+  const courseSnap = await db.doc(`courses/${a.courseId}`).get();
+  const course = courseSnap.data() || {};
+  let instructorName = "";
+  if (course.ownerInstructorId) {
+    const ins = await db.doc(`users/${course.ownerInstructorId}`).get();
+    instructorName = ins.data()?.name || "";
+  }
+  const org = (await db.doc("orgSettings/singleton").get()).data() || {};
+  const [serialNo] = await nextSerialNo();
+  const now = FieldValue.serverTimestamp();
+  await certRef.set({
+    assignmentId,
+    userId: a.userId,
+    userName,
+    // Müdürün kendi departmanının sertifikalarını okuyabilmesi için gerekli —
+    // güvenlik kuralı bu alana bakıyor.
+    userDepartmentId: a.userDepartmentId ?? null,
+    courseId: a.courseId,
+    courseTitle: a.courseTitle,
+    serialNo,
+    issuedAt: now,
+    // — dondurulan alanlar —
+    birthPlace: user.birthPlace ?? null,
+    birthDate: user.birthDate ?? null,
+    durationHours: course.durationHours ?? null,
+    // Hangi kurs revizyonunda eğitim alındığı — denetimde ilk sorulan şey.
+    // Kurs sonradan revize edilse bile bu belge o günkü sürümü gösterir.
+    courseRevisionNo: course.revisionNo ?? null,
+    courseRevisionDate: course.revisionDate ?? null,
+    // Online eğitimde imzalayan bir eğitmen YOK — belgeyi kurumun eğitim
+    // sistemi üretti. Kursu hazırlayan kişiyi imza hanesine yazmak yanıltıcı.
+    instructorName: null,
+    trainingStartedAt: a.startedAt ?? null,
+    trainingCompletedAt: a.completedAt ?? null,
+    examRequired: exam?.required ?? true,
+    examScore: exam?.score ?? null,
+    examPassingScore: exam?.passingScore ?? null,
+    heldIn: org.trainingLocation ?? "ONLINE",
+    organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
+    approvalNo: org.approvalNo ?? "TR.145.118",
+  });
+  await db.doc(`certVerify/${serialNo}`).set({
+    serialNo,
+    name: userName,
+    courseTitle: a.courseTitle,
+    issuedAt: now,
+  });
+}
+
+/** Bir bölümü tamamlar (sıralı zorunluluk kontrolüyle). Hepsi bitince sınav
+ *  varsa SECTIONS_DONE, yoksa COMPLETED + sertifika. */
+export const completeSection = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const { assignmentId, sectionId } = req.data || {};
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  if (a.status === "COMPLETED") return { status: "COMPLETED" };
+
+  const secSnap = await getFirestore()
+    .collection(`courses/${a.courseId}/sections`)
+    .orderBy("order")
+    .get();
+  const sections = secSnap.docs.map((d) => d.id);
+  if (!sections.includes(String(sectionId)))
+    throw new HttpsError("invalid-argument", "Geçersiz bölüm.");
+
+  const done: string[] = Array.isArray(a.sectionsDone) ? a.sectionsDone : [];
+  // Sıralı zorunluluk: bu bölüm, tamamlanmamış ilk bölüm olmalı.
+  const nextExpected = sections.find((s) => !done.includes(s));
+  if (nextExpected !== String(sectionId))
+    throw new HttpsError("failed-precondition", "Bölümleri sırayla tamamlamalısın.");
+
+  const newDone = [...done, String(sectionId)];
+  const allDone = sections.every((s) => newDone.includes(s));
+  let status = "IN_PROGRESS";
+  if (allDone) {
+    // Sınav yalnızca kurs sınav istiyorsa VE bankada soru varsa devreye girer.
+    // exam.required alanı eski kayıtlarda yok; o kurslarda sınav vardı sayılır.
+    const course = (await getFirestore().doc(`courses/${a.courseId}`).get()).data() as any;
+    const examRequired = course?.exam?.required ?? true;
+    const qs = examRequired ? await courseQuestions(a.courseId) : [];
+    status = qs.length > 0 ? "SECTIONS_DONE" : "COMPLETED";
+  }
+
+  await ref.update({
+    sectionsDone: newDone,
+    status,
+    // İlk bölüm tamamlanınca eğitimin başlangıcı damgalanır; sertifikadaki
+    // "On <başlangıç> - <bitiş>" satırı buna dayanıyor.
+    ...(a.startedAt ? {} : { startedAt: FieldValue.serverTimestamp() }),
+    ...(status === "COMPLETED" ? { completedAt: FieldValue.serverTimestamp() } : {}),
+  });
+  if (status === "COMPLETED")
+    await issueCertificateFor(String(assignmentId), a, { required: false });
+  return { status, sectionsDone: newDone };
+});
+
+/** Sınavı başlatır: soruları seçer, snapshot yazar, CEVAPSIZ döndürür. */
+export const startExam = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const { assignmentId } = req.data || {};
+  const { a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  if (a.status !== "SECTIONS_DONE" && a.status !== "EXAM_FAILED")
+    throw new HttpsError("failed-precondition", "Önce tüm bölümleri tamamla.");
+
+  const db = getFirestore();
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
+  const exam = course?.exam || { questionCount: 10, shuffle: true };
+  if (exam.required === false)
+    throw new HttpsError("failed-precondition", "Bu kursun sınavı yok.");
+  let qs = await courseQuestions(a.courseId);
+  if (qs.length === 0) throw new HttpsError("failed-precondition", "Kursta sınav sorusu yok.");
+  if (exam.shuffle) qs = qs.sort(() => Math.random() - 0.5);
+  qs = qs.slice(0, Math.min(exam.questionCount || 10, qs.length));
+
+  const attemptNo = ((a.examAttemptCount as number) || 0) + 1;
+  await db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`).set({
+    attemptNo,
+    questionIds: qs.map((q) => q.id),
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  // Cevapları çıkararak döndür.
+  return {
+    attemptNo,
+    passingScore: exam.passingScore || course?.passingScore || 70,
+    questions: qs.map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text })),
+    })),
+  };
+});
+
+/** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */
+export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const { assignmentId, attemptNo, answers } = req.data || {};
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  const db = getFirestore();
+
+  const sessRef = db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
+  const sess = (await sessRef.get()).data() as any;
+  if (!sess) throw new HttpsError("not-found", "Sınav oturumu yok.");
+  if (sess.submittedAt) throw new HttpsError("failed-precondition", "Bu deneme zaten gönderildi.");
+
+  const allQs = await courseQuestions(a.courseId);
+  const byId = new Map(allQs.map((q) => [q.id, q]));
+  const answerMap: Record<string, string> = answers || {};
+  let correct = 0;
+  const picked: string[] = sess.questionIds || [];
+  for (const qid of picked) {
+    const q = byId.get(qid);
+    if (!q) continue;
+    const correctOpt = (q.options || []).find((o: any) => o.isCorrect);
+    if (correctOpt && answerMap[qid] === correctOpt.id) correct++;
+  }
+  const score = picked.length ? Math.round((correct / picked.length) * 100) : 0;
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
+  const passingScore = course?.exam?.passingScore || course?.passingScore || 70;
+  const passed = score >= passingScore;
+
+  await sessRef.update({ submittedAt: FieldValue.serverTimestamp() });
+  await db.doc(`assignments/${assignmentId}/examAttempts/${attemptNo}`).set({
+    // userId olmadan güvenlik kuralı (isSelf(resource.data.userId)) sahibi bile
+    // reddediyordu.
+    userId: a.userId,
+    attemptNo,
+    score,
+    passed,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+
+  if (passed) {
+    await ref.update({
+      status: "COMPLETED",
+      examAttemptCount: attemptNo,
+      completedAt: FieldValue.serverTimestamp(),
+    });
+    await issueCertificateFor(String(assignmentId), a, {
+      required: true,
+      score,
+      passingScore,
+    });
+    return { passed, score, status: "COMPLETED" };
+  }
+  // Başarısız: 2. denemede baştan (bölümleri sıfırla), yoksa tekrar sınav.
+  if (attemptNo >= 2) {
+    await ref.update({ status: "IN_PROGRESS", sectionsDone: [], examAttemptCount: attemptNo });
+    return { passed, score, status: "RETAKE_REQUIRED" };
+  }
+  await ref.update({ status: "EXAM_FAILED", examAttemptCount: attemptNo });
+  return { passed, score, status: "EXAM_FAILED" };
+});
+
+/**
+ * Yüz yüze eğitim oturumunu kapatır ve katılımcılara sertifika üretir.
+ *
+ * Sertifika numarası oturumu planlarken verilen başlangıçtan sırayla dağıtılır
+ * (ör. 25-131, 25-132 …) — kağıt kayıtlarının devamı getirilebilsin diye.
+ * Katılımcı sistemde kayıtlıysa aynı kursun açık ataması da kapatılır.
+ */
+export const finishClassSession = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const db = getFirestore();
+  const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
+  if (caller?.role !== "ADMIN" && caller?.role !== "INSTRUCTOR")
+    throw new HttpsError("permission-denied", "Bu işlem admin/eğitmen içindir.");
+
+  const sessionId = String(req.data?.sessionId || "");
+  if (!sessionId) throw new HttpsError("invalid-argument", "sessionId gerekli.");
+
+  const sRef = db.doc(`classSessions/${sessionId}`);
+  const sSnap = await sRef.get();
+  if (!sSnap.exists) throw new HttpsError("not-found", "Oturum bulunamadı.");
+  const ses = sSnap.data() as any;
+  if (ses.status === "CLOSED")
+    throw new HttpsError("failed-precondition", "Bu oturum zaten kapatıldı.");
+
+  const attSnap = await db.collection(`classSessions/${sessionId}/attendees`).orderBy("signedAt").get();
+  const attendees = attSnap.docs.filter((d) => (d.data() as any).rejected !== true);
+  if (attendees.length === 0)
+    throw new HttpsError("failed-precondition", "Katılımcı yok — sertifika üretilemez.");
+
+  const org = (await db.doc("orgSettings/singleton").get()).data() || {};
+  // Numaralar merkezî sicilden, katılımcı sayısı kadar tek seferde alınır —
+  // araya başka bir sertifika girip seriyi bölemesin.
+  const serials = await nextSerialNo(attendees.length);
+  const now = FieldValue.serverTimestamp();
+
+  const results: { attendeeId: string; serialNo: string }[] = [];
+
+  /**
+   * Katılımcı → personel eşleşmesi BURADA yapılır.
+   *
+   * Eskiden QR formunda e-postadan eşleştirilmeye çalışılıyordu ama form
+   * girişsiz açıldığı için güvenlik kuralları `users` okumasına izin vermiyor;
+   * eşleşme sessizce boş kalıyor, dolayısıyla personelin ataması hiç
+   * kapanmıyordu. Sunucu tarafında ad (ve varsa e-posta) ile eşleştiriyoruz.
+   */
+  const norm = (s: unknown) => String(s ?? "").trim().toLocaleLowerCase("tr");
+  const usersSnap = await db.collection("users").get();
+  const userByName = new Map<string, string>();
+  const userByEmail = new Map<string, string>();
+  for (const u of usersSnap.docs) {
+    const x = u.data() as any;
+    if (x.name) userByName.set(norm(x.name), u.id);
+    if (x.email) userByEmail.set(norm(x.email), u.id);
+  }
+
+  for (let i = 0; i < attendees.length; i++) {
+    const d = attendees[i];
+    const a = d.data() as any;
+    const serialNo = serials[i];
+    if (!a.userId) {
+      const match = (a.email ? userByEmail.get(norm(a.email)) : null) ?? userByName.get(norm(a.fullName));
+      if (match) a.userId = match;
+    }
+
+    // Sertifika id'si oturum+katılımcıya bağlı → aynı oturum iki kez kapatılsa
+    // bile sertifika çiftlenmez.
+    const certId = `session_${sessionId}_${d.id}`;
+    await db.doc(`certificates/${certId}`).set({
+      sessionId,
+      attendeeId: d.id,
+      userId: a.userId ?? null,
+      userName: a.fullName ?? "",
+      birthPlace: a.birthPlace ?? null,
+      birthDate: a.birthDate ?? null,
+      courseId: ses.courseId ?? null,
+      courseTitle: ses.courseTitle ?? "",
+      serialNo,
+      issuedAt: now,
+      durationHours: ses.durationHours ?? null,
+      trainingStartedAt: ses.startDate ?? null,
+      trainingCompletedAt: ses.endDate ?? null,
+      heldIn: ses.location ?? "ONLINE",
+      // Sınıf eğitiminde imza hanesi EĞİTMENİN. Bu alan yazılmadığı için
+      // sınıf sertifikaları da "Online Training" olarak çıkıyordu.
+      instructorName: ses.instructorName ?? null,
+      organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
+      approvalNo: org.approvalNo ?? "TR.145.118",
+      examRequired: false,
+      examScore: null,
+      examPassingScore: null,
+      deliveryMode: "CLASSROOM",
+    });
+
+    await db.doc(`certVerify/${serialNo}`).set({
+      serialNo,
+      name: a.fullName ?? "",
+      courseTitle: ses.courseTitle ?? "",
+      issuedAt: now,
+    });
+
+    await d.ref.update({ certificateNo: serialNo });
+
+    // Personelse aynı kursun açık atamasını kapat.
+    if (a.userId && ses.courseId) {
+      const aRef = db.doc(`assignments/${a.userId}_${ses.courseId}`);
+      const aSnap = await aRef.get();
+      const cur = aSnap.data() as any;
+      if (aSnap.exists && cur?.status !== "COMPLETED" && cur?.status !== "EXAM_PASSED") {
+        await aRef.update({
+          status: "COMPLETED",
+          completedAt: now,
+          completedVia: "CLASSROOM",
+          classSessionId: sessionId,
+        });
+      }
+    }
+    results.push({ attendeeId: d.id, serialNo });
+  }
+
+  await sRef.update({
+    status: "CLOSED",
+    closedAt: now,
+    closedById: req.auth.uid,
+    certFirstNo: serials[0] ?? null,
+    certLastNo: serials.at(-1) ?? null,
+    issuedCount: results.length,
+  });
+
+  return { issued: results.length, first: results[0]?.serialNo, last: results.at(-1)?.serialNo };
+});
+
+const TYPES: Record<string, string> = {
+  html: "text/html; charset=utf-8",
+  htm: "text/html; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  json: "application/json; charset=utf-8",
+  xml: "application/xml; charset=utf-8",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  svg: "image/svg+xml",
+  webp: "image/webp",
+  ico: "image/x-icon",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  eot: "application/vnd.ms-fontobject",
+  pdf: "application/pdf",
+  swf: "application/x-shockwave-flash",
+};
+
+function typeFor(name: string): string {
+  const ext = name.split(".").pop()?.toLowerCase() || "";
+  return TYPES[ext] || "application/octet-stream";
+}
+
+/**
+ * SCORM / bölüm içeriklerini aynı-origin, DİZİN YAPISI korunarak servis eder.
+ * iframe içinde SCORM'un `res/index.html` → `./style.css` gibi göreli yolları
+ * doğru çözülsün diye gerekli. URL: /serveScormContent/content/<...>/index.html
+ * Eğitim materyali olduğu için şimdilik public (yol içindeki rastgele id ile
+ * korunuyor); ileride auth eklenebilir.
+ */
+export const serveScormContent = onRequest(
+  {
+    region: "europe-west3",
+    memory: "256MiB",
+    timeoutSeconds: 60,
+    cors: true,
+    invoker: "public",
+  },
+  async (req, res) => {
+    let p = decodeURIComponent(req.path || "");
+    /**
+     * Öncesindeki fonksiyon adı / rewrite prefixinden bağımsız: content/ ile
+     * başlat. Ayraçlı aranır ("/content/"), çünkü rewrite yolu
+     * "/scorm-content/content/..." biçiminde geliyor ve ayraçsız arama
+     * "scorm-content/" içindeki parçaya denk gelip yolu "content/content/..."
+     * yapıyordu — dosya hiçbir zaman bulunamıyordu.
+     */
+    const idx = p.indexOf("/content/");
+    if (idx >= 0) p = p.slice(idx + 1);
+    else if (!p.startsWith("content/")) {
+      res.status(400).send("path required (content/...)");
+      return;
+    }
+    // güvenlik: yalnızca content/ altını servis et, .. engelle
+    if (p.includes("..")) {
+      res.status(403).send("forbidden");
+      return;
+    }
+    try {
+      const file = getStorage().bucket().file(p);
+      const [exists] = await file.exists();
+      if (!exists) {
+        res.status(404).send("not found: " + p);
+        return;
+      }
+      res.set("Content-Type", typeFor(p));
+      res.set("Cache-Control", "public, max-age=3600");
+      res.set("Access-Control-Allow-Origin", "*");
+      file
+        .createReadStream()
+        .on("error", () => {
+          if (!res.headersSent) res.status(500).end();
+        })
+        .pipe(res);
+    } catch (e) {
+      res.status(500).send("error: " + (e as Error).message);
+    }
+  }
+);
+
+/**
+ * Admin geçersiz kılma: bölüm içeriği açılmadığı için kilitli kalan atamayı
+ * elle tamamlar. Personel eğitimi almış olabilir ama dosya yüklenmediği için
+ * "I completed this section" butonu açılmıyorsa tek çıkış yolu budur.
+ *
+ * Sınav bütünlüğü korunur: sınavı olan ve henüz geçilmemiş bir kurs bu yolla
+ * kapatılamaz — admin sınav sonucu uyduramaz.
+ *
+ * Denetim izi zorunlu: kim, ne zaman, hangi gerekçeyle kapattı hem atamaya
+ * hem sertifikaya yazılır.
+ */
+export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const db = getFirestore();
+  const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
+  if (caller?.role !== "ADMIN")
+    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+
+  const assignmentId = String(req.data?.assignmentId || "");
+  const reason = String(req.data?.reason || "").trim();
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId gerekli.");
+  if (reason.length < 5)
+    throw new HttpsError("invalid-argument", "Gerekçe zorunlu (en az 5 karakter).");
+
+  const ref = db.doc(`assignments/${assignmentId}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Atama bulunamadı.");
+  const a = snap.data() as any;
+  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+    return { closed: false, reason: "already-complete" };
+
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() || {};
+  const examRequired = course.exam?.required !== false;
+  if (examRequired) {
+    const attempts = await db
+      .collection(`assignments/${assignmentId}/examAttempts`)
+      .where("passed", "==", true)
+      .limit(1)
+      .get();
+    if (attempts.empty)
+      throw new HttpsError(
+        "failed-precondition",
+        "Bu kursun sınavı var ve henüz geçilmemiş. Sınav sonucu elle kapatılamaz — " +
+          "personel sınavı almalı."
+      );
+  }
+
+  const override = {
+    completedVia: "ADMIN_OVERRIDE",
+    overrideReason: reason.slice(0, 500),
+    overrideById: req.auth.uid,
+    overrideByName: caller?.name || "",
+    overrideAt: FieldValue.serverTimestamp(),
+  };
+  await ref.update({
+    status: "COMPLETED",
+    completedAt: FieldValue.serverTimestamp(),
+    startedAt: a.startedAt ?? FieldValue.serverTimestamp(),
+    ...override,
+  });
+
+  const fresh = (await ref.get()).data() as any;
+  await issueCertificateFor(assignmentId, fresh, {
+    required: examRequired,
+    score: null,
+    passingScore: course.exam?.passingScore ?? null,
+  });
+  // Sertifikada da izi bırak — denetçi belgeden geriye gidebilsin.
+  await db.doc(`certificates/${assignmentId}`).set(
+    { issuedVia: "ADMIN_OVERRIDE", overrideReason: override.overrideReason },
+    { merge: true }
+  );
+  return { closed: true };
+});
+
+/**
+ * Admin, herhangi bir kullanıcının şifresini sıfırlar.
+ * Yeni şifre geçici sayılır: `mustChangePassword` işaretlenir, kullanıcı ilk
+ * girişte kendi şifresini belirlemek zorunda kalır — böylece adminin verdiği
+ * şifre kalıcı olmaz.
+ *
+ * Kim, kime, ne zaman sıfırladı kullanıcı kaydına yazılır.
+ */
+export const setUserPassword = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const db = getFirestore();
+  const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
+  if (caller?.role !== "ADMIN")
+    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+
+  const uid = String(req.data?.uid || "");
+  const password = String(req.data?.password || "");
+  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  if (password.length < 6)
+    throw new HttpsError("invalid-argument", "Şifre en az 6 karakter olmalı.");
+
+  const target = await db.doc(`users/${uid}`).get();
+  if (!target.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+
+  try {
+    await getAuth().updateUser(uid, { password });
+  } catch (e) {
+    throw new HttpsError("internal", "Şifre değiştirilemedi: " + (e as Error).message);
+  }
+
+  await db.doc(`users/${uid}`).update({
+    mustChangePassword: true,
+    passwordResetAt: FieldValue.serverTimestamp(),
+    passwordResetById: req.auth.uid,
+    passwordResetByName: caller?.name || "",
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true, email: target.data()?.email ?? null };
+});
+
+/**
+ * Geçmiş sertifikaların içe aktarımı.
+ *
+ * Kâğıt/Excel sicildeki kayıtlar sisteme girilir ki numaralandırma oradan
+ * devam etsin ve Training Follow-Up geçmişi görsün. `certificates` koleksiyonu
+ * client'a kapalı olduğu için buradan yazılır.
+ *
+ * Eşleştirme: personel önce e-posta, yoksa tam ad ile; eğitim kurs adıyla.
+ * Eşleşmeyen satır YİNE de sicile yazılır (sicil eksiksiz olmalı) ama
+ * `userId`/`courseId` boş kalır ve sonuçta ayrıca raporlanır — o satırlar
+ * kimsenin eğitim açığını kapatmaz.
+ */
+export const importCertificates = onCall({ region: "europe-west3" }, async (req) => {
+  await assertAdmin(req.auth?.uid);
+  const db = getFirestore();
+
+  const rows: any[] = Array.isArray(req.data?.rows) ? req.data.rows : [];
+  if (rows.length === 0) throw new HttpsError("invalid-argument", "Satır yok.");
+  if (rows.length > 500)
+    throw new HttpsError("invalid-argument", "Tek seferde en fazla 500 satır.");
+
+  const org = (await db.doc("orgSettings/singleton").get()).data() || {};
+  const norm = (s: unknown) => String(s ?? "").trim().toLocaleLowerCase("tr");
+  const [usersSnap, coursesSnap] = await Promise.all([
+    db.collection("users").get(),
+    db.collection("courses").get(),
+  ]);
+  const byEmail = new Map<string, any>();
+  const byName = new Map<string, any>();
+  for (const d of usersSnap.docs) {
+    const u = { id: d.id, ...(d.data() as any) };
+    if (u.email) byEmail.set(norm(u.email), u);
+    if (u.name) byName.set(norm(u.name), u);
+  }
+  const courseByTitle = new Map<string, any>();
+  for (const d of coursesSnap.docs) {
+    const c = { id: d.id, ...(d.data() as any) };
+    if (c.title) courseByTitle.set(norm(c.title), c);
+  }
+
+  const ts = (iso: unknown) => {
+    const s = String(iso ?? "").trim();
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? null : Timestamp.fromDate(d);
+  };
+
+  const results: { serialNo: string; ok: boolean; user: boolean; course: boolean; error?: string }[] =
+    [];
+  let maxNo = 0;
+
+  for (const r of rows) {
+    const serialNo = String(r.serialNo ?? "").trim();
+    if (!serialNo) {
+      results.push({ serialNo: "", ok: false, user: false, course: false, error: "No number" });
+      continue;
+    }
+    const user = r.email ? byEmail.get(norm(r.email)) : byName.get(norm(r.name));
+    const course = courseByTitle.get(norm(r.courseTitle));
+    const issued = ts(r.issuedAt) ?? ts(r.completedAt);
+    if (!issued) {
+      results.push({ serialNo, ok: false, user: !!user, course: !!course, error: "No date" });
+      continue;
+    }
+
+    // Numara belge kimliği: aynı dosya iki kez yüklenirse kayıt çiftlenmez.
+    const certId = `imported_${serialNo.replace(/[^\w-]+/g, "_")}`;
+    try {
+      await db.doc(`certificates/${certId}`).set(
+        {
+          serialNo,
+          imported: true,
+          issuedVia: "IMPORT",
+          importedById: req.auth!.uid,
+          importedAt: FieldValue.serverTimestamp(),
+          userId: user?.id ?? null,
+          userName: user?.name ?? String(r.name ?? "").trim(),
+          userDepartmentId: user?.departmentId ?? null,
+          courseId: course?.id ?? null,
+          courseTitle: course?.title ?? String(r.courseTitle ?? "").trim(),
+          birthPlace: r.birthPlace ? String(r.birthPlace).trim() : user?.birthPlace ?? null,
+          birthDate: r.birthDate ? String(r.birthDate).trim() : user?.birthDate ?? null,
+          instructorName: r.instructorName ? String(r.instructorName).trim() : null,
+          durationHours: r.durationHours != null ? Number(r.durationHours) : null,
+          trainingStartedAt: ts(r.startedAt),
+          trainingCompletedAt: ts(r.completedAt),
+          issuedAt: issued,
+          examRequired: false,
+          examScore: null,
+          heldIn: r.location ? String(r.location).trim() : null,
+        },
+        { merge: true }
+      );
+      // QR doğrulama geçmiş sertifikalarda da çalışsın.
+      await db.doc(`certVerify/${serialNo}`).set(
+        {
+          serialNo,
+          name: user?.name ?? String(r.name ?? "").trim(),
+          courseTitle: course?.title ?? String(r.courseTitle ?? "").trim(),
+          issuedAt: issued,
+          certificateId: certId,
+        },
+        { merge: true }
+      );
+      const n = Number(serialNo.match(/(\d+)\s*$/)?.[1] ?? 0);
+      if (n > maxNo) maxNo = n;
+      results.push({ serialNo, ok: true, user: !!user, course: !!course });
+    } catch (e) {
+      results.push({
+        serialNo,
+        ok: false,
+        user: !!user,
+        course: !!course,
+        error: (e as Error).message,
+      });
+    }
+  }
+
+  // Sayaç en büyük içe aktarılan numaranın bir fazlasına çekilir — yeni
+  // sertifikalar sicilin devamından başlasın. Sayaç zaten ileridiyse dokunma.
+  let nextNo: number | null = null;
+  if (maxNo > 0) {
+    const ref = db.doc("counters/certificates");
+    nextNo = await db.runTransaction(async (tx) => {
+      const d = (await tx.get(ref)).data() as any;
+      const cur = Number(d?.next ?? 0);
+      const want = maxNo + 1;
+      if (want > cur) {
+        tx.set(ref, { next: want }, { merge: true });
+        return want;
+      }
+      return cur;
+    });
+  }
+
+  return {
+    total: rows.length,
+    imported: results.filter((r) => r.ok).length,
+    failed: results.filter((r) => !r.ok),
+    unmatchedUser: results.filter((r) => r.ok && !r.user).map((r) => r.serialNo),
+    unmatchedCourse: results.filter((r) => r.ok && !r.course).map((r) => r.serialNo),
+    nextNo,
+  };
+});
+
+/**
+ * İçe aktarılmış sertifikaları geri alır — yanlış/eksik bir dosya yüklendiğinde
+ * temiz sayfa açmak için. YALNIZCA `imported: true` kayıtlar silinir; sistemin
+ * kendi ürettiği (online tamamlama, sınıf eğitimi) sertifikalara dokunulmaz.
+ *
+ * `dryRun` ile önce ne silineceği raporlanır. Silme geri alınamaz.
+ */
+export const undoCertificateImport = onCall({ region: "europe-west3" }, async (req) => {
+  await assertAdmin(req.auth?.uid);
+  const db = getFirestore();
+  const dryRun = req.data?.dryRun !== false;
+  /** Sayacı da başa al — içe aktarım onu ileri sarmıştı. */
+  const resetNextTo = Number(req.data?.resetNextTo) || null;
+
+  const snap = await db.collection("certificates").where("imported", "==", true).get();
+  const serials = snap.docs.map((d) => String((d.data() as any).serialNo ?? "")).filter(Boolean);
+  if (dryRun) return { wouldDelete: snap.size, serials: serials.slice(0, 10) };
+
+  let deleted = 0;
+  for (let i = 0; i < snap.docs.length; i += 200) {
+    const batch = db.batch();
+    for (const d of snap.docs.slice(i, i + 200)) {
+      batch.delete(d.ref);
+      const s = String((d.data() as any).serialNo ?? "");
+      if (s) batch.delete(db.doc(`certVerify/${s}`));
+      deleted++;
+    }
+    await batch.commit();
+  }
+
+  if (resetNextTo) {
+    await db.doc("counters/certificates").set({ next: resetNextTo }, { merge: true });
+  }
+  return { deleted, nextNo: resetNextTo };
+});

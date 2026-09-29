@@ -1,0 +1,452 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --brand: #e31e24;
+  --sidebar-top: #8b1013;
+  --sidebar-bot: #5c0a0d;
+  --amber: #f6a609;
+}
+
+@layer base {
+  body {
+    @apply antialiased text-slate-800;
+    background: #f4f6f9;
+    font-family: Inter, ui-sans-serif, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-slate-200/70 rounded-xl shadow-card overflow-hidden;
+  }
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg px-4 py-2 text-sm font-semibold transition shadow-sm disabled:opacity-60;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium transition;
+  }
+  .input {
+    @apply w-full border border-slate-200 rounded-lg px-3 py-2 text-sm placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand-400 transition;
+  }
+  .label {
+    @apply block text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1.5;
+  }
+  /* Bekleyen eğitimin butonu dikkat çeksin. */
+  .pulse-cta {
+    animation: pulse-ring 1.6s ease-out infinite;
+  }
+  .th {
+    @apply text-left font-semibold text-[10px] uppercase tracking-wide px-4 py-2.5 whitespace-nowrap;
+  }
+  .td {
+    @apply px-4 py-2.5 align-middle;
+  }
+  /* Kenar çubuğu — macOS ölçüleri: dolu hap, ikon+metin, nötr grafit zemin.
+     Kırmızı artık zeminin kendisi değil; yalnızca aktif maddenin vurgusu.
+     Zemin nötr olunca tablodaki kırmızı uyarılar (expired, eksik eğitim)
+     menüyle yarışmıyor. */
+  .nav-item {
+    @apply flex items-center gap-[9px] mx-2 px-[9px] py-[7px] rounded-lg text-[13.5px] font-medium transition;
+    color: #d1d1d6;
+    letter-spacing: -0.005em;
+  }
+  .nav-item svg {
+    @apply h-4 w-4 shrink-0;
+    color: #8e8e93;
+  }
+  .nav-item:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .nav-item.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: inset 2px 0 0 var(--brand);
+    @apply font-semibold;
+  }
+  .nav-item.active svg {
+    color: var(--brand);
+  }
+  .nav-section {
+    @apply text-[10px] font-semibold uppercase tracking-[0.06em] px-4 pt-3.5 pb-1;
+    color: #98989d;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(227, 30, 36, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(227, 30, 36, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(227, 30, 36, 0);
+  }
+}
+
+/* Hareket azaltma açıksa yanıp sönme durur; buton yine kırmızı ve belirgin. */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-cta {
+    animation: none;
+  }
+}
+
+/* İki ayrı yazdırma kipi:
+   - Varsayılan: yalnızca .cert-print görünür (yatay A4 sertifika)
+   - body.printing-report: sayfa raporu — kenar çubuğu ve butonlar gizli */
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body:not(.printing-report) * {
+    visibility: hidden;
+  }
+  body:not(.printing-report) .cert-print,
+  body:not(.printing-report) .cert-print * {
+    visibility: visible;
+  }
+  body:not(.printing-report) .cert-print {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    aspect-ratio: auto !important;
+    box-shadow: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Rapor kipi ──────────────────────────────────────────
+     Çıktı ekran görüntüsü değil, belge olmalı: uygulama kabuğu
+     kalkar, kartlar düz çerçeveye, renkli başlık bantları sade
+     satırlara döner. */
+
+  /* Antet blok, künye flex — tek bir `.print-only` kuralı ikisini de block'a
+     zorladığı için ayrı ayrı veriliyor. */
+  body.printing-report .report-head {
+    display: block !important;
+  }
+
+  body.printing-report aside,
+  body.printing-report .no-print,
+  body.printing-report header {
+    display: none !important;
+  }
+
+  /* Üst bar (başlık + kullanıcı rozeti) — antet zaten aynı bilgiyi taşıyor. */
+  body.printing-report main > div:first-child {
+    display: none !important;
+  }
+  body.printing-report main > div:last-child {
+    padding: 0 !important;
+  }
+
+  body.printing-report,
+  body.printing-report .min-h-screen {
+    background: #fff !important;
+    min-height: 0 !important;
+    display: block !important;
+  }
+
+  /* Antet */
+  body.printing-report .report-head {
+    margin-bottom: 6mm;
+  }
+  body.printing-report .rh-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid #8b1013;
+    padding-bottom: 3mm;
+  }
+  body.printing-report .rh-logo {
+    height: 13mm;
+    width: auto;
+  }
+  body.printing-report .rh-org-name {
+    font-size: 10pt;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #0f172a;
+  }
+  body.printing-report .rh-org-sub {
+    font-size: 7.5pt;
+    color: #475569;
+  }
+  body.printing-report .rh-title-row {
+    margin: 4mm 0 3mm;
+  }
+  body.printing-report .rh-title {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #0f172a;
+    line-height: 1.15;
+  }
+  body.printing-report .rh-sub {
+    font-size: 8.5pt;
+    color: #475569;
+    margin-top: 1mm;
+  }
+  body.printing-report table.rh-meta {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    margin-bottom: 2mm;
+  }
+  body.printing-report table.rh-meta th {
+    text-align: left;
+    background: #f1f5f9;
+    color: #475569;
+    font-weight: 700;
+    white-space: nowrap;
+    width: 1%;
+  }
+  body.printing-report table.rh-meta th,
+  body.printing-report table.rh-meta td {
+    border: 1px solid #cbd5e1;
+    padding: 1.2mm 2mm;
+    color: #0f172a;
+  }
+
+  /* Belge sonu künyesi. Normal akışta — sabit konumlandırma çok sayfalı
+     çıktıda tablonun üstüne biniyordu. Form no artık antette. */
+  body.printing-report .report-foot {
+    display: flex !important;
+    justify-content: space-between;
+    gap: 8mm;
+    border-top: 1px solid #cbd5e1;
+    padding-top: 1.5mm;
+    font-size: 7pt;
+    color: #64748b;
+  }
+  /* Antetteki form künyesi sağa yaslanır. */
+  body.printing-report .rh-doc {
+    margin-left: auto;
+    text-align: right;
+    font-size: 7pt;
+    color: #475569;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
+
+  /* Kartlar düz çerçeve olur. */
+  body.printing-report .card {
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 0 !important;
+    overflow: visible !important;
+    break-inside: auto;
+    margin-bottom: 5mm;
+    background: #fff !important;
+  }
+
+  /* Bordo gradyan başlık bantları — kâğıtta blok blok mürekkep olur. */
+  body.printing-report [style*="gradient"] {
+    background: #f1f5f9 !important;
+    border-bottom: 1px solid #cbd5e1 !important;
+  }
+  body.printing-report [style*="gradient"],
+  body.printing-report [style*="gradient"] * {
+    color: #0f172a !important;
+  }
+  /* Kart başlığının altındaki ince turuncu vurgu çizgisi. */
+  body.printing-report .card [style*="gradient"][class*="h-0.5"] {
+    display: none !important;
+  }
+
+  /* Yapışkan konumlar kâğıtta üst üste biner. */
+  body.printing-report .sticky,
+  body.printing-report [class*="sticky"] {
+    position: static !important;
+  }
+  body.printing-report .overflow-auto,
+  body.printing-report .overflow-x-auto,
+  body.printing-report .overflow-y-auto,
+  body.printing-report .print-expand {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  /* Tablolar */
+  body.printing-report table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    border-spacing: 0 !important;
+    font-size: 8pt;
+  }
+  body.printing-report thead {
+    display: table-header-group;
+  }
+  body.printing-report th,
+  body.printing-report td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 1.2mm 1.8mm !important;
+    vertical-align: middle;
+  }
+  body.printing-report th {
+    background: #f1f5f9 !important;
+    color: #334155 !important;
+    font-weight: 700;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  body.printing-report tr {
+    break-inside: avoid;
+  }
+  body.printing-report td,
+  body.printing-report th {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Training Follow-Up matrisi: ekranda sütunlar sabit genişlikte ve yatay
+     kayıyor, kâğıtta kayacak yer yok. `table-layout: fixed` + `width: 100%`
+     sütunları kalan alana eşit böler, böylece kaç eğitim olursa olsun sayfaya
+     sığar. Satır içi min/max genişlikler `!important` ile geçersiz kılınır. */
+  body.printing-report table.matrix-table {
+    table-layout: fixed;
+    font-size: 5pt;
+  }
+  body.printing-report table.matrix-table th,
+  body.printing-report table.matrix-table td {
+    min-width: 0 !important;
+    max-width: none !important;
+    width: auto !important;
+    padding: 0.6mm 0.3mm !important;
+  }
+  /* Sütun başlıkları uzun — yalnızca BOŞLUKTAN sarılır. */
+  body.printing-report table.matrix-table th {
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: none;
+  }
+  /* Hücre içeriği hiç sarılmaz: tarih "25.08.20 / 26" diye ikiye bölünüyordu,
+     "PLANNED" de kelime ortasından kırılıyordu. */
+  body.printing-report table.matrix-table td,
+  body.printing-report table.matrix-table td * {
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+    hyphens: none;
+  }
+  /* Personel sütunu okunur kalsın, geri kalanı paylaşsın. */
+  body.printing-report table.matrix-table th:first-child,
+  body.printing-report table.matrix-table td:first-child {
+    width: 27mm !important;
+    text-align: left;
+    overflow-wrap: normal;
+  }
+  /* Isı haritasında hücre tek bir kısa değer taşıyor (kalan gün ya da tarih),
+     eskisi gibi iki satır değil — punto büyüyebilir ve satır sıkışabilir.
+     Ekrandaki `text-[11px]` sınıfı tablonun ayarını eziyordu, burada geri alınır. */
+  body.printing-report table.matrix-table td {
+    font-size: 6pt !important;
+    line-height: 1.1;
+    height: auto !important;
+  }
+  body.printing-report table.matrix-table td span {
+    font-size: inherit !important;
+    display: block;
+  }
+  /* Zeminler kâğıtta da basılmalı: bu tablonun bilgisi renkte.
+     Hücre kenarındaki beyaz ayraç kâğıtta çok kalın kalıyor, inceltilir. */
+  body.printing-report table.matrix-table td {
+    border-width: 0.25mm !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Taranan desen kâğıtta gri bir blok gibi çıkıyor; düz açık gri yeter. */
+  body.printing-report table.matrix-table td.matrix-na {
+    background-image: none !important;
+    background-color: #f2f2f4 !important;
+  }
+  /* Lejant kutucukları renkli basılsın — çıktının anahtarı bu. */
+  body.printing-report .card + div i,
+  body.printing-report i[aria-hidden="true"] {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Durum rozetleri kâğıtta da okunsun ama kutu gibi durmasın. */
+  body.printing-report .card span[class*="rounded"] {
+    border-radius: 2px !important;
+  }
+
+  /* Satır menüsü taşıyan hücreler — başlıkları `no-print` ile işaretli.
+     Kâğıtta tıklanacak bir şey yok, sütun tamamen kalkar. */
+  body.printing-report td:has(> button[aria-label^="Actions"]),
+  body.printing-report td:has(> div > button[aria-label^="Actions"]) {
+    display: none !important;
+  }
+
+  /* Arama/filtre çubukları ve form kontrolleri. */
+  body.printing-report input,
+  body.printing-report select,
+  body.printing-report button {
+    display: none !important;
+  }
+  /* Onay kutuları veri taşıyor olabilir; onlar kalsın. */
+  body.printing-report input[type="checkbox"] {
+    display: inline-block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* Yalnızca yazdırmada görünen bloklar (rapor anteti/künyesi). */
+.print-only {
+  display: none;
+}
+
+/* Training Follow-Up: eksik eğitim hücresi yanıp söner — uygunsuzluk gözden
+   kaçmasın. Yazdırmada ve hareket azaltma açıkken sabit kırmızı kalır. */
+/* Isı haritasının en koyu tonu; animasyon satır içi rengi ezdiği için burada
+   da aynı değer kullanılmalı, yoksa eksik hücre açık kırmızıya düşüyordu. */
+@keyframes cell-missing-blink {
+  0%,
+  100% {
+    background-color: #8e1b16;
+  }
+  50% {
+    background-color: #b8322b;
+  }
+}
+.cell-missing {
+  animation: cell-missing-blink 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cell-missing {
+    animation: none;
+    background-color: #8e1b16;
+  }
+}
+@media print {
+  .cell-missing {
+    animation: none !important;
+    background-color: #8e1b16 !important;
+  }
+}
+
+/* Gerekli olmayan hücre: boyanmaz, taranır — renk ölçeğine bir ton daha
+   eklemeden "burada bir şey yok" der. */
+.matrix-na {
+  background-image: repeating-linear-gradient(
+    45deg,
+    #f4f4f6,
+    #f4f4f6 3px,
+    #eaeaee 3px,
+    #eaeaee 6px
+  );
+}

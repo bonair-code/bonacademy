@@ -1,0 +1,17 @@
+node_modules
+dist
+.firebase
+
+.env
+.env.*
+*.log
+functions/lib
+serviceAccount*.json
+.DS_Store
+
+.env
+.env.*
+*.log
+functions/lib
+serviceAccount*.json
+.DS_Store

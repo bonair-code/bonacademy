@@ -1,0 +1,186 @@
+rules_version = '2';
+
+// BonAcademy (Firebase-native) — Firestore Security Rules
+// Roller: ADMIN, MANAGER (Müdür), INSTRUCTOR (Eğitmen), USER (Çalışan),
+// CUSTOMER (dışarıdan eğitim alan müşteri — yalnızca kendi kaydına erişir).
+// Rol, kullanıcının users/{uid} dokümanından okunur (Spark uyumlu — Cloud
+// Functions/claim gerektirmez). Blaze'e geçince custom claim'e optimize edilebilir.
+// Güvenlik-kritik yazımlar (sınav puanı, sertifika, atama durumu) client'a kapalı;
+// yalnızca Cloud Functions (admin SDK) yazar.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()  { return request.auth != null; }
+    function prof()      { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function myRole()    { return prof().role; }
+    function myDept()    { return prof().departmentId; }
+    function isAdmin()      { return signedIn() && myRole() == 'ADMIN'; }
+    function isManager()    { return signedIn() && myRole() == 'MANAGER'; }
+    function isInstructor() { return signedIn() && myRole() == 'INSTRUCTOR'; }
+    function isSelf(uid)    { return signedIn() && request.auth.uid == uid; }
+    // CUSTOMER = dışarıdan eğitim alan müşteri. Personel değil: kurum yapısını
+    // (departmanlar, yetki kapsamları, ayarlar) görmemeli.
+    function isStaff()      { return signedIn() && myRole() != 'CUSTOMER'; }
+    function courseData(cid){ return get(/databases/$(database)/documents/courses/$(cid)).data; }
+    function ownsCourse(cid){ return isInstructor() && courseData(cid).ownerInstructorId == request.auth.uid; }
+
+    // ---- USERS ----
+    match /users/{uid} {
+      // Eğitmen, eğitim durumunu takip edebilmek için personeli okuyabilir.
+      allow read: if isSelf(uid)
+                  || isAdmin()
+                  || isInstructor()
+                  || (isManager() && resource.data.departmentId == myDept());
+      // Kullanıcı yalnızca kendi dilini; admin profili yönetir. Auth kullanıcısı
+      // oluşturma ayrı (şimdilik konsol, ileride Function).
+      // Kullanıcı kendi profilinde YALNIZCA bu alanları değiştirebilir.
+      // Rol, departman, unvan ve aktiflik listede yok — kimse kendini
+      // yetkilendiremesin ya da pasifken aktifleştiremesin.
+      allow update: if isAdmin()
+                    || (isSelf(uid)
+                        && request.resource.data.diff(resource.data)
+                             .affectedKeys().hasOnly([
+                               'locale',
+                               'birthPlace',
+                               'birthDate',
+                               'phone',
+                               'mustChangePassword',
+                               'profileCompletedAt',
+                               'updatedAt'
+                             ]));
+      allow create, delete: if isAdmin();
+    }
+
+    // ---- Referans koleksiyonları ----
+    match /departments/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /jobTitles/{id}   { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /appOptions/{id}  { allow read: if isStaff(); allow write: if isAdmin(); }
+    match /orgSettings/{id} { allow read: if isStaff(); allow write: if isAdmin(); }
+
+    // ---- COURSES (Eğitmen hazırlar; Admin her kursa) ----
+    match /courses/{cid} {
+      allow read: if signedIn(); // yalnızca meta (sorular ayrı alt-koleksiyonda)
+      allow create: if isAdmin()
+                    || (isInstructor() && request.resource.data.ownerInstructorId == request.auth.uid);
+      allow update, delete: if isAdmin() || ownsCourse(cid);
+
+      // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). İçerik kurs
+      // materyalidir → çalışan okuyabilir (sıra/başlık/SCORM yolu); yalnızca
+      // ADMIN veya sahibi EĞİTMEN düzenler.
+      match /sections/{sid} {
+        allow read: if signedIn();
+        allow write: if isAdmin() || ownsCourse(cid);
+      }
+
+      // ⚠️ Sorular: cevaplar (isCorrect) burada. Çalışan ERİŞEMEZ — sınav
+      // sorularını cevapsız halde startExam Function'ından alır.
+      match /questions/{qid} {
+        allow read, write: if isAdmin() || ownsCourse(cid);
+      }
+      match /revisions/{r} {
+        allow read: if isAdmin() || isInstructor();
+        allow write: if false; // Function
+      }
+    }
+
+    // ---- PLANS (atama planı — Admin/Müdür) ----
+    match /plans/{pid} {
+      allow read: if isAdmin() || isManager();
+      allow write: if isAdmin() || isManager(); // Müdür kapsamı Function/uygulamada
+    }
+
+    // ---- ASSIGNMENTS (atama döngüsü — durum geçişleri Function) ----
+    match /assignments/{aid} {
+      allow read: if isAdmin()
+                  || isInstructor()
+                  || isSelf(resource.data.userId)
+                  || (isManager() && resource.data.userDepartmentId == myDept());
+      allow write: if false; // yalnızca Function
+      match /scorm/{rev} {
+        allow read: if isAdmin() || isSelf(resource.data.userId);
+        allow create, update: if isSelf(request.resource.data.userId);
+      }
+      match /examSessions/{n} { allow read, write: if false; }
+      match /examAttempts/{n} {
+        allow read: if isAdmin() || isSelf(resource.data.userId);
+        allow write: if false;
+      }
+    }
+
+    // ---- EXTERNAL TRAINING (dışarıdan alınan eğitim kayıtları) ----
+    // BonAir'in vermediği eğitimler. Sertifika ÜRETİLMEZ; personelin getirdiği
+    // belge Storage'a iliştirilir. Admin herkese, müdür yalnızca kendi
+    // departmanındaki personele kayıt girebilir.
+    match /externalTrainings/{id} {
+      function targetDept(uid) {
+        return get(/databases/$(database)/documents/users/$(uid)).data.departmentId;
+      }
+      allow read: if isAdmin()
+                  || isSelf(resource.data.userId)
+                  || (isManager() && resource.data.userDepartmentId == myDept());
+      allow create: if isAdmin()
+                    || (isManager()
+                        && targetDept(request.resource.data.userId) == myDept()
+                        && request.resource.data.userDepartmentId == myDept());
+      allow update, delete: if isAdmin()
+                            || (isManager() && resource.data.userDepartmentId == myDept());
+    }
+
+    // ---- CLASS SESSIONS (yüz yüze eğitim + QR yoklama) ----
+    // Oturum id'si tahmin edilemez ve LİNKİN KENDİSİ paroladır: katılım formu
+    // giriş istemez. Bu yüzden oturum dokümanı herkese okunur (yalnızca kurs
+    // adı/tarih gibi görünür bilgi), yoklama kaydı ise ancak oturum AÇIKKEN
+    // oluşturulabilir.
+    match /classSessions/{sid} {
+      function session() {
+        return get(/databases/$(database)/documents/classSessions/$(sid)).data;
+      }
+      allow read: if true;
+      allow create, update, delete: if isAdmin() || isInstructor();
+
+      match /attendees/{aid} {
+        // Katılımcı kendi kaydını yazar; oturum kapandıysa yazamaz.
+        allow create: if session().status == 'OPEN'
+                      && request.resource.data.fullName is string
+                      && request.resource.data.fullName.size() > 1
+                      && request.resource.data.fullName.size() < 120;
+        allow read, update, delete: if isAdmin() || isInstructor();
+      }
+    }
+
+    // ---- CERTIFICATES ----
+    match /certificates/{id} {
+      allow read: if isAdmin()
+                  || isInstructor()
+                  || isSelf(resource.data.userId)
+                  || (isManager() && resource.data.userDepartmentId == myDept());
+      allow write: if false; // yalnızca issueCertificate Function
+    }
+    match /certVerify/{serialNo} {
+      allow read: if true;   // QR public doğrulama
+      allow write: if false;
+    }
+
+    // ---- Function-managed / salt-okunur ----
+    match /notifications/{id} {
+      allow read: if isAdmin() || isSelf(resource.data.userId);
+      allow write: if false;
+    }
+    match /auditLogs/{id} { allow read: if isAdmin(); allow write: if false; }
+    // Sertifika numarası sayacı. Numarayı FUNCTION artırır (transaction);
+    // admin yalnızca BİÇİMİ ayarlayabilir — kâğıt sicilden devam edebilmek
+    // için sıradaki numarayı elle vermek gerekiyor.
+    match /counters/{id} {
+      allow read: if isAdmin() || isInstructor();
+      allow create: if isAdmin() && id == 'certificates';
+      allow update: if isAdmin()
+                    && id == 'certificates'
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['prefix', 'next', 'pad']);
+      allow delete: if false;
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

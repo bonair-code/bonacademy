@@ -1,0 +1,56 @@
+rules_version = '2';
+
+// BonAcademy — Cloud Storage kuralları
+// SCORM paket içeriği kurs materyalidir (gizli değil) → giriş yapmış kullanıcı
+// okuyabilir. Yükleme/değişiklik yalnızca staff (upload Function/akışı) üzerinden.
+// Sertifika PDF'leri kişiseldir → sahibi + staff okur.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn()  { return request.auth != null; }
+    function role()      { return request.auth.token.role; }
+    function isAdmin()   { return signedIn() && role() == 'ADMIN'; }
+    function isManager() { return signedIn() && role() == 'MANAGER'; }
+    function isInstructor() { return signedIn() && role() == 'INSTRUCTOR'; }
+
+    // Kurs kapak görseli: covers/{courseId}/...
+    // Kapak kurs kataloğunun bir parçası — eğitimi atanan herkes (müşteri dahil)
+    // görür. Yükleme yalnızca eğitimi hazırlayan roller.
+    match /covers/{courseId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isInstructor() || isManager();
+    }
+
+    // SCORM paket içeriği: scorm/{courseId}/{revision}/...
+    match /scorm/{courseId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if isAdmin() || isManager();
+    }
+
+    // Bölüm içerikleri (PDF / SCORM zip): content/{courseId}/{sectionId}/...
+    // NOT: Storage kuralları rolü Firestore'dan okuyamaz ve henüz custom claim
+    // yok. Geçici olarak giriş yapmış kullanıcıya yazma izni (şu an yalnızca
+    // staff kullanıyor). Claim Function'ı gelince isAdmin/isInstructor'a daraltılacak.
+    match /content/{courseId}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if signedIn();
+    }
+
+    // Dışarıdan alınan eğitim belgeleri: externalCertificates/{userId}/...
+    // Rol ve departman custom claim'den okunur (Storage kuralları Firestore'a
+    // bakamaz) — createUser/updateUser bu claim'leri yazıyor.
+    match /externalCertificates/{userId}/{allPaths=**} {
+      allow read: if isAdmin()
+                  || (signedIn() && request.auth.uid == userId)
+                  || isManager();
+      allow write: if isAdmin() || isManager();
+    }
+
+    // Sertifika PDF'leri: certificates/{userId}/{certId}.pdf
+    match /certificates/{userId}/{file} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == userId);
+      allow write: if false; // yalnızca issueCertificate Function (admin SDK)
+    }
+
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}
