@@ -8,7 +8,13 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { ORG } from "../lib/org";
+import {
+  PublicError,
+  PublicShell,
+  pubButton,
+  pubInput,
+  pubLabel,
+} from "../components/PublicShell";
 
 type Session = {
   courseTitle: string;
@@ -89,128 +95,106 @@ export function JoinSession() {
     }
   }
 
+  const open = state === "ready" && session?.status === "OPEN";
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(160deg,#8b1013 0%,#5c0a0d 100%)" }}
+    <PublicShell
+      title={
+        state === "loading"
+          ? "Loading…"
+          : state === "missing"
+          ? "Session not found"
+          : !open
+          ? "Attendance closed"
+          : done
+          ? "You are signed in"
+          : session?.courseTitle
+      }
+      subtitle={
+        state === "missing"
+          ? "Check the link or ask your instructor for a new one."
+          : state === "ready" && !open
+          ? `${session?.courseTitle} is not accepting sign-ins${
+              session?.status === "CLOSED" ? " — the session has finished." : " yet."
+            }`
+          : open && !done
+          ? [
+              session?.instructorName,
+              session?.startDate ? session.startDate.split("-").reverse().join(".") : null,
+              session?.location,
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          : undefined
+      }
     >
-      <div className="w-full max-w-[420px]">
-        <div className="flex flex-col items-center mb-5">
-          <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-11 w-auto" />
+      {open && done && (
+        <p className="text-[12.5px] leading-relaxed" style={{ color: "#c7c7cc" }}>
+          <b className="text-white">{fullName}</b> is on the attendance list for{" "}
+          {session?.courseTitle}. Your certificate is issued when the instructor closes the
+          session.
+        </p>
+      )}
+
+      {open && !done && (
+        <form onSubmit={submit}>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={pubLabel}>First Name *</label>
+              <input
+                className={`${pubInput} uppercase`}
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="TALHA"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className={pubLabel}>Surname *</label>
+              <input
+                className={`${pubInput} uppercase`}
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="DUYGU"
+              />
+            </div>
           </div>
-          <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-4">
-            Training Attendance
+
+          <div className="mt-3.5">
+            <label className={pubLabel}>Place of Birth</label>
+            <input
+              className={`${pubInput} uppercase`}
+              value={birthPlace}
+              onChange={(e) => setBirthPlace(e.target.value)}
+              placeholder="İSTANBUL"
+            />
+          </div>
+
+          <div className="mt-3.5">
+            <label className={pubLabel}>Date of Birth</label>
+            <input
+              className={pubInput}
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+            />
+          </div>
+
+          <p className="text-[10.5px] mt-2 mb-4" style={{ color: "#8e8e93" }}>
+            Your place and date of birth are printed on the certificate.
           </p>
-        </div>
 
-        <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
-          <span
-            className="block h-1"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-          />
-          <div className="px-7 py-6">
-            {state === "loading" && <p className="text-sm text-slate-400">Loading…</p>}
+          {err && <PublicError>{err}</PublicError>}
 
-            {state === "missing" && (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">Session not found</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  Check the link or ask your instructor for a new one.
-                </p>
-              </>
-            )}
-
-            {state === "ready" && session && session.status !== "OPEN" && (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">Attendance closed</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  {session.courseTitle} is not accepting sign-ins
-                  {session.status === "CLOSED" ? " — the session has finished." : " yet."}
-                </p>
-              </>
-            )}
-
-            {state === "ready" && session?.status === "OPEN" && done && (
-              <>
-                <h2 className="text-lg font-extrabold text-emerald-700">You are signed in</h2>
-                <p className="text-xs text-slate-500 mt-1">
-                  <b className="text-slate-700">{fullName.trim()}</b> is on the attendance list for{" "}
-                  {session.courseTitle}. Your certificate is issued when the instructor closes the
-                  session.
-                </p>
-              </>
-            )}
-
-            {state === "ready" && session?.status === "OPEN" && !done && (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">{session.courseTitle}</h2>
-                <p className="text-xs text-slate-500 mt-1 mb-5">
-                  {session.instructorName ? `${session.instructorName} · ` : ""}
-                  {session.startDate ? session.startDate.split("-").reverse().join(".") : ""}
-                  {session.location ? ` · ${session.location}` : ""}
-                </p>
-
-                <form onSubmit={submit}>
-                  <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="label">First Name *</label>
-                      <input
-                        className="input uppercase"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="TALHA"
-                        autoFocus
-                      />
-                    </div>
-                    <div>
-                      <label className="label">Surname *</label>
-                      <input
-                        className="input uppercase"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="DUYGU"
-                      />
-                    </div>
-                  </div>
-                  <label className="label">Place of Birth</label>
-                  <input
-                    className="input mb-3 uppercase"
-                    value={birthPlace}
-                    onChange={(e) => setBirthPlace(e.target.value)}
-                    placeholder="İSTANBUL"
-                  />
-                  <label className="label">Date of Birth</label>
-                  <input
-                    className="input mb-3"
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                  />
-                  <p className="text-[10px] text-slate-400 mb-4">
-                    Your place and date of birth are printed on the certificate.
-                  </p>
-
-                  {err && (
-                    <p className="text-xs text-brand-700 mb-3 rounded-md bg-brand-50 border border-brand-100 px-2.5 py-2">
-                      {err}
-                    </p>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={busy || !firstName.trim() || !lastName.trim()}
-                    className="btn-primary w-full"
-                  >
-                    {busy ? "Signing in…" : "Sign In to Attendance"}
-                  </button>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-
-        <p className="text-center text-white/40 text-[11px] mt-5">{ORG.legalFooter}</p>
-      </div>
-    </div>
+          <button
+            type="submit"
+            disabled={busy || !firstName.trim() || !lastName.trim()}
+            className={pubButton}
+          >
+            {busy ? "Signing in…" : "Sign In to Attendance"}
+          </button>
+        </form>
+      )}
+    </PublicShell>
   );
 }

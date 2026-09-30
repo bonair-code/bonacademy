@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
+import { PublicShell, pubInput, pubLabel } from "../components/PublicShell";
 import { db } from "../lib/firebase";
-import { ORG } from "../lib/org";
 
 type CertV = {
   serialNo: string;
@@ -67,125 +67,140 @@ export function Verify() {
   }
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(160deg,#8b1013 0%,#5c0a0d 100%)" }}
+    <PublicShell
+      title="Certificate verification"
+      subtitle="Check a certificate number against the register."
+      width="max-w-[440px]"
     >
-      <div className="w-full max-w-[440px]">
-        <div className="flex flex-col items-center mb-5">
-          <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-11 w-auto" />
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          lookup(serial);
+        }}
+      >
+        <label className={pubLabel}>Certificate No</label>
+        <div className="flex gap-2">
+          <input
+            className={pubInput}
+            value={serial}
+            onChange={(e) => setSerial(e.target.value)}
+            placeholder="26-001"
+            autoFocus={!fromUrl}
+          />
+          <button
+            type="submit"
+            className="shrink-0 rounded-[10px] px-4 text-[13px] font-semibold text-white bg-brand-600 hover:bg-brand-700 transition"
+          >
+            Check
+          </button>
+        </div>
+      </form>
+
+      {state === "loading" && (
+        <p className="text-[13px] mt-4" style={{ color: "#98989d" }}>
+          Checking…
+        </p>
+      )}
+
+      {state === "none" && (
+        <div
+          className="mt-4 rounded-xl p-4"
+          style={{ background: "rgba(224,51,44,.16)", border: "1px solid rgba(224,51,44,.35)" }}
+        >
+          <div className="font-semibold text-[14px]" style={{ color: "#ffb4b1" }}>
+            Not a valid certificate
           </div>
-          <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-4">
-            Certificate Verification
+          <p className="text-[12px] mt-1" style={{ color: "rgba(255,180,177,.8)" }}>
+            No certificate is registered under this number.
           </p>
         </div>
+      )}
 
-        <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
-          <span
-            className="block h-1"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-          />
-          <div className="px-7 py-6">
-            {/* Seri no arama */}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                lookup(serial);
-              }}
-              className="mb-4"
-            >
-              <label className="label">Certificate No</label>
-              <div className="flex gap-2">
-                <input
-                  className="input"
-                  value={serial}
-                  onChange={(e) => setSerial(e.target.value)}
-                  placeholder="BA-00001 or 25-131"
-                  autoFocus={!fromUrl}
-                />
-                <button type="submit" className="btn-primary text-xs px-4 shrink-0">
-                  Check
-                </button>
-              </div>
-            </form>
+      {state === "found" && cert && (
+        <>
+          <div
+            className="mt-4 rounded-xl p-4"
+            style={{ background: "rgba(48,177,90,.14)", border: "1px solid rgba(48,177,90,.32)" }}
+          >
+            <div className="font-semibold text-[13px]" style={{ color: "#86e0a6" }}>
+              ✓ Registered certificate
+            </div>
+            <div className="text-[17px] font-semibold text-white mt-2 tracking-[-0.018em]">
+              {cert.name}
+            </div>
+            <p className="text-[13px]" style={{ color: "#c7c7cc" }}>
+              {cert.courseTitle}
+            </p>
+            <div className="text-[11px] tabular-nums mt-2" style={{ color: "#98989d" }}>
+              No: {cert.serialNo}
+              {issued ? ` · Issued ${dmy(issued)}` : ""}
+            </div>
+          </div>
 
-            {state === "loading" && <p className="text-sm text-slate-400">Checking…</p>}
+          {/* Tarih teyidi — elindeki belgeyle aynı mı */}
+          <form
+            onSubmit={confirmDate}
+            className="mt-4 pt-4"
+            style={{ borderTop: "1px solid rgba(255,255,255,.12)" }}
+          >
+            <label className={pubLabel}>Confirm the date on the document</label>
+            <div className="flex gap-2">
+              <input
+                className={pubInput}
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setChecked(null);
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!date}
+                className="shrink-0 rounded-[10px] px-4 text-[13px] font-semibold text-white bg-white/10 border border-white/15 hover:bg-white/15 disabled:opacity-40 transition"
+              >
+                Verify
+              </button>
+            </div>
 
-            {state === "none" && (
-              <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-                <div className="text-red-700 font-bold text-[15px]">Not a valid certificate</div>
-                <p className="text-xs text-red-700/80 mt-1">
-                  No certificate is registered under this number.
-                </p>
-              </div>
-            )}
-
-            {state === "found" && cert && (
-              <>
-                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="text-emerald-700 font-bold text-[15px]">
-                    ✓ Registered certificate
-                  </div>
-                  <div className="text-lg font-extrabold text-slate-900 mt-2">{cert.name}</div>
-                  <p className="text-sm text-slate-600">{cert.courseTitle}</p>
-                  <div className="text-[11px] text-slate-500 mt-2 tabular-nums">
-                    No: {cert.serialNo}
-                    {issued ? ` · Issued ${dmy(issued)}` : ""}
-                  </div>
-                </div>
-
-                {/* Tarih teyidi — elindeki belgeyle aynı mı */}
-                <form onSubmit={confirmDate} className="mt-4 pt-4 border-t border-slate-100">
-                  <label className="label">Confirm the date on the document</label>
-                  <div className="flex gap-2">
-                    <input
-                      className="input"
-                      type="date"
-                      value={date}
-                      onChange={(e) => {
-                        setDate(e.target.value);
-                        setChecked(null);
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!date}
-                      className="btn-secondary text-xs px-4 shrink-0 disabled:opacity-40"
-                    >
-                      Verify
-                    </button>
-                  </div>
-
-                  {checked === true && (
-                    <p className="mt-3 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[13px] font-semibold px-3 py-2">
-                      Verified — the number and date match our records.
-                    </p>
-                  )}
-                  {checked === false && (
-                    <p className="mt-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-[13px] font-semibold px-3 py-2">
-                      Date does not match. This number was issued on {dmy(issued)}.
-                    </p>
-                  )}
-                  {checked === null && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Enter the certificate date printed on the document.
-                    </p>
-                  )}
-                </form>
-              </>
-            )}
-
-            {state === "idle" && (
-              <p className="text-xs text-slate-500">
-                Enter the certificate number, or scan the QR code on the document.
+            {checked === true && (
+              <p
+                className="mt-3 rounded-[9px] text-[12.5px] font-semibold px-3 py-2"
+                style={{
+                  background: "rgba(48,177,90,.16)",
+                  border: "1px solid rgba(48,177,90,.35)",
+                  color: "#86e0a6",
+                }}
+              >
+                Verified — the number and date match our records.
               </p>
             )}
-          </div>
-        </div>
+            {checked === false && (
+              <p
+                className="mt-3 rounded-[9px] text-[12.5px] font-semibold px-3 py-2"
+                style={{
+                  background: "rgba(224,51,44,.16)",
+                  border: "1px solid rgba(224,51,44,.35)",
+                  color: "#ffb4b1",
+                }}
+              >
+                Date does not match. This number was issued on {dmy(issued)}.
+              </p>
+            )}
+            {checked === null && (
+              <p className="text-[10.5px] mt-1.5" style={{ color: "#8e8e93" }}>
+                Enter the certificate date printed on the document.
+              </p>
+            )}
+          </form>
+        </>
+      )}
 
-        <p className="text-center text-white/40 text-[11px] mt-5">{ORG.legalFooter}</p>
-      </div>
-    </div>
+      {state === "idle" && (
+        <p className="text-[12px] mt-4" style={{ color: "#98989d" }}>
+          Enter the certificate number, or scan the QR code on the document.
+        </p>
+      )}
+    </PublicShell>
   );
 }

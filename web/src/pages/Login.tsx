@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
+import {
+  PublicError,
+  PublicShell,
+  pubButton,
+  pubInput,
+  pubLabel,
+} from "../components/PublicShell";
 
 export function Login() {
   const [mode, setMode] = useState<"signin" | "reset">("signin");
@@ -48,141 +55,99 @@ export function Login() {
     setErr(null);
   }
 
+  if (mode === "reset") {
+    return (
+      <PublicShell
+        title={sent ? "Check your inbox" : "Reset password"}
+        subtitle={
+          sent
+            ? undefined
+            : "Enter your work email and we will send you a reset link."
+        }
+      >
+        {sent ? (
+          <>
+            <p className="text-[12.5px] leading-relaxed mb-4" style={{ color: "#c7c7cc" }}>
+              If an account exists for <b className="text-white">{email.trim()}</b>, a password
+              reset link is on its way. The link expires after a while — request a new one if it
+              does.
+            </p>
+            <button onClick={backToSignIn} className={pubButton}>
+              Back to sign in
+            </button>
+          </>
+        ) : (
+          <form onSubmit={resetPassword}>
+            <label className={pubLabel}>Email</label>
+            <input
+              className={pubInput}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="ad.soyad@bonair.com.tr"
+              autoComplete="username"
+              autoFocus
+            />
+            <div className="mt-4" />
+            {err && <PublicError>{err}</PublicError>}
+            <button type="submit" disabled={busy || !email.trim()} className={pubButton}>
+              {busy ? "Sending…" : "Send reset link"}
+            </button>
+            <button
+              type="button"
+              onClick={backToSignIn}
+              className="w-full text-center text-[11px] font-semibold mt-3 text-white/45 hover:text-white/80"
+            >
+              ← Back to sign in
+            </button>
+          </form>
+        )}
+      </PublicShell>
+    );
+  }
+
   return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(160deg,#8b1013 0%,#5c0a0d 100%)" }}
-    >
-      <div className="w-full max-w-[420px]">
-        {/* Logo + kimlik */}
-        <div className="flex flex-col items-center mb-6">
-          <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-12 w-auto" />
-          </div>
-          <h1 className="text-white text-2xl font-extrabold tracking-tight mt-5">BonAcademy</h1>
-          <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-1">
-            Training Management System
-          </p>
+    <PublicShell title="Sign in" subtitle="Compliance in aviation starts with training.">
+      <form onSubmit={emailLogin}>
+        <label className={pubLabel}>Email</label>
+        <input
+          className={pubInput}
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="ad.soyad@bonair.com.tr"
+          autoComplete="username"
+        />
+
+        <div className="flex items-baseline justify-between mt-3.5">
+          <label className={pubLabel}>Password</label>
+          <button
+            type="button"
+            onClick={() => {
+              setMode("reset");
+              setErr(null);
+            }}
+            className="text-[10.5px] font-semibold text-brand-500 hover:text-brand-400 mb-1.5"
+          >
+            Forgot password?
+          </button>
         </div>
+        <input
+          className={pubInput}
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+        />
 
-        <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
-          <span
-            className="block h-1"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-          />
-          <div className="px-8 py-7">
-            {mode === "signin" ? (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">Sign In</h2>
-                <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Compliance in aviation starts with training.
-                </p>
+        <div className="mt-3.5" />
+        {err && <PublicError>{err}</PublicError>}
 
-                <form onSubmit={emailLogin}>
-                  <label className="label">Email</label>
-                  <input
-                    className="input mb-3"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ad.soyad@bonair.com.tr"
-                    autoComplete="username"
-                  />
-
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="label !mb-0">Password</label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMode("reset");
-                        setErr(null);
-                      }}
-                      className="text-[11px] font-semibold text-brand-700 hover:underline"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-                  <input
-                    className="input mb-4"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    autoComplete="current-password"
-                  />
-
-                  {err && <ErrorBox>{err}</ErrorBox>}
-
-                  <button type="submit" disabled={busy} className="btn-primary w-full">
-                    {busy ? "Signing in…" : "Sign In"}
-                  </button>
-                </form>
-              </>
-            ) : sent ? (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">Check your inbox</h2>
-                <p className="text-xs text-slate-500 mt-1 mb-4">
-                  If an account exists for <b className="text-slate-700">{email.trim()}</b>, a
-                  password reset link is on its way. The link expires after a while — request a new
-                  one if it does.
-                </p>
-                <button onClick={backToSignIn} className="btn-primary w-full">
-                  Back to Sign In
-                </button>
-              </>
-            ) : (
-              <>
-                <h2 className="text-lg font-extrabold text-slate-900">Reset Password</h2>
-                <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Enter your work email and we will send you a reset link.
-                </p>
-
-                <form onSubmit={resetPassword}>
-                  <label className="label">Email</label>
-                  <input
-                    className="input mb-4"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="ad.soyad@bonair.com.tr"
-                    autoComplete="username"
-                    autoFocus
-                  />
-
-                  {err && <ErrorBox>{err}</ErrorBox>}
-
-                  <button
-                    type="submit"
-                    disabled={busy || !email.trim()}
-                    className="btn-primary w-full"
-                  >
-                    {busy ? "Sending…" : "Send Reset Link"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={backToSignIn}
-                    className="w-full text-center text-[11px] font-semibold text-slate-500 hover:text-brand-700 mt-3"
-                  >
-                    ← Back to Sign In
-                  </button>
-                </form>
-              </>
-            )}
-          </div>
-        </div>
-
-        <p className="text-center text-white/40 text-[11px] mt-5">
-          BonAir Aviation · BonAir Academy
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function ErrorBox({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs text-brand-700 mb-3 rounded-md bg-brand-50 border border-brand-100 px-2.5 py-2">
-      {children}
-    </p>
+        <button type="submit" disabled={busy} className={pubButton}>
+          {busy ? "Signing in…" : "Sign In"}
+        </button>
+      </form>
+    </PublicShell>
   );
 }
 

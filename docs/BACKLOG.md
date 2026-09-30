@@ -1185,3 +1185,19 @@ eğitmen/admin oturumunda yapılabilir. Oturum detay sayfası artık:
 Eşleşme yazıldığı an sertifika o kişiye bağlanıyor ve Training Follow-Up
 hücresi kendiliğinden doluyor — matris tamamlamaları `certificates`
 koleksiyonundan okuyor.
+
+## Herkese açık ekranlar — koyu cam düzen (30.09.2026)
+
+Giriş, sertifika doğrulama ve QR yoklama ekranları baştan aşağı kırmızıydı.
+Sistemin geri kalanında kırmızı vurgu rengine indirilmişti; bu üç ekran eski
+kimlikte kalmıştı. Ayrıca kırmızı zeminde kırmızı hata mesajı ("Incorrect
+email or password") neredeyse görünmüyordu.
+
+Ortak kabuk: `components/PublicShell.tsx` — koyu grafit zemin, üstten hafif
+kırmızı ışık, buzlu cam kart, marka kilidi ve altta kurum künyesi
+(DGCA SHT-145 · TR.145.118). Kenar çubuğuyla aynı dünyada olduğu için giriş
+yapınca renk şoku olmuyor. Kırmızı yalnızca birincil düğmede ve hatada.
+
+Koyu zemine uygun form yardımcıları da orada: `pubLabel`, `pubInput`,
+`pubButton`, `PublicError`. Üç sayfa da bunları kullanıyor; beyaz kart
+sınıfları (`input`, `label`, `btn-primary`) koyu zeminde okunmuyordu.
