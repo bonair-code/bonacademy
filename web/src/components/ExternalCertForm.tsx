@@ -4,18 +4,9 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
+import { addValidity } from "../lib/records";
 
 export type RecurUnit = "NONE" | "DAY" | "MONTH" | "YEAR";
-
-export function addValidity(base: Date, every: number | null, unit: RecurUnit): Date | null {
-  if (!every || unit === "NONE") return null;
-  const d = new Date(base);
-  if (unit === "DAY") d.setDate(d.getDate() + every);
-  else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
-  else if (unit === "YEAR") d.setFullYear(d.getFullYear() + every);
-  else return null;
-  return d;
-}
 
 /**
  * Dış eğitim kaydı — kişinin eksik bir eğitimi için. Kurs ve personel dışarıdan

@@ -18,6 +18,15 @@ import {
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { FilePreview } from "../components/FilePreview";
+import {
+  daysLeft,
+  expiryOf,
+  fmt,
+  keyOf,
+  methodRecordIndex,
+  openAssignmentSet,
+  pickLatest,
+} from "../lib/records";
 import { AnchoredCard } from "../components/AnchoredCard";
 import { AssignOne } from "../components/AssignOne";
 
@@ -82,7 +91,6 @@ type CellState =
       methodRows?: MethodRow[];
     };
 
-const DAY = 86400000;
 
 /**
  * Isı haritası. Excel'deki bantların karşılığı ama tek bir sürekli ölçek:
@@ -116,17 +124,7 @@ function heat(state: CellState): { bg: string; fg: string } {
   return { bg: HEAT.fresh, fg: "#0f2f1a" };
 }
 
-function addValidity(base: Date, every?: number | null, unit?: string): Date | null {
-  if (!every || !unit || unit === "NONE") return null;
-  const d = new Date(base);
-  if (unit === "DAY") d.setDate(d.getDate() + every);
-  else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
-  else if (unit === "YEAR") d.setFullYear(d.getFullYear() + every);
-  else return null;
-  return d;
-}
 
-const fmt = (d: Date) => d.toLocaleDateString("tr-TR");
 
 export function TrainingMatrix() {
   const { profile, role } = useAuth();
@@ -240,11 +238,10 @@ export function TrainingMatrix() {
       recordTitle?: string | null;
     };
     const m = new Map<string, Done>();
+    // Kazanan kayıt kuralı lib/records.ts'de: EN SON tamamlanan.
     const put = (uid: string, cid: string, d: Done | null) => {
       if (!uid || !cid || !d) return;
-      const k = `${uid}|${cid}`;
-      const prev = m.get(k);
-      if (!prev || d.date > prev.date) m.set(k, d);
+      pickLatest(m, keyOf(uid, cid), d);
     };
     for (const c of certs) {
       const date = (c.issuedAt as Timestamp)?.toDate?.();
@@ -280,33 +277,12 @@ export function TrainingMatrix() {
    * kişinin her metodu ayrı bir kayıt; `completions` yalnızca en sonu
    * tuttuğu için burada tamamı gerekiyor.
    */
-  const methodRecords = useMemo(() => {
-    const m = new Map<string, MethodRecord[]>();
-    for (const e of externals) {
-      const date = (e.completedAt as Timestamp)?.toDate?.();
-      if (!date || !e.userId || !e.courseId) continue;
-      const k = `${e.userId}|${e.courseId}`;
-      m.set(k, [
-        ...(m.get(k) ?? []),
-        {
-          method: e.method ?? null,
-          date,
-          expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
-          url: e.fileUrl ?? null,
-        },
-      ]);
-    }
-    return m;
-  }, [externals]);
+  const methodRecords = useMemo(
+    () => methodRecordIndex(externals) as Map<string, MethodRecord[]>,
+    [externals]
+  );
 
-  const assignedSet = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of assignments) {
-      if (a.status !== "COMPLETED" && a.status !== "EXAM_PASSED")
-        s.add(`${a.userId}|${a.courseId}`);
-    }
-    return s;
-  }, [assignments]);
+  const assignedSet = useMemo(() => openAssignmentSet(assignments), [assignments]);
 
   const hover = useCellHover();
 
@@ -344,32 +320,33 @@ export function TrainingMatrix() {
      */
     const ticked = heldMethods(u, c.id);
     if (methodsOf(c).length > 0 && ticked.length > 0) {
-      const rows = methodBreakdown(ticked, methodRecords.get(`${u.id}|${c.id}`) ?? []);
+      const rows = methodBreakdown(ticked, methodRecords.get(keyOf(u.id, c.id)) ?? []);
       const { missing, date, expiry } = worstOf(rows);
       if (missing.length > 0) return { kind: "MISSING", methodsMissing: missing, methodRows: rows };
       return {
         kind: "DONE",
         date: date!,
         expires: expiry,
-        days: expiry ? Math.round((expiry.getTime() - Date.now()) / DAY) : null,
+        days: daysLeft(expiry),
         external: "External",
         methodRows: rows,
       };
     }
 
-    const done = completions.get(`${u.id}|${c.id}`);
+    const done = completions.get(keyOf(u.id, c.id));
     if (done) {
       // Dış belgenin geçerliliği kursun tekrar süresinden değil, belgenin
-      // kendi bitiş tarihinden gelir — kişi sayfası ve Dashboard böyle
-      // hesaplıyordu, matris hesaplamıyordu; üç ekran farklı sonuç veriyordu.
-      const expires = done.external
-        ? done.expiresAt ?? null
-        : addValidity(done.date, c.recurrenceEvery, c.recurrenceUnit);
+      // kendi bitiş tarihinden gelir. Kural lib/records.ts'de — matris bunu
+      // hesaplamıyordu ve üç ekran aynı kişi için farklı sonuç veriyordu.
+      const expires = expiryOf(
+        { date: done.date, external: !!done.external, externalExpiry: done.expiresAt ?? null },
+        c
+      );
       return {
         kind: "DONE",
         date: done.date,
         expires,
-        days: expires ? Math.round((expires.getTime() - Date.now()) / DAY) : null,
+        days: daysLeft(expires),
         external: done.external,
         certificateId: done.certId ?? null,
         externalUrl: done.url ?? null,

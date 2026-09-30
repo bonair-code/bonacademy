@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   collection,
   deleteDoc,
@@ -18,24 +18,40 @@ import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { requirementFor } from "../lib/requirements";
+import { DAY, daysLeft, expiryOf, fmt, isAssignmentDone, pickLatest } from "../lib/records";
+import {
+  AssignPanel,
+  DeleteConfirm,
+  PasswordReset,
+  ROLE_LABEL,
+  UserForm,
+  type MethodCourse,
+  type Ref,
+  type ScopeRef,
+  type UserRow,
+} from "../components/user/UserDialogs";
 import { PrintButton } from "../components/PrintButton";
 import { FilePreview } from "../components/FilePreview";
 
-type UserRow = {
-  id: string;
-  name: string;
-  email: string;
-  departmentId: string | null;
-  jobTitleIds?: string[];
-  subScopeIds?: string[];
-  isActive?: boolean;
-};
 type CourseRow = {
   id: string;
   title: string;
   isActive?: boolean;
+  delivery?: string;
+  methods?: string[];
   recurrenceEvery?: number | null;
   recurrenceUnit?: string;
+};
+
+/** Sayfanın sekmeleri. Tek akış hâline sığmıyordu; atamalar da eklendi. */
+const TABS = ["OVERVIEW", "TRAINING", "CERTIFICATES", "RECORDS", "ASSIGNMENTS"] as const;
+type Tab = (typeof TABS)[number];
+const TAB_LABEL: Record<Tab, string> = {
+  OVERVIEW: "Overview",
+  TRAINING: "Training",
+  CERTIFICATES: "Certificates",
+  RECORDS: "External records",
+  ASSIGNMENTS: "Assignments",
 };
 type ExternalRow = {
   id: string;
@@ -51,18 +67,6 @@ type ExternalRow = {
   method?: string | null;
 };
 
-const DAY = 86400000;
-
-function addValidity(base: Date, every?: number | null, unit?: string): Date | null {
-  if (!every || !unit || unit === "NONE") return null;
-  const d = new Date(base);
-  if (unit === "DAY") d.setDate(d.getDate() + every);
-  else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
-  else if (unit === "YEAR") d.setFullYear(d.getFullYear() + every);
-  else return null;
-  return d;
-}
-const fmt = (d?: Date | null) => (d ? d.toLocaleDateString("tr-TR") : "—");
 
 type Line = {
   course: CourseRow;
@@ -78,11 +82,12 @@ type Line = {
 export function StaffDetail() {
   const { userId } = useParams<{ userId: string }>();
   const { profile, role } = useAuth();
+  const navigate = useNavigate();
 
   const [user, setUser] = useState<UserRow | null>(null);
   const [courses, setCourses] = useState<CourseRow[]>([]);
   const [jobTitles, setJobTitles] = useState<
-    { id: string; name: string; requiredCourseIds?: string[]; subScopes?: { id: string; name: string; requiredCourseIds?: string[] }[] }[]
+    (ScopeRef & { requiredCourseIds?: string[] })[]
   >([]);
   const [departments, setDepartments] = useState<Map<string, string>>(new Map());
   const [certs, setCerts] = useState<any[]>([]);
@@ -91,11 +96,17 @@ export function StaffDetail() {
   const [preview, setPreview] = useState<{ url: string; name: string; title: string } | null>(
     null
   );
+  const [tab, setTab] = useState<Tab>("OVERVIEW");
   const [dialog, setDialog] = useState<
     | { kind: "add"; course: CourseRow | null }
     | { kind: "remove"; row: ExternalRow }
     | { kind: "edit"; row: ExternalRow }
     | { kind: "force"; line: Line }
+    // Kişi yönetimi — eskiden yalnızca Users sayfasının satır menüsünde vardı.
+    | { kind: "editUser" }
+    | { kind: "password" }
+    | { kind: "assign" }
+    | { kind: "deleteUser" }
     | null
   >(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -143,25 +154,21 @@ export function StaffDetail() {
   // Kişinin ilgili olduğu her kurs: zorunlu olanlar + atanmışlar + tamamlananlar.
   const lines: Line[] = useMemo(() => {
     const assignedIds = new Set(
-      assignments
-        .filter((a) => a.status !== "COMPLETED" && a.status !== "EXAM_PASSED")
-        .map((a) => a.courseId)
+      assignments.filter((a) => !isAssignmentDone(a.status)).map((a) => a.courseId)
     );
+    // Kazanan kayıt kuralı lib/records.ts'de: aynı kurs için birden fazla
+    // kayıt varsa EN SON tamamlanan kazanır.
     const certByCourse = new Map<string, { date: Date; id: string }>();
     for (const c of certs) {
       const dt = (c.issuedAt as Timestamp)?.toDate?.();
       if (!dt || !c.courseId) continue;
-      const prev = certByCourse.get(c.courseId);
-      if (!prev || dt > prev.date) certByCourse.set(c.courseId, { date: dt, id: c.__id });
+      pickLatest(certByCourse, c.courseId, { date: dt, id: c.__id });
     }
-    const extByCourse = new Map<string, ExternalRow>();
-    // Aynı kurs için birden fazla dış kayıt olabiliyor; kazanan EN SON
-    // tamamlanan olmalı. Eskiden döngüde en son gelen kazanıyordu, rastgeleydi.
+    const extByCourse = new Map<string, ExternalRow & { date: Date }>();
     for (const e of externals) {
-      if (!e.courseId) continue;
-      const prev = extByCourse.get(e.courseId);
-      const t = e.completedAt?.toMillis?.() ?? 0;
-      if (!prev || t > (prev.completedAt?.toMillis?.() ?? 0)) extByCourse.set(e.courseId, e);
+      const dt = e.completedAt?.toDate?.();
+      if (!dt || !e.courseId) continue;
+      pickLatest(extByCourse, e.courseId, { ...e, date: dt });
     }
 
     const relevant = courses.filter(
@@ -178,16 +185,17 @@ export function StaffDetail() {
       const date = useExt ? extDate : internal;
 
       if (date) {
-        const expires = useExt
-          ? ext?.expiresAt?.toDate?.() ?? null
-          : addValidity(date, course.recurrenceEvery, course.recurrenceUnit);
+        const expires = expiryOf(
+          { date, external: useExt, externalExpiry: ext?.expiresAt?.toDate?.() ?? null },
+          course
+        );
         return {
           course,
           required: requiredIds.has(course.id),
           state: "DONE" as const,
           date,
           expires,
-          days: expires ? Math.round((expires.getTime() - Date.now()) / DAY) : null,
+          days: daysLeft(expires),
           external: useExt ? ext : null,
           certificateId: useExt ? null : internalCert?.id ?? null,
         };
@@ -205,6 +213,28 @@ export function StaffDetail() {
     });
   }, [courses, requiredIds, assignments, certs, externals]);
 
+  /** UserForm departman listesini dizi bekliyor; sayfa Map tutuyor. */
+  const departmentList: Ref[] = useMemo(
+    () => [...departments.entries()].map(([id, name]) => ({ id, name })),
+    [departments]
+  );
+  /** Metodlara bölünmüş eğitimler — kişi formunda metod tikleri için. */
+  const methodCourses: MethodCourse[] = useMemo(
+    () =>
+      courses
+        .filter((c) => (c.methods ?? []).length > 0)
+        .map((c) => ({ id: c.id, title: c.title, methods: c.methods ?? [] })),
+    [courses]
+  );
+  /** Atanabilir eğitimler: dış eğitim sistemde tamamlanamaz, yayında olmayanın içeriği yok. */
+  const assignableCourses: Ref[] = useMemo(
+    () =>
+      courses
+        .filter((c) => c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false)
+        .map((c) => ({ id: c.id, name: c.title })),
+    [courses]
+  );
+
   const missing = lines.filter((l) => l.state === "MISSING");
   const planned = lines.filter((l) => l.state === "PLANNED");
   const done = lines.filter((l) => l.state === "DONE");
@@ -213,6 +243,25 @@ export function StaffDetail() {
 
   const canEdit =
     role === "ADMIN" || (role === "MANAGER" && user?.departmentId === profile?.departmentId);
+
+  /** Hesabı aktif/pasif et. Users sayfasındaki ile aynı çağrı. */
+  async function setActive(isActive: boolean) {
+    if (!userId) return;
+    setErr(null);
+    try {
+      await httpsCallable(functions, "updateUser")({ uid: userId, isActive });
+      setToast(isActive ? "Account activated." : "Account deactivated.");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
+
+  /**
+   * Sekme panelleri DOM'da her zaman duruyor, aktif olmayan CSS ile gizleniyor.
+   * Koşullu render etseydik PDF raporu yalnızca açık sekmeyi basardı — rapor
+   * bir uygunluk belgesi, eksik basılamaz.
+   */
+  const panel = (t: Tab) => (tab === t ? "" : "hidden print:block");
 
   if (role !== "ADMIN" && role !== "MANAGER" && role !== "INSTRUCTOR")
     return <p className="text-sm text-slate-400 py-10">Not available for your role.</p>;
@@ -236,28 +285,35 @@ export function StaffDetail() {
       <Link to="/follow-up" className="text-xs text-slate-500 hover:text-slate-800 no-print">
         ← Training Follow-Up
       </Link>
-      <PageHead title={user.name} subtitle="Training status, gaps and external certificates." />
+      <PageHead
+        title={user.name}
+        subtitle="Everything on this person: training, certificates, records and assignments."
+      />
       <div className="mb-4" />
 
-      {/* Kimlik + özet */}
-      <div className="card p-4 mb-4">
+      {/* Kimlik + özet. Bu kart her sekmede kalır: kişinin kim olduğu
+          sekme değiştirince kaybolmamalı. */}
+      <div className="card p-4 mb-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-[13px] text-slate-500">{user.email}</div>
-            <div className="text-[12px] text-slate-600 mt-1">
-              {departments.get(user.departmentId ?? "") ?? "No department"}
-              {titleNames.length > 0 && (
-                <span className="ml-2 inline-flex flex-wrap gap-1 align-middle">
-                  {titleNames.map((t) => (
-                    <span
-                      key={t}
-                      className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[11px] font-medium"
-                    >
-                      {t}
-                    </span>
-                  ))}
+            <div className="text-[12px] text-slate-600 mt-1 flex flex-wrap items-center gap-1.5">
+              <span>{departments.get(user.departmentId ?? "") ?? "No department"}</span>
+              <span className="text-slate-300">·</span>
+              <span>{ROLE_LABEL[user.role] ?? user.role}</span>
+              {user.isActive === false && (
+                <span className="bg-slate-200 text-slate-700 rounded px-1.5 py-0.5 text-[10.5px] font-bold uppercase">
+                  Inactive
                 </span>
               )}
+              {titleNames.map((t) => (
+                <span
+                  key={t}
+                  className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[11px] font-medium"
+                >
+                  {t}
+                </span>
+              ))}
             </div>
           </div>
           <div className="flex items-center gap-2 no-print">
@@ -270,6 +326,34 @@ export function StaffDetail() {
                 + External Certificate
               </button>
             )}
+            {/* Kişi yönetimi artık burada: eskiden Users sayfasının satır
+                menüsündeydi, yani bir kişiyi düzenlemek için tam kaydından
+                çıkıp başka sayfaya gitmek gerekiyordu. */}
+            {canEdit && (
+              <RowMenu
+                label={`Manage ${user.name}`}
+                items={[
+                  { label: "Edit details", icon: "✎", onClick: () => setDialog({ kind: "editUser" }) },
+                  { label: "Reset password", icon: "🔑", onClick: () => setDialog({ kind: "password" }) },
+                  { label: "Assign training", icon: "▤", onClick: () => setDialog({ kind: "assign" }) },
+                  {
+                    label: user.isActive === false ? "Activate" : "Deactivate",
+                    icon: user.isActive === false ? "✓" : "⦸",
+                    onClick: () => void setActive(user.isActive === false),
+                  },
+                  ...(role === "ADMIN"
+                    ? [
+                        {
+                          label: "Delete user",
+                          icon: "🗑",
+                          danger: true,
+                          onClick: () => setDialog({ kind: "deleteUser" }),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            )}
           </div>
         </div>
 
@@ -281,8 +365,116 @@ export function StaffDetail() {
         </div>
       </div>
 
+      {/* Sekmeler. Baskıda gizli: PDF raporu her şeyi alt alta basıyor. */}
+      <div className="flex gap-1 mb-3 overflow-x-auto no-print">
+        {TABS.map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`shrink-0 text-[12.5px] font-semibold px-3 py-2 rounded-lg transition ${
+              tab === t
+                ? "bg-slate-900 text-white"
+                : "text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {TAB_LABEL[t]}
+            {t === "CERTIFICATES" && certs.length > 0 && (
+              <span className={tab === t ? "text-white/60 ml-1" : "text-slate-400 ml-1"}>
+                {certs.length}
+              </span>
+            )}
+            {t === "RECORDS" && externals.length > 0 && (
+              <span className={tab === t ? "text-white/60 ml-1" : "text-slate-400 ml-1"}>
+                {externals.length}
+              </span>
+            )}
+            {t === "ASSIGNMENTS" && assignments.length > 0 && (
+              <span className={tab === t ? "text-white/60 ml-1" : "text-slate-400 ml-1"}>
+                {assignments.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Özet: en çok bakılan iki şey — kapatılacak eksikler ve yaklaşan
+          bitişler. Tam liste Training sekmesinde. */}
+      <div className={`grid lg:grid-cols-2 gap-3 ${panel("OVERVIEW")}`}>
+        <div className="card">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-[13px] font-bold text-slate-800">
+              Gaps <span className="text-slate-400 font-normal">({missing.length})</span>
+            </span>
+            {canEdit && missing.length > 0 && (
+              <button
+                onClick={() => setDialog({ kind: "assign" })}
+                className="text-[11.5px] font-semibold text-brand-700 hover:underline no-print"
+              >
+                Assign training
+              </button>
+            )}
+          </div>
+          {missing.length === 0 ? (
+            <p className="px-5 py-6 text-center text-[13px] text-emerald-700 font-medium">
+              No gaps — every required training is on record.
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {missing.map((l) => (
+                <li key={l.course.id} className="px-5 py-2.5 flex items-center gap-3">
+                  <span className="min-w-0 flex-1 text-[13px] font-medium text-slate-800 truncate">
+                    {l.course.title}
+                  </span>
+                  {l.required && (
+                    <span className="shrink-0 text-[10px] font-bold uppercase text-brand-700">
+                      Required
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="card">
+          <div className="px-5 py-3 border-b border-slate-100">
+            <span className="text-[13px] font-bold text-slate-800">Expiring or expired</span>
+          </div>
+          {(() => {
+            // Dolmuş ve 90 günden az kalmış olanlar; en acili üstte.
+            const soon = done
+              .filter((l) => l.days !== null && l.days <= 90)
+              .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+            if (soon.length === 0)
+              return (
+                <p className="px-5 py-6 text-center text-[13px] text-slate-400">
+                  Nothing expiring in the next 90 days.
+                </p>
+              );
+            return (
+              <ul className="divide-y divide-slate-100">
+                {soon.map((l) => (
+                  <li key={l.course.id} className="px-5 py-2.5 flex items-center gap-3">
+                    <span className="min-w-0 flex-1 text-[13px] font-medium text-slate-800 truncate">
+                      {l.course.title}
+                    </span>
+                    <span
+                      className={`shrink-0 text-[11.5px] font-semibold tabular-nums ${
+                        l.days! < 0 ? "text-brand-700" : "text-amber-700"
+                      }`}
+                    >
+                      {l.days! < 0 ? `${-l.days!}d overdue` : `${l.days}d left`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            );
+          })()}
+        </div>
+      </div>
+
       {/* Eğitim durumu */}
-      <div className="card">
+      <div className={`card ${panel("TRAINING")}`}>
         <div
           className="px-5 py-3 relative"
           style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
@@ -451,7 +643,7 @@ export function StaffDetail() {
       {/* TÜM dış kayıtlar. Eğitim tablosu kurs başına yalnızca kazanan kaydı
           gösteriyor; aynı kursa girilmiş ikinci bir kayıt hiçbir yerde
           görünmüyor, dolayısıyla silinemiyordu. Burası tam liste. */}
-      <div className="card mt-4">
+      <div className={`card mt-4 ${panel("RECORDS")}`}>
         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
           <span className="text-[13px] font-bold text-slate-800">
             External Certificates{" "}
@@ -577,6 +769,147 @@ export function StaffDetail() {
         )}
       </div>
 
+      {/* Sertifikalar — bu kişiye sistemden verilen BonAir sertifikaları.
+          Eskiden yalnızca kişinin kendi "My Certificates" sayfasında
+          görünüyordu; müdür bir personelin sertifikasını göremiyordu. */}
+      <div className={`card mt-4 ${panel("CERTIFICATES")}`}>
+        <div className="px-5 py-3 border-b border-slate-100">
+          <span className="text-[13px] font-bold text-slate-800">
+            BonAir Certificates{" "}
+            <span className="text-slate-400 font-normal">({certs.length})</span>
+          </span>
+        </div>
+        {certs.length === 0 ? (
+          <p className="px-5 py-6 text-center text-[13px] text-slate-400">
+            No certificate issued by BonAir yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500">
+                  <th className="th">No</th>
+                  <th className="th">Training</th>
+                  <th className="th">Issued</th>
+                  <th className="th">Instructor</th>
+                  <th className="th">Held</th>
+                  <th className="th w-20 text-right no-print"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...certs]
+                  .sort((a, b) => (b.issuedAt?.toMillis?.() ?? 0) - (a.issuedAt?.toMillis?.() ?? 0))
+                  .map((c) => (
+                    <tr key={c.__id} className="hover:bg-slate-50/70">
+                      <td className="td font-semibold text-slate-900 tabular-nums">
+                        {c.serialNo ?? "—"}
+                      </td>
+                      <td className="td text-slate-800">{c.courseTitle ?? "—"}</td>
+                      <td className="td tabular-nums text-slate-500">
+                        {fmt(c.issuedAt?.toDate?.())}
+                      </td>
+                      <td className="td text-slate-600">{c.instructorName || "—"}</td>
+                      <td className="td text-slate-600">
+                        {c.deliveryMode === "CLASSROOM" ? "Classroom" : c.heldIn || "—"}
+                      </td>
+                      <td className="td text-right no-print">
+                        <Link
+                          to={`/certificate/${c.__id}`}
+                          className="text-[12px] font-medium text-brand-700 hover:underline"
+                        >
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Atamalar — bu listeyi hiçbir ekran göstermiyordu. Sayfa veriyi
+          zaten çekiyordu ama sadece "Planned" durumu olarak kullanıyordu;
+          son teslim tarihi, gecikme ve kimin attığı hiç görünmüyordu. */}
+      <div className={`card mt-4 ${panel("ASSIGNMENTS")}`}>
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+          <span className="text-[13px] font-bold text-slate-800">
+            Assignments{" "}
+            <span className="text-slate-400 font-normal">({assignments.length})</span>
+          </span>
+          {canEdit && (
+            <button
+              onClick={() => setDialog({ kind: "assign" })}
+              className="btn-secondary text-xs py-1.5 no-print"
+            >
+              + Assign
+            </button>
+          )}
+        </div>
+        {assignments.length === 0 ? (
+          <p className="px-5 py-6 text-center text-[13px] text-slate-400">
+            Nothing assigned to {user.name} yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="bg-slate-50 text-slate-500">
+                  <th className="th">Training</th>
+                  <th className="th">Status</th>
+                  <th className="th">Due</th>
+                  <th className="th">Completed</th>
+                  <th className="th">Assigned by</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {[...assignments]
+                  .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+                  .map((a) => {
+                    const finished = a.status === "COMPLETED" || a.status === "EXAM_PASSED";
+                    const dueMs = a.dueDate?.toMillis?.() ?? null;
+                    const overdue = !finished && dueMs !== null && dueMs < Date.now();
+                    return (
+                      <tr key={`${a.courseId}_${a.cycleNumber ?? 1}`} className="hover:bg-slate-50/70">
+                        <td className="td font-semibold text-slate-900">{a.courseTitle || "—"}</td>
+                        <td className="td">
+                          <span
+                            className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${
+                              finished
+                                ? "bg-emerald-50 text-emerald-700"
+                                : overdue
+                                ? "bg-red-50 text-red-700"
+                                : "bg-sky-50 text-sky-800"
+                            }`}
+                          >
+                            {finished ? "Completed" : overdue ? "Overdue" : String(a.status ?? "—")}
+                          </span>
+                        </td>
+                        <td className="td tabular-nums">
+                          <span className={overdue ? "text-brand-700 font-semibold" : "text-slate-600"}>
+                            {fmt(a.dueDate?.toDate?.())}
+                          </span>
+                          {overdue && dueMs !== null && (
+                            <span className="block text-[10px] text-slate-400">
+                              {Math.round((Date.now() - dueMs) / DAY)}d overdue
+                            </span>
+                          )}
+                        </td>
+                        <td className="td tabular-nums text-slate-500">
+                          {fmt(a.completedAt?.toDate?.())}
+                        </td>
+                        <td className="td text-slate-500 text-[12px]">
+                          {a.triggeredBy === "MANAGER_REQUESTED" ? "Manager" : a.triggeredBy || "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
       {preview && (
         <FilePreview
           url={preview.url}
@@ -652,6 +985,74 @@ export function StaffDetail() {
               Cancel
             </button>
           </div>
+        </Modal>
+      )}
+
+      {/* Kişi yönetimi diyalogları — Users sayfasıyla aynı bileşenler. */}
+      {dialog?.kind === "editUser" && (
+        <Modal title="Edit User" subtitle={user.email} onClose={() => setDialog(null)}>
+          <UserForm
+            existing={user}
+            departments={departmentList}
+            jobTitles={jobTitles}
+            methodCourses={methodCourses}
+            onDone={(m) => {
+              setToast(m);
+              setDialog(null);
+            }}
+            onCancel={() => setDialog(null)}
+          />
+        </Modal>
+      )}
+
+      {dialog?.kind === "password" && (
+        <Modal
+          title="Reset Password"
+          subtitle={user.name}
+          onClose={() => setDialog(null)}
+          width="max-w-md"
+        >
+          <PasswordReset
+            user={user}
+            onDone={(m) => {
+              setToast(m);
+              setDialog(null);
+            }}
+            onCancel={() => setDialog(null)}
+          />
+        </Modal>
+      )}
+
+      {dialog?.kind === "assign" && (
+        <Modal title="Assign Training" subtitle={user.name} onClose={() => setDialog(null)}>
+          <AssignPanel
+            userId={user.id}
+            courses={assignableCourses}
+            onDone={(m) => {
+              setToast(m);
+              setDialog(null);
+            }}
+            onCancel={() => setDialog(null)}
+          />
+        </Modal>
+      )}
+
+      {dialog?.kind === "deleteUser" && (
+        <Modal
+          title="Delete User"
+          subtitle={user.email}
+          onClose={() => setDialog(null)}
+          width="max-w-md"
+        >
+          <DeleteConfirm
+            user={user}
+            onDone={() => {
+              // Kişi silindi; bu sayfanın konusu artık yok.
+              setDialog(null);
+              navigate("/users");
+            }}
+            onCancel={() => setDialog(null)}
+          />
         </Modal>
       )}
 

@@ -1,9 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router-dom";
 
 export type MenuItem = {
   label: string;
-  onClick: () => void;
+  /** `to` verilirse gezinme kalemi olur; ikisinden biri gerekli. */
+  onClick?: () => void;
+  to?: string;
   /** Yıkıcı işlemler kırmızı gösterilir ve ayırıcıyla ayrılır. */
   danger?: boolean;
   icon?: ReactNode;
@@ -96,24 +99,38 @@ export function RowMenu({ items, label = "Row actions" }: { items: MenuItem[]; l
             style={{ position: "fixed", top: pos.top, left: pos.left, width: MENU_W }}
             className="z-[60] bg-white border border-slate-200 rounded-lg shadow-xl py-1"
           >
-            {items.map((it, i) => (
-              <div key={it.label}>
-                {it.danger && i > 0 && <div className="my-1 border-t border-slate-100" />}
-                <button
-                  role="menuitem"
-                  onClick={() => {
-                    setOpen(false);
-                    it.onClick();
-                  }}
-                  className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition ${
-                    it.danger ? "text-brand-700 hover:bg-brand-50" : "text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
+            {items.map((it, i) => {
+              const cls = `w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition ${
+                it.danger ? "text-brand-700 hover:bg-brand-50" : "text-slate-700 hover:bg-slate-50"
+              }`;
+              const body = (
+                <>
                   {it.icon && <span className="w-4 shrink-0 text-center">{it.icon}</span>}
                   {it.label}
-                </button>
-              </div>
-            ))}
+                </>
+              );
+              return (
+                <div key={it.label}>
+                  {it.danger && i > 0 && <div className="my-1 border-t border-slate-100" />}
+                  {it.to ? (
+                    <Link role="menuitem" to={it.to} onClick={() => setOpen(false)} className={cls}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <button
+                      role="menuitem"
+                      onClick={() => {
+                        setOpen(false);
+                        it.onClick?.();
+                      }}
+                      className={cls}
+                    >
+                      {body}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>,
           document.body
         )}

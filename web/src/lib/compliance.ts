@@ -5,6 +5,14 @@ import { db } from "./firebase";
 import { requirementFor, type Scope } from "./requirements";
 import { heldMethods, methodBreakdown, methodsOf, worstOf } from "./methods";
 import { isStaffRole, type Role } from "./auth";
+import {
+  addValidity,
+  isAssignmentDone,
+  keyOf,
+  methodRecordIndex,
+  openAssignmentSet,
+  pickLatest,
+} from "./records";
 
 /**
  * Kurum uygunluk özeti — Training Follow-Up ile AYNI hesabı yapar, ama
@@ -46,16 +54,6 @@ export type ComplianceSummary = {
 };
 
 type AnyRow = Record<string, any>;
-
-function addValidity(base: Date, every?: number | null, unit?: string): Date | null {
-  if (!every || !unit || unit === "NONE") return null;
-  const d = new Date(base);
-  if (unit === "DAY") d.setDate(d.getDate() + every);
-  else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
-  else if (unit === "YEAR") d.setFullYear(d.getFullYear() + every);
-  else return null;
-  return d;
-}
 
 export function useCompliance(
   profile: { uid: string; departmentId: string | null } | null,
@@ -120,9 +118,7 @@ export function useCompliance(
     const done = new Map<string, Done>();
     const put = (uid: string, cid: string, d: Done | null) => {
       if (!uid || !cid || !d) return;
-      const k = `${uid}|${cid}`;
-      const prev = done.get(k);
-      if (!prev || d.date > prev.date) done.set(k, d);
+      pickLatest(done, keyOf(uid, cid), d);
     };
     for (const c of certs) {
       const d = (c.issuedAt as Timestamp)?.toDate?.();
@@ -139,22 +135,11 @@ export function useCompliance(
     }
 
     /** (userId, courseId) → o kursun bütün dış kayıtları; metod dökümü için. */
-    const methodRecs = new Map<string, { method?: string | null; date: Date; expiry: Date | null }[]>();
-    for (const e of externals) {
-      const d = (e.completedAt as Timestamp)?.toDate?.();
-      if (!d || !e.userId || !e.courseId) continue;
-      const k = `${e.userId}|${e.courseId}`;
-      methodRecs.set(k, [
-        ...(methodRecs.get(k) ?? []),
-        { method: e.method ?? null, date: d, expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null },
-      ]);
-    }
+    const methodRecs = methodRecordIndex(externals);
 
-    const openAssignments = assignments.filter(
-      (a) => a.status !== "COMPLETED" && a.status !== "EXAM_PASSED"
-    );
-    const assignedSet = new Set(openAssignments.map((a) => `${a.userId}|${a.courseId}`));
-    const openByKey = new Map(openAssignments.map((a) => [`${a.userId}|${a.courseId}`, a]));
+    const openAssignments = assignments.filter((a) => !isAssignmentDone(a.status));
+    const assignedSet = openAssignmentSet(assignments);
+    const openByKey = new Map(openAssignments.map((a) => [keyOf(a.userId, a.courseId), a]));
 
     // Müşteri personel değil: kurum uyum yüzdesini ve eksik listesini bozmasın.
     const activeUsers = users.filter((u) => u.isActive !== false && isStaffRole(u.role));

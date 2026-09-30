@@ -9,6 +9,7 @@ import { printCertificate } from "../lib/print";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm, type ExternalRecord } from "../components/ExternalCertForm";
 import { FilePreview } from "../components/FilePreview";
+import { addValidity, DAY, fmt } from "../lib/records";
 
 /**
  * Kişinin eğitim kayıtları — **eğitim başına** bir satır, kayıt başına değil.
@@ -20,21 +21,8 @@ import { FilePreview } from "../components/FilePreview";
  * üstte geçerli olan kayıt ve kalan gün, altında aynı eğitimin geçmişi.
  */
 
-const DAY = 86400000;
-const fmt = (d?: Date | null) => (d ? d.toLocaleDateString("tr-TR") : "—");
 
 type Course = { every: number | null; unit: string; title: string; methods: string[] };
-
-/** Sertifikanın yenileme tarihi kursun tekrar periyodundan gelir. */
-function addValidity(base: Date, every: number | null, unit: string): Date | null {
-  if (!every || unit === "NONE") return null;
-  const d = new Date(base);
-  if (unit === "DAY") d.setDate(d.getDate() + every);
-  else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
-  else if (unit === "YEAR") d.setFullYear(d.getFullYear() + every);
-  else return null;
-  return d;
-}
 
 type Source = "BONACADEMY" | "EXTERNAL" | "PAPER";
 
