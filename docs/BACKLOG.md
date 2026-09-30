@@ -985,3 +985,12 @@ farklı cevap vermesine yol açmıştı.
 
 **Metod listesi henüz boş** — kullanıcı kendi listesini yazacak
 (Settings → Tracked Trainings → NDT training → Methods).
+
+### Detay kartı fareyle tutuluyor (30.09.2026)
+Kart `pointer-events-none` idi ve hücreden çıkar çıkmaz kapanıyordu; hücre ile
+kart arasındaki boşluktan geçerken kayboluyor, içindeki metni okumak ya da
+seçmek mümkün olmuyordu. Artık hücreden çıkışta 220 ms bekleniyor, kartın
+üstüne girilince bekleme iptal ediliyor, karttan çıkılınca kapanıyor.
+
+Hücrelerdeki `title` öznitelikleri kaldırıldı — tarayıcının siyah ipucu detay
+kartının üstüne biniyor ve aynı bilgiyi daha kötü gösteriyordu.

@@ -583,7 +583,6 @@ export function TrainingMatrix() {
                                   setRecord({ user: u, course: c });
                                 }}
                                 className="group w-full h-full font-semibold"
-                                title={`Record ${c.title} for ${u.name}`}
                               >
                                 <span className="group-hover:hidden">
                                   <Cell state={st} />
@@ -613,7 +612,9 @@ export function TrainingMatrix() {
         {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
       </div>
 
-      {hover.at && <CellDetail at={hover.at} />}
+      {hover.at && (
+        <CellDetail at={hover.at} onEnter={hover.holdOpen} onLeave={hover.closeNow} />
+      )}
 
       {record && (
         <Modal
@@ -666,6 +667,7 @@ type HoverState = {
 function useCellHover() {
   const [at, setAt] = useState<HoverState | null>(null);
   const timer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
 
   const clear = () => {
     if (timer.current !== null) {
@@ -676,6 +678,7 @@ function useCellHover() {
 
   const enter = (el: HTMLElement, user: UserRow, course: CourseRow, state: CellState) => {
     clear();
+    holdOpen();
     // Gerekli olmayan hücrede yalnızca muafiyet varsa gösterilecek bir şey var.
     if (state.kind === "NA" && !state.exemptBy) return;
     const rect = el.getBoundingClientRect();
@@ -685,8 +688,29 @@ function useCellHover() {
     );
   };
 
+  /**
+   * Hücreden çıkınca kart hemen kapanmaz: hücre ile kart arasında birkaç
+   * piksellik boşluk var ve fare oradan geçerken kart kayboluyordu, yani
+   * içindeki metni okumak ya da seçmek imkânsızdı. Kısa bir süre beklenir;
+   * kartın üstüne girilirse bekleme iptal edilir.
+   */
   const leave = () => {
     clear();
+    closeTimer.current = window.setTimeout(() => setAt(null), 220);
+  };
+
+  /** Kartın üstüne gelindi — kapanmayı iptal et. */
+  const holdOpen = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  };
+
+  /** Karttan çıkıldı — kapat. */
+  const closeNow = () => {
+    clear();
+    holdOpen();
     setAt(null);
   };
 
@@ -704,10 +728,18 @@ function useCellHover() {
 
   useEffect(() => clear, []);
 
-  return { at, enter, leave };
+  return { at, enter, leave, holdOpen, closeNow };
 }
 
-function CellDetail({ at }: { at: HoverState }) {
+function CellDetail({
+  at,
+  onEnter,
+  onLeave,
+}: {
+  at: HoverState;
+  onEnter: () => void;
+  onLeave: () => void;
+}) {
   const { user, course, state, rect } = at;
   const W = 260;
   // Ekranın sağına taşarsa sola, altına taşarsa üstüne açılır.
@@ -724,7 +756,9 @@ function CellDetail({ at }: { at: HoverState }) {
 
   return createPortal(
     <div
-      className="fixed z-[80] rounded-xl bg-white shadow-xl border border-slate-200 px-3.5 py-3 text-[11.5px] no-print pointer-events-none"
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      className="fixed z-[80] rounded-xl bg-white shadow-xl border border-slate-200 px-3.5 py-3 text-[11.5px] no-print"
       style={{
         width: W,
         left,
@@ -878,14 +912,13 @@ function Cell({ state }: { state: CellState }) {
   const body = (
     <span>{state.days === null ? "∞" : state.days < 0 ? `−${-state.days}` : state.days}</span>
   );
-  // Tarayıcının kendi ipucu, detay kartı beklenmeden de temel bilgiyi versin.
-  const title = state.expires ? `${fmt(state.date)} → ${fmt(state.expires)}` : fmt(state.date);
+  // Tarayıcının siyah ipucu kullanılmıyor: detay kartı aynı bilgiyi daha
+  // okunur veriyor ve ikisi üst üste binince hücre okunmaz hâle geliyordu.
 
   if (state.certificateId) {
     return (
       <Link
         to={`/certificate/${state.certificateId}`}
-        title={title}
         className="block tabular-nums hover:underline"
       >
         {body}
@@ -898,7 +931,6 @@ function Cell({ state }: { state: CellState }) {
         href={state.externalUrl}
         target="_blank"
         rel="noreferrer"
-        title={title}
         className="block tabular-nums hover:underline"
       >
         {body}
@@ -906,7 +938,7 @@ function Cell({ state }: { state: CellState }) {
     );
   }
   return (
-    <span className="block tabular-nums" title={title}>
+    <span className="block tabular-nums">
       {body}
     </span>
   );
