@@ -7,13 +7,6 @@ import { useAuth } from "../lib/auth";
 
 export type RecurUnit = "NONE" | "DAY" | "MONTH" | "YEAR";
 
-const UNIT_LABEL: Record<RecurUnit, string> = {
-  NONE: "No expiry",
-  DAY: "Day(s)",
-  MONTH: "Month(s)",
-  YEAR: "Year(s)",
-};
-
 export function addValidity(base: Date, every: number | null, unit: RecurUnit): Date | null {
   if (!every || unit === "NONE") return null;
   const d = new Date(base);
@@ -54,6 +47,28 @@ export type ExternalRecord = {
 
 const iso = (d?: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
 
+/** Geçerlilik seçenekleri — kâğıt sertifikalarda görülen süreler. */
+type ValidityKey = "NONE" | "Y1" | "Y2" | "Y5" | "CUSTOM";
+const VALIDITY_CHOICES: { key: ValidityKey; label: string }[] = [
+  { key: "NONE", label: "No expiry" },
+  { key: "Y1", label: "1 year" },
+  { key: "Y2", label: "2 years" },
+  { key: "Y5", label: "5 years" },
+  { key: "CUSTOM", label: "Pick date" },
+];
+const YEARS_OF: Record<ValidityKey, number | null> = {
+  NONE: null, Y1: 1, Y2: 2, Y5: 5, CUSTOM: null,
+};
+
+/** Kursun tekrar periyodu hangi seçeneğe denk geliyor. */
+function validityFromCourse(c?: { recurrenceEvery?: number | null; recurrenceUnit?: string } | null): ValidityKey {
+  const u = (c?.recurrenceUnit as RecurUnit) ?? "NONE";
+  if (u === "NONE") return "NONE";
+  if (u !== "YEAR") return "CUSTOM";
+  const n = c?.recurrenceEvery ?? 0;
+  return n === 1 ? "Y1" : n === 2 ? "Y2" : n === 5 ? "Y5" : "CUSTOM";
+}
+
 export function ExternalCertForm({
   user,
   course,
@@ -83,9 +98,6 @@ export function ExternalCertForm({
   const [durationHours, setDurationHours] = useState(
     existing?.durationHours != null ? String(existing.durationHours) : ""
   );
-  // Varsayılan geçerlilik kursun kendi periyodundan gelir; gerekirse değiştirilir.
-  const [every, setEvery] = useState(String(course?.recurrenceEvery ?? ""));
-  const [unit, setUnit] = useState<RecurUnit>((course?.recurrenceUnit as RecurUnit) ?? "NONE");
   /**
    * Geçerlilik tarihi doğrudan girilebilir. Dış sertifikada bitiş tarihi
    * belgenin üstünde yazar; kursun tekrar periyodundan türetmek her zaman
@@ -93,7 +105,14 @@ export function ExternalCertForm({
    * kullanıcı elle değiştirirse bir daha ezilmez.
    */
   const [validUntil, setValidUntil] = useState(iso(existing?.expiresAt?.toDate?.()));
-  const [touchedValid, setTouchedValid] = useState(!!existing);
+  /**
+   * Geçerlilik seçimi. Düzenleme kipinde kayıtlı bir bitiş tarihi varsa
+   * "CUSTOM"; yeni kayıtta kursun kendi periyodundan başlar.
+   */
+  const [validity, setValidity] = useState<ValidityKey>(() => {
+    if (existing) return existing.expiresAt ? "CUSTOM" : "NONE";
+    return validityFromCourse(course);
+  });
   const [serialNo, setSerialNo] = useState(existing?.externalSerialNo ?? "");
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [file, setFile] = useState<File | null>(null);
@@ -111,14 +130,14 @@ export function ExternalCertForm({
   const canSubmit =
     !!title.trim() && !!provider.trim() && !!completed && (editing || paperOnly || !!file);
 
-  /** Periyottan bitiş tarihini türet; kullanıcı elle girdiyse dokunma. */
-  function autoValid(nextCompleted: string, nextEvery: string, nextUnit: RecurUnit) {
-    if (touchedValid) return;
-    const d =
-      nextCompleted && nextUnit !== "NONE" && Number(nextEvery) > 0
-        ? addValidity(new Date(nextCompleted), Number(nextEvery), nextUnit)
-        : null;
-    setValidUntil(iso(d));
+  /** Seçilen geçerliliği alınma tarihine uygular. */
+  function applyValidity(key: ValidityKey, fromDate = completed) {
+    setValidity(key);
+    if (key === "CUSTOM") return; // tarihi kullanıcı girer
+    const years = YEARS_OF[key];
+    setValidUntil(
+      years && fromDate ? iso(addValidity(new Date(fromDate), years, "YEAR")) : ""
+    );
   }
 
   async function submit(e: React.FormEvent) {
@@ -217,8 +236,8 @@ export function ExternalCertForm({
               const c = courses.find((x) => x.id === id);
               if (c) {
                 if (!title.trim()) setTitle(c.title);
-                setUnit((c.recurrenceUnit as RecurUnit) ?? "NONE");
-                setEvery(String(c.recurrenceEvery ?? ""));
+                // Geçerliliği kursun kendi periyodundan öner.
+                applyValidity(validityFromCourse(c));
               }
             }}
           >
@@ -241,6 +260,9 @@ export function ExternalCertForm({
         </div>
       )}
 
+      <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 mb-2">
+        Training
+      </p>
       <div className="grid sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
           <label className="label">Training Name</label>
@@ -261,6 +283,12 @@ export function ExternalCertForm({
           />
         </div>
 
+        <div className="sm:col-span-2 border-t border-slate-100 pt-3 -mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+            Dates
+          </p>
+        </div>
+
         <div>
           <label className="label">Completion Date</label>
           <input
@@ -269,7 +297,7 @@ export function ExternalCertForm({
             value={completed}
             onChange={(e) => {
               setCompleted(e.target.value);
-              autoValid(e.target.value, every, unit);
+              applyValidity(validity, e.target.value);
             }}
           />
         </div>
@@ -286,58 +314,48 @@ export function ExternalCertForm({
           />
         </div>
 
-        <div>
-          <label className="label">Valid Until</label>
-          <input
-            className="input"
-            type="date"
-            value={validUntil}
-            onChange={(e) => {
-              setValidUntil(e.target.value);
-              setTouchedValid(true);
-            }}
-          />
-          <p className="text-[10px] text-slate-400 mt-1">
-            {validUntil ? "Taken from the certificate." : "Blank = no expiry tracked."}
-          </p>
-        </div>
-        <div>
-          <label className="label">Or fill it from a period</label>
-          <div className="flex gap-2">
-            <input
-              className="input w-20"
-              type="number"
-              min={1}
-              value={unit === "NONE" ? "" : every}
-              disabled={unit === "NONE"}
-              onChange={(e) => {
-                setEvery(e.target.value);
-                setTouchedValid(false);
-                autoValid(completed, e.target.value, unit);
-              }}
-              aria-label="Valid for"
-            />
-            <select
-              className="input flex-1"
-              value={unit}
-              onChange={(e) => {
-                const u = e.target.value as RecurUnit;
-                const ev = u !== "NONE" && !every ? "1" : every;
-                setUnit(u);
-                setEvery(ev);
-                setTouchedValid(false);
-                autoValid(completed, ev, u);
-              }}
-            >
-              {(Object.keys(UNIT_LABEL) as RecurUnit[]).map((u) => (
-                <option key={u} value={u}>
-                  {UNIT_LABEL[u]}
-                </option>
-              ))}
-            </select>
+        {/* Geçerlilik TEK kontrol. Eskiden "Valid Until" ile "Or fill it from
+            a period" aynı değeri iki ayrı yerden dolduruyordu ve hangisinin
+            kazandığı belli değildi. */}
+        <div className="sm:col-span-2">
+          <label className="label">Validity</label>
+          <div className="inline-flex w-full bg-slate-100 rounded-[9px] p-0.5">
+            {VALIDITY_CHOICES.map((v) => (
+              <button
+                key={v.key}
+                type="button"
+                onClick={() => applyValidity(v.key)}
+                className={`flex-1 text-[11.5px] font-semibold px-2 py-1.5 rounded-[7px] transition ${
+                  validity === v.key
+                    ? "bg-white text-slate-900 shadow-sm"
+                    : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {v.label}
+              </button>
+            ))}
           </div>
-          <p className="text-[10px] text-slate-400 mt-1">
-            Fills the date on the left — you can still change it.
+          {validity === "CUSTOM" ? (
+            <input
+              className="input mt-2"
+              type="date"
+              value={validUntil}
+              onChange={(e) => setValidUntil(e.target.value)}
+            />
+          ) : (
+            <p className="text-[10px] text-slate-400 mt-1">
+              {validity === "NONE"
+                ? "No expiry tracked for this record."
+                : validUntil
+                ? `Expires ${validUntil.split("-").reverse().join(".")} — counted from the completion date.`
+                : "Enter the completion date and the expiry is worked out from it."}
+            </p>
+          )}
+        </div>
+
+        <div className="sm:col-span-2 border-t border-slate-100 pt-3 -mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400">
+            Document
           </p>
         </div>
 
@@ -399,14 +417,31 @@ export function ExternalCertForm({
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-        <button type="submit" disabled={busy || !canSubmit} className="btn-primary text-xs py-2">
-          {busy ? "Saving…" : "Save Record"}
-        </button>
+      {/* Alt şerit pencerenin dibine yapışır: form ne kadar uzarsa uzasın
+          Kaydet hep aynı yerde. Negatif kenar boşlukları Modal'ın iç
+          dolgusunu aşıp şeridi tam genişliğe yayar. */}
+      <div className="-mx-[18px] -mb-[18px] mt-5 px-[18px] py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
+        {err ? (
+          <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>
+        ) : (
+          <span className="text-[11.5px] text-slate-400 mr-auto">
+            {canSubmit
+              ? "Ready to save."
+              : editing
+              ? "Fill in the training name, provider and date."
+              : "Training name, provider, date and a document are required."}
+          </span>
+        )}
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        <button
+          type="submit"
+          disabled={busy || !canSubmit}
+          className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy ? "Saving…" : "Save Record"}
+        </button>
       </div>
     </form>
   );

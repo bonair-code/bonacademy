@@ -887,3 +887,22 @@ iSpring paketi 200 dönüyor.
 - Düğme yalnızca ADMIN'e ve kendi departmanındaki personel için MANAGER'a
   çıkıyor — `externalTrainings` Firestore kuralı da tam olarak bunu izin
   veriyor; eğitmene göstermek tıklandığında yetki hatası verirdi.
+
+## Form penceresi — sade sayfa düzeni (30.09.2026)
+
+`Modal` kabuğu: kırmızı gradyan başlık kaldırıldı (sistemdeki son kırmızı
+kalıntıydı). Beyaz başlık, ince ayraç, yuvarlak kapatma düğmesi. Bu değişiklik
+sistemdeki BÜTÜN formlara yansıyor.
+
+`ExternalCertForm` A düzenine geçti: alanlar Training · Dates · Document
+gruplarına ayrıldı, aralarında saç teli çizgi; düğmeler pencerenin dibindeki
+şeritte (negatif kenar boşluklarıyla tam genişlik), birincil sağda. Şeridin
+solunda neyin eksik olduğu yazıyor.
+
+### Düzeltilen belirsizlik
+"Valid Until" ile "Or fill it from a period" **aynı değeri iki ayrı yerden**
+dolduruyordu ve hangisinin kazandığı belli değildi (`touchedValid` bayrağıyla
+idare ediliyordu). Tek bir segment kontrolüne indirildi: No expiry / 1 year /
+2 years / 5 years / Pick date. Kurs seçilince kursun kendi periyodundan
+öneriliyor; alınma tarihi değişince bitiş yeniden hesaplanıyor.
+Ölü `every` / `unit` state'i ve `UNIT_LABEL` sabiti kaldırıldı.

@@ -42,27 +42,26 @@ export function Modal({
         // üstten hizala ve gerekiyorsa arka plan kaydırsın.
         className={`w-full ${width} bg-white rounded-xl shadow-2xl overflow-hidden`}
       >
-        <div
-          className="relative px-5 py-3.5 flex items-start justify-between gap-4"
-          style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
-        >
+        {/* Beyaz başlık: kırmızı gradyan bant eski kimliğin kalıntısıydı ve
+            formun kendisinden daha çok dikkat çekiyordu. */}
+        <div className="px-[18px] py-[15px] border-b border-slate-100 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[13px] font-bold text-white">{title}</div>
-            {subtitle && <div className="text-[11px] text-white/60 truncate">{subtitle}</div>}
+            <div className="text-[14.5px] font-semibold text-slate-900 tracking-[-0.015em] leading-tight">
+              {title}
+            </div>
+            {subtitle && (
+              <div className="text-[11.5px] text-slate-400 truncate mt-0.5">{subtitle}</div>
+            )}
           </div>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="text-white/70 hover:text-white text-lg leading-none shrink-0 -mt-0.5"
+            className="h-[26px] w-[26px] shrink-0 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700 grid place-items-center text-[15px] leading-none transition"
           >
             ×
           </button>
-          <span
-            className="absolute bottom-0 left-0 right-0 h-0.5"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-          />
         </div>
-        <div className="p-5">{children}</div>
+        <div className="p-[18px]">{children}</div>
       </div>
     </div>
   );
