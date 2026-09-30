@@ -1001,3 +1001,16 @@ sertifikayı açacak bağlantı kalmamıştı (dosyalar Storage'da duruyordu, so
 yalnızca arayüzdeydi). Detay kartında her metod satırı artık kendi belgesine
 bağlantı: `MethodRecord.url` → `MethodRow.url`. Kâğıt kayıtta bağlantı yok,
 düz metin kalıyor.
+
+### Dashboard "Act on these" satırları kart oldu (30.09.2026)
+Kalan gün sağda 11px gri bir metindi ("in 36d") — listenin en önemli bilgisi
+olmasına rağmen görünmüyordu. Satırlar ayrı kartlara dönüştü:
+
+- Solda 4px renkli şerit ve ikon; kart zemini de aynı aciliyet tonunda.
+- Sağda **büyük rakam + altında "days left" / "days overdue"**; bugün dolan
+  "Today", hiç alınmamış "Not taken".
+- Ton eşiği: süresi geçmiş kırmızı, ≤30 gün turuncu, 31–90 gün kehribar,
+  hiç alınmamış nötr gri.
+
+Aciliyet artık üç yerden okunuyor (şerit, zemin, rakam); eski `KindTag`
+rozetine gerek kalmadı, kaldırıldı.

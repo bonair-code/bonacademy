@@ -469,30 +469,11 @@ function StaffDashboard() {
             Nothing outstanding here.
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
+          <div className="p-2.5 space-y-2">
             {shown.map((f) => (
-              <li key={`${f.userId}|${f.courseId}|${f.kind}`}>
-                <Link
-                  to={`/team/${f.userId}`}
-                  className="flex items-center gap-3 px-5 py-2.5 hover:bg-slate-50"
-                >
-                  <KindTag kind={f.kind} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold text-slate-900 truncate">
-                      {f.userName}
-                    </span>
-                    <span className="block text-[11px] text-slate-500 truncate">
-                      {f.courseTitle}
-                      {f.extra ? ` + ${f.extra} more` : ""}
-                    </span>
-                  </span>
-                  <span className="text-[11px] tabular-nums text-slate-500 shrink-0">
-                    {f.days === null ? "—" : f.days < 0 ? `${-f.days}d ago` : `in ${f.days}d`}
-                  </span>
-                </Link>
-              </li>
+              <FindingRow key={`${f.userId}|${f.courseId}|${f.kind}`} f={f} />
             ))}
-          </ul>
+          </div>
         )}
 
         {totalRows > shown.length && (
@@ -635,18 +616,96 @@ function EmptyState({ title, line }: { title: string; line: string }) {
   );
 }
 
-function KindTag({ kind }: { kind: Finding["kind"] }) {
-  const map = {
-    EXPIRED: { t: "EXPIRED", c: "bg-red-100 text-red-800" },
-    MISSING: { t: "MISSING", c: "bg-slate-200 text-slate-700" },
-    SOON: { t: "DUE SOON", c: "bg-amber-100 text-amber-800" },
-  }[kind];
+/**
+ * "Act on these" satırı. Eski hâlinde kalan gün sağda 11px gri bir metindi
+ * ("in 36d") ve listenin en önemli bilgisi olmasına rağmen hiç görünmüyordu.
+ * Aciliyet artık üç yerden okunuyor: sol şeridin rengi, kartın zemini ve
+ * sağdaki büyük rakam.
+ */
+function FindingRow({ f }: { f: Finding & { extra?: number } }) {
+  const d = f.days;
+  const overdue = f.kind === "EXPIRED" || (d !== null && d < 0);
+
+  // Renk aciliyete göre; MISSING'in günü yok, kendi nötr tonunda durur.
+  const tone =
+    f.kind === "MISSING"
+      ? { bar: "#8e8e93", bg: "#f7f7f9", fg: "#57575c", icon: "bg-slate-200 text-slate-600" }
+      : overdue
+      ? { bar: "#e0332c", bg: "#fdf2f2", fg: "#b3241f", icon: "bg-red-100 text-red-700" }
+      : d !== null && d <= 30
+      ? { bar: "#ef7a1a", bg: "#fdf6ef", fg: "#a8530c", icon: "bg-orange-100 text-orange-700" }
+      : { bar: "#f0a020", bg: "#fdfaf0", fg: "#8a5c08", icon: "bg-amber-100 text-amber-800" };
+
   return (
-    <span
-      className={`shrink-0 w-[74px] text-center text-[9px] font-bold tracking-wide rounded px-1.5 py-1 ${map.c}`}
+    <Link
+      to={`/team/${f.userId}`}
+      className="flex items-center gap-3 rounded-xl border border-slate-200/70 pl-0 pr-3 py-2.5 hover:shadow-card transition"
+      style={{ background: tone.bg, borderLeft: `4px solid ${tone.bar}` }}
     >
-      {map.t}
-    </span>
+      <span
+        className={`ml-2.5 h-7 w-7 rounded-lg grid place-items-center shrink-0 ${tone.icon}`}
+        aria-hidden="true"
+      >
+        {f.kind === "MISSING" ? <IconMissing /> : overdue ? <IconAlert /> : <IconClock />}
+      </span>
+
+      <span className="min-w-0 flex-1">
+        <span className="block text-[13px] font-semibold text-slate-900 truncate">
+          {f.userName}
+        </span>
+        <span className="block text-[11.5px] text-slate-500 truncate">
+          {f.courseTitle}
+          {f.extra ? ` + ${f.extra} more` : ""}
+        </span>
+      </span>
+
+      {/* Kalan gün: rakam büyük, birimi altında küçük — ekranın karşısından
+          okunacak tek şey bu. */}
+      <span className="shrink-0 text-right leading-none" style={{ color: tone.fg }}>
+        {f.kind === "MISSING" ? (
+          <span className="text-[12px] font-bold uppercase tracking-[0.04em]">Not taken</span>
+        ) : d === null ? (
+          <span className="text-[12px] font-bold">—</span>
+        ) : d === 0 ? (
+          <span className="text-[13px] font-bold uppercase tracking-[0.04em]">Today</span>
+        ) : (
+          <>
+            <span className="block text-[19px] font-bold tabular-nums tracking-[-0.02em]">
+              {Math.abs(d)}
+            </span>
+            <span className="block text-[10px] font-medium mt-0.5 opacity-80">
+              {overdue ? "days overdue" : "days left"}
+            </span>
+          </>
+        )}
+      </span>
+
+      <span className="shrink-0 text-slate-300 text-[15px] leading-none">›</span>
+    </Link>
+  );
+}
+
+function IconClock() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5.5l3.5 2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconAlert() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.5M12 16.2v.3" strokeLinecap="round" />
+    </svg>
+  );
+}
+function IconMissing() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="4" width="16" height="16" rx="3" strokeDasharray="3 3" />
+    </svg>
   );
 }
 
