@@ -15,3 +15,6 @@ serviceAccount*.json
 functions/lib
 serviceAccount*.json
 .DS_Store
+
+# TypeScript artımlı derleme önbelleği — derleme çıktısı, sürüm takibine girmemeli.
+*.tsbuildinfo

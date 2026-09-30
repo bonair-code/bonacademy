@@ -7,7 +7,12 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    // src/sso.js, dört depoda birebir aynı tutulan düz JS dosyası. TS'e
+    // çevirmek o özelliği bozar ve kopyaların zamanla ayrışmasına yol
+    // açardı. checkJs bilerek kapalı: dosyanın burada yalnızca derlemeye
+    // dahil edilmesi gerekiyor.
+    "allowJs": true
   },
   "include": ["src"]
 }

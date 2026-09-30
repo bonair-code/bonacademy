@@ -193,6 +193,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
+
+    // ── SSO biletleri ───────────────────────────────────────
+    // Tek şifre devrinde kullanılan tek kullanımlık biletler. YALNIZ
+    // Cloud Functions (Admin SDK, kuralları baypas eder) yazar ve okur.
+    // Aşağıdaki genel reddin kapsamında zaten kapalı; burada açıkça
+    // yazılıyor ki koleksiyonu arayan biri nerede yönetildiğini görsün.
+    match /sso_tickets/{ticketHash} {
+      allow read, write: if false;
+    }
     match /{document=**} { allow read, write: if false; }
   }
 }

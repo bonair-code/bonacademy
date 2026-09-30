@@ -4,6 +4,7 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
+import { makeSsoHandler } from "./sso";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -1234,3 +1235,38 @@ export const undoCertificateImport = onCall({ region: "europe-west3" }, async (r
   }
   return { deleted, nextNo: resetNextTo };
 });
+
+// ── Tek şifre devri (SSO) ─────────────────────────────────────────
+// Uygulama Merkezi (bonair-launcher) üzerinden BonAir Technic şifresiyle
+// giriş yapan kullanıcı, burada hesabı varsa şifre sorulmadan giriyor.
+//
+// onCall değil onRequest ve App Check zorlanmıyor: bu ucu launcher (başka
+// bir origin) ve henüz giriş yapmamış bir sekme çağırıyor, ikisinde de bu
+// projenin App Check token'ı yok. Kapı, BonAir Technic'in imzalı ID
+// token'ı ve tek kullanımlık bilet. Ayrıntı: src/sso.js
+export const sso = onRequest(
+  { region: "europe-west3", timeoutSeconds: 30, maxInstances: 20 },
+  makeSsoHandler({
+    appId: "academy",
+    idpProjectId: "bonappetit-c2db2",
+    // Bilet İSTEYEBİLEN adresler — Uygulama Merkezi.
+    launcherOrigins: [
+      "https://bonair-launcher.web.app",
+      "https://bonair-launcher.firebaseapp.com",
+    ],
+    // Bileti KULLANABİLEN adresler — bu uygulamanın kendi adresleri.
+    // Yeni bir alan adı bağlanırsa buraya eklenmeli.
+    appOrigins: [
+      "https://academy.bonair.com.tr",
+      "https://bonair-academy.web.app",
+      "https://bonair-academy.firebaseapp.com",
+    ],
+    // HERKESE AÇIK: BonAcademy'de hesabı olan herkes girebilir, kişiye özel
+    // yetki aranmaz. Ayrı bir yetki listesi tutmak, "hesabı var ama yetkisi
+    // verilmemiş" gibi çalışmayan bir ara durum üretirdi.
+    requireEntitlement: false,
+    // Tek kapı bu: Auth hesabı VE users/{uid} profili. Profili olmayan
+    // kullanıcı uygulamada zaten hiçbir şey göremiyor.
+    requireProfile: { collection: "users" },
+  })
+);
