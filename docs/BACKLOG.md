@@ -1088,14 +1088,19 @@ silindi: `BA-00001`, `BA-00002` (online tamamlama denemeleri) ve `26-52`,
 Kalan sertifika 244, hepsi tekil, 26 serisinin en büyüğü 137, sayaç 138'de —
 bir sonraki belge `26-138` olacak.
 
-Artıklar  ile temizlendi: iki deneme sınıf
+Artıklar `scripts/cleanup-test-runs.js` ile temizlendi: iki deneme sınıf
 oturumu katılımcılarıyla birlikte silindi, sertifikası kalmayan iki atama
 PENDING'e döndürüldü (atama silinmez — kişi eğitimi yeniden alabilsin diye
 sıfırlanır).
 
-**Silme sırasında çıkan yan hasar ve düzeltmesi:**  numarası hem
+**Silme sırasında çıkan yan hasar ve düzeltmesi:** `26-131` numarası hem
 sınıf denemesinde hem içe aktarılan gerçek belgede kullanılıyordu.
- dokümanı numaraya göre anahtarlandığı için ikisine tek belge
+`certVerify` dokümanı numaraya göre anahtarlandığı için ikisine tek belge
 hizmet ediyordu; deneme kaydı silinince **kâğıt sertifikanın doğrulaması da
 gitti**. Elle geri kondu. Kontrol: 244 sertifika, 244 doğrulama kaydı,
 sahipsiz kayıt yok.
+
+**Ders:** `certVerify` doküman anahtarı seri numarası. Aynı numara iki
+sertifikada kullanılırsa doğrulama kaydı paylaşılır ve birini silmek
+diğerini de bozar. Numara artık tek kaynaktan ve otomatik verildiği için
+çakışma oluşmamalı, ama silme işlemlerinde kontrol edilmeli.
