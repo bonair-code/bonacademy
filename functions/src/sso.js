@@ -107,12 +107,19 @@ function fail(res, status, code, message) {
  * @param {string} cfg.requireProfile.collection  Koleksiyon adı, ör. "users".
  * @param {string} [cfg.requireProfile.matchField] Doküman kimliği uid ise
  *        boş bırakın; kayıt uid'yi bir ALANDA tutuyorsa o alanın adı.
+ * @param {boolean} [cfg.requireEntitlement=true]  Kişiye özel yetki (IdP'deki
+ *        `apps` claim'i) aransın mı? HERKESE AÇIK uygulamalarda false:
+ *        o zaman tek kapı, bu uygulamada hesabının olması. Yetki listesini
+ *        ayrıca tutmak, "hesabı var ama yetkisi verilmemiş" diye çalışmayan
+ *        bir ara durum üretirdi.
  * @returns {(req, res) => Promise<void>}  onRequest gövdesi
  */
 function makeSsoHandler(cfg) {
   const appId = cfg.appId;
   const idpProjectId = cfg.idpProjectId;
   const selfIssued = !!cfg.selfIssued;
+  // Varsayılan true: yetki aramayı unutmak, yanlışlıkla herkese açmak olur.
+  const requireEntitlement = cfg.requireEntitlement !== false;
   const requireProfile = cfg.requireProfile || null;
   const startOrigins = (cfg.launcherOrigins || []).concat(DEV_ORIGINS);
   const redeemOrigins = (cfg.appOrigins || []).concat(DEV_ORIGINS);
@@ -147,7 +154,8 @@ function makeSsoHandler(cfg) {
 
     try {
       if (action === "start") {
-        return await start(req, res, appId, idpProjectId, selfIssued, requireProfile);
+        return await start(req, res, appId, idpProjectId,
+          selfIssued || !requireEntitlement, requireProfile);
       }
       if (action === "redeem") return await redeem(req, res);
       if (action === "roster") {
@@ -161,7 +169,7 @@ function makeSsoHandler(cfg) {
   };
 }
 
-async function start(req, res, appId, idpProjectId, selfIssued, requireProfile) {
+async function start(req, res, appId, idpProjectId, yetkiSiz, requireProfile) {
   const idToken = (req.body || {}).idToken;
   if (!idToken || typeof idToken !== "string") {
     return fail(res, 400, "missing-token", "idToken zorunlu.");
@@ -174,9 +182,11 @@ async function start(req, res, appId, idpProjectId, selfIssued, requireProfile) 
     return fail(res, 401, "invalid-token", "Oturum doğrulanamadı, tekrar giriş yapın.");
   }
 
-  // Kimlik kaynağının kendisi için ayrı bir yetki aranmaz: kullanıcı zaten
-  // o projenin hesabıyla doğrulandı. Diğer uygulamalar claim ister.
-  if (!selfIssued) {
+  // Yetki aranmayan iki durum: (1) kimlik kaynağının kendisi — kullanıcı
+  // zaten o projenin hesabıyla doğrulandı; (2) herkese açık uygulama —
+  // tek kapı, bu uygulamada hesabının olması. İkisi de çağrı noktasında
+  // yetkiSiz olarak geliyor.
+  if (!yetkiSiz) {
     const apps = Array.isArray(decoded.apps) ? decoded.apps : [];
     if (!apps.includes(appId)) {
       return fail(res, 403, "not-entitled", "Bu uygulama için yetkiniz yok.");

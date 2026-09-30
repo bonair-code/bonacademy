@@ -1163,8 +1163,12 @@ export const sso = onRequest(
       "https://bonair-academy.web.app",
       "https://bonair-academy.firebaseapp.com",
     ],
-    // Auth hesabı yetmez: rol ve departman users/{uid} dokümanında ve
-    // kaydı olmayan kullanıcı uygulamada zaten hiçbir şey göremiyor.
+    // HERKESE AÇIK: BonAcademy'de hesabı olan herkes girebilir, kişiye özel
+    // yetki aranmaz. Ayrı bir yetki listesi tutmak, "hesabı var ama yetkisi
+    // verilmemiş" gibi çalışmayan bir ara durum üretirdi.
+    requireEntitlement: false,
+    // Tek kapı bu: Auth hesabı VE users/{uid} profili. Profili olmayan
+    // kullanıcı uygulamada zaten hiçbir şey göremiyor.
     requireProfile: { collection: "users" },
   })
 );
