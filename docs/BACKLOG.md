@@ -877,3 +877,13 @@ iSpring paketi 200 dönüyor.
   kodunu, adresi ve ne yapılacağını yazıyor; iframe bir 404 gövdesini sessizce
   gösteriyordu ve kullanıcı yalnızca boş bir kutu görüyordu. Yanına ⟳ Reload
   düğmesi eklendi (iframe `key` ile yeniden kuruluyor, `cache: "reload"`).
+
+### Follow-Up — N/A yazısı ve hücreden kayıt girme (30.09.2026)
+- Gerekli olmayan hücrede nokta yerine soluk **"N/A"** yazıyor; nokta,
+  hücrenin boş mu kaldığı yoksa gerekli mi olmadığı belirsiz bırakıyordu.
+- **Eksik hücre tıklanabilir**: dış eğitim kaydı formunu kişi ve kurs seçili
+  olarak açıyor. Eskiden matriste eksiği görüp kişi sayfasına gitmek
+  gerekiyordu. Hücre normalde "—", üzerine gelince "+ add" gösteriyor.
+- Düğme yalnızca ADMIN'e ve kendi departmanındaki personel için MANAGER'a
+  çıkıyor — `externalTrainings` Firestore kuralı da tam olarak bunu izin
+  veriyor; eğitmene göstermek tıklandığında yetki hatası verirdi.

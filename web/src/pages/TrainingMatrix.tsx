@@ -8,6 +8,8 @@ import { isStaffRole, useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
 import { PrintButton } from "../components/PrintButton";
 import { requirementFor } from "../lib/requirements";
+import { Modal } from "../components/Modal";
+import { ExternalCertForm } from "../components/ExternalCertForm";
 
 /**
  * Training Follow-Up Form — personel × eğitim matrisi.
@@ -122,6 +124,18 @@ export function TrainingMatrix() {
   const [fScope, setFScope] = useState("");
   const [fCourse, setFCourse] = useState("");
   const [fStatus, setFStatus] = useState("");
+  /**
+   * Eksik hücreden doğrudan kayıt girme. Eskiden kişi sayfasına gidip oradan
+   * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
+   */
+  const [record, setRecord] = useState<{ user: UserRow; course: CourseRow } | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   useEffect(() => {
     if (!profile) return;
@@ -234,6 +248,14 @@ export function TrainingMatrix() {
   }, [assignments]);
 
   const hover = useCellHover();
+
+  /**
+   * Dış eğitim kaydını admin herkese, müdür yalnızca kendi departmanındaki
+   * personele yazabilir — Firestore kuralı da tam olarak bu. Eğitmen matrisi
+   * görebiliyor ama kayıt giremiyor, o yüzden ona düğme gösterilmiyor.
+   */
+  const canRecordFor = (u: UserRow) =>
+    role === "ADMIN" || (role === "MANAGER" && u.departmentId === profile?.departmentId);
 
   function cellFor(u: UserRow, c: CourseRow): CellState {
     const done = completions.get(`${u.id}|${c.id}`);
@@ -490,7 +512,25 @@ export function TrainingMatrix() {
                             onMouseEnter={(e) => hover.enter(e.currentTarget, u, c, st)}
                             onMouseLeave={hover.leave}
                           >
-                            <Cell state={st} />
+                            {/* Eksik hücre doğrudan kayıt formunu açar.
+                                Dış kaydı yalnızca admin ve kendi departmanının
+                                müdürü yazabilir (Firestore kuralı da böyle). */}
+                            {st.kind === "MISSING" && canRecordFor(u) ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  hover.leave();
+                                  setRecord({ user: u, course: c });
+                                }}
+                                className="group w-full h-full font-bold"
+                                title={`Record ${c.title} for ${u.name}`}
+                              >
+                                <span className="group-hover:hidden">—</span>
+                                <span className="hidden group-hover:inline">+ add</span>
+                              </button>
+                            ) : (
+                              <Cell state={st} />
+                            )}
                           </td>
                         );
                       })}
@@ -512,6 +552,35 @@ export function TrainingMatrix() {
       </div>
 
       {hover.at && <CellDetail at={hover.at} />}
+
+      {record && (
+        <Modal
+          title="Record External Training"
+          subtitle={`${record.user.name} · ${record.course.title}`}
+          onClose={() => setRecord(null)}
+        >
+          <ExternalCertForm
+            user={{
+              id: record.user.id,
+              name: record.user.name,
+              departmentId: record.user.departmentId,
+            }}
+            course={record.course}
+            courses={courses}
+            onDone={(m) => {
+              setToast(m);
+              setRecord(null);
+            }}
+            onCancel={() => setRecord(null)}
+          />
+        </Modal>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl no-print">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
@@ -606,9 +675,14 @@ function CellDetail({ at }: { at: HoverState }) {
       <div className="text-[11px] text-slate-500 leading-snug mb-2">{course.title}</div>
 
       {state.kind === "MISSING" && (
-        <p className="text-[11.5px] text-red-700 font-semibold">
-          Never taken — required by this person's authorisation scope.
-        </p>
+        <>
+          <p className="text-[11.5px] text-red-700 font-semibold">
+            Never taken — required by this person's authorisation scope.
+          </p>
+          <p className="text-[10.5px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100">
+            Click the cell to record training taken elsewhere.
+          </p>
+        </>
       )}
       {state.kind === "PLANNED" && (
         <p className="text-[11.5px] text-amber-800 font-semibold">
@@ -685,7 +759,9 @@ function Swatch({ color, label }: { color: string; label: string }) {
  * sayfasına, dış sertifika yüklenen dosyaya gider.
  */
 function Cell({ state }: { state: CellState }) {
-  if (state.kind === "NA") return <span className="opacity-60">·</span>;
+  // "N/A" açıkça yazılır: nokta, hücrenin boş kaldığı mı yoksa gerekli
+  // olmadığı mı belirsiz bırakıyordu.
+  if (state.kind === "NA") return <span className="text-[10px] opacity-55">N/A</span>;
   if (state.kind === "PLANNED") return <span className="font-bold">PLAN</span>;
   if (state.kind === "MISSING") return <span className="font-bold">—</span>;
 
