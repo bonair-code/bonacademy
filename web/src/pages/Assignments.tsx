@@ -367,9 +367,17 @@ function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
 }
 
 /**
- * Toplu atama. Bir eğitim seçilip kişiler işaretlenir; zaten atanmış olanlar
- * işaretlenemez — `assignCourses` onları zaten atlıyor, ama seçilebilir
- * göstermek "20 kişiye atadım" deyip 12'sinin atlanmasına yol açıyordu.
+ * Atama penceresi. İki yön:
+ *
+ *   BY_COURSE — bir eğitim, çok kişi. "Safety Training'i 20 kişiye ver."
+ *   BY_PERSON — bir kişi, çok eğitim. "Yeni giren adama 6 eğitimi birden ver."
+ *
+ * İkisi de gerçek iş: ilki dönemsel yenilemeler, ikincisi işe yeni başlayan
+ * personel. Tek yön bırakmak birini 20 pencere açmaya zorluyordu.
+ *
+ * Zaten atanmış olan kalemler işaretlenemez — `assignCourses` onları zaten
+ * atlıyor, ama seçilebilir göstermek "20 kişiye atadım" deyip 12'sinin
+ * sessizce atlanmasına yol açıyordu.
  */
 function AssignForm({
   users,
@@ -386,7 +394,9 @@ function AssignForm({
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
-  const [courseId, setCourseId] = useState("");
+  const [mode, setMode] = useState<"BY_COURSE" | "BY_PERSON">("BY_COURSE");
+  /** Seçilen taraf: eğitime göre kurs id, kişiye göre kullanıcı id. */
+  const [anchor, setAnchor] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [dept, setDept] = useState("");
   const [q, setQ] = useState("");
@@ -394,40 +404,78 @@ function AssignForm({
   const [progress, setProgress] = useState(0);
   const [err, setErr] = useState<string | null>(null);
 
-  /** Bu eğitim kimlerde zaten var. */
-  const already = useMemo(
-    () => new Set(existing.filter((a) => a.courseId === courseId).map((a) => a.userId)),
-    [existing, courseId]
-  );
+  const byCourse = mode === "BY_COURSE";
 
+  function switchMode(m: "BY_COURSE" | "BY_PERSON") {
+    setMode(m);
+    setAnchor("");
+    setPicked(new Set());
+    setQ("");
+    setDept("");
+  }
+
+  /** Bu seçim için zaten atanmış olanlar. */
+  const already = useMemo(() => {
+    if (!anchor) return new Set<string>();
+    return new Set(
+      byCourse
+        ? existing.filter((a) => a.courseId === anchor).map((a) => a.userId)
+        : existing.filter((a) => a.userId === anchor).map((a) => a.courseId)
+    );
+  }, [existing, anchor, byCourse]);
+
+  /** İşaretlenecek kalemler: kişiler ya da eğitimler. */
   const list = useMemo(() => {
     const needle = q.trim().toLocaleLowerCase("tr");
-    return users
-      .filter((u) => (dept ? u.departmentId === dept : true))
-      .filter((u) => (needle ? u.name.toLocaleLowerCase("tr").includes(needle) : true))
-      .sort((a, b) => a.name.localeCompare(b.name, "tr"));
-  }, [users, dept, q]);
+    if (byCourse) {
+      return users
+        .filter((u) => (dept ? u.departmentId === dept : true))
+        .filter((u) => (needle ? u.name.toLocaleLowerCase("tr").includes(needle) : true))
+        .map((u) => ({
+          id: u.id,
+          label: u.name,
+          note: departments.get(u.departmentId ?? "") ?? "—",
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, "tr"));
+    }
+    return courses
+      .filter((c) => (needle ? c.title.toLocaleLowerCase("tr").includes(needle) : true))
+      .map((c) => ({
+        id: c.id,
+        label: c.title,
+        note: c.isActive === false ? "draft" : "",
+      }));
+  }, [byCourse, users, courses, dept, q, departments]);
 
-  const selectable = list.filter((u) => !already.has(u.id));
-  const allPicked = selectable.length > 0 && selectable.every((u) => picked.has(u.id));
+  const selectable = list.filter((x) => !already.has(x.id));
+  const allPicked = selectable.length > 0 && selectable.every((x) => picked.has(x.id));
 
   async function submit() {
-    if (!courseId || picked.size === 0) return;
+    if (!anchor || picked.size === 0) return;
     setBusy(true);
     setErr(null);
     setProgress(0);
     try {
       const fn = httpsCallable(functions, "assignCourses");
       let created = 0;
-      const ids = Array.from(picked);
-      // Fonksiyon kişi başına çalışıyor; toplu atama burada döngüyle yapılır.
-      for (const uid of ids) {
-        const res = await fn({ userId: uid, courseIds: [courseId] });
-        created += (res.data as { created?: number })?.created ?? 0;
-        setProgress((p) => p + 1);
+
+      if (byCourse) {
+        // Fonksiyon kişi başına çalışıyor; kişiler döngüyle geçiliyor.
+        for (const uid of Array.from(picked)) {
+          const res = await fn({ userId: uid, courseIds: [anchor] });
+          created += (res.data as { created?: number })?.created ?? 0;
+          setProgress((p) => p + 1);
+        }
+        const title = courses.find((c) => c.id === anchor)?.title ?? "Training";
+        onDone(`${title} assigned to ${created} ${created === 1 ? "person" : "people"}.`);
+      } else {
+        // Tek kişiye çok eğitim: fonksiyon bunu tek çağrıda yapıyor.
+        const res = await fn({ userId: anchor, courseIds: Array.from(picked) });
+        created = (res.data as { created?: number })?.created ?? 0;
+        setProgress(picked.size);
+        const name = users.find((u) => u.id === anchor)?.name ?? "the employee";
+        onDone(`${created} training${created === 1 ? "" : "s"} assigned to ${name}.`);
       }
-      const title = courses.find((c) => c.id === courseId)?.title ?? "Training";
-      onDone(`${title} assigned to ${created} ${created === 1 ? "person" : "people"}.`);
     } catch (e) {
       setErr((e as Error).message);
       setBusy(false);
@@ -436,54 +484,88 @@ function AssignForm({
 
   return (
     <div>
+      {/* Yön seçimi */}
+      <div className="inline-flex w-full bg-slate-100 rounded-[9px] p-0.5 mb-4">
+        {(
+          [
+            { key: "BY_COURSE", label: "By training" },
+            { key: "BY_PERSON", label: "By person" },
+          ] as const
+        ).map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => switchMode(o.key)}
+            className={`flex-1 text-[12px] font-semibold px-3 py-1.5 rounded-[7px] transition ${
+              mode === o.key
+                ? "bg-white text-slate-900 shadow-sm"
+                : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-3">
-        <label className="label">Training</label>
+        <label className="label">{byCourse ? "Training" : "Person"}</label>
         <select
           className="input"
-          value={courseId}
+          value={anchor}
           onChange={(e) => {
-            setCourseId(e.target.value);
+            setAnchor(e.target.value);
             setPicked(new Set());
           }}
         >
           <option value="">— Select —</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title}
-              {c.isActive === false ? " (draft)" : ""}
-            </option>
-          ))}
+          {byCourse
+            ? courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.title}
+                  {c.isActive === false ? " (draft)" : ""}
+                </option>
+              ))
+            : [...users]
+                .sort((a, b) => a.name.localeCompare(b.name, "tr"))
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                    {u.departmentId ? ` — ${departments.get(u.departmentId) ?? ""}` : ""}
+                  </option>
+                ))}
         </select>
       </div>
 
-      {courseId && (
+      {anchor && (
         <>
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search name…"
+              placeholder={byCourse ? "Search name…" : "Search training…"}
               className="input !w-48 !py-1.5 !text-xs"
             />
-            <select
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-              className="input !w-auto !py-1.5 !text-xs"
-            >
-              <option value="">All departments</option>
-              {[...departments.entries()].map(([id, name]) => (
-                <option key={id} value={id}>
-                  {name}
-                </option>
-              ))}
-            </select>
+            {byCourse && (
+              <select
+                value={dept}
+                onChange={(e) => setDept(e.target.value)}
+                className="input !w-auto !py-1.5 !text-xs"
+              >
+                <option value="">All departments</option>
+                {[...departments.entries()].map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               onClick={() =>
                 setPicked((p) => {
                   const n = new Set(p);
-                  if (allPicked) selectable.forEach((u) => n.delete(u.id));
-                  else selectable.forEach((u) => n.add(u.id));
+                  if (allPicked) selectable.forEach((x) => n.delete(x.id));
+                  else selectable.forEach((x) => n.add(x.id));
                   return n;
                 })
               }
@@ -500,13 +582,13 @@ function AssignForm({
 
           <div className="rounded-lg border border-slate-200 max-h-72 overflow-auto divide-y divide-slate-100">
             {list.length === 0 && (
-              <p className="p-6 text-center text-sm text-slate-400">No one matches.</p>
+              <p className="p-6 text-center text-sm text-slate-400">Nothing matches.</p>
             )}
-            {list.map((u) => {
-              const has = already.has(u.id);
+            {list.map((x) => {
+              const has = already.has(x.id);
               return (
                 <label
-                  key={u.id}
+                  key={x.id}
                   className={`flex items-center gap-2.5 px-3 py-2 text-[13px] ${
                     has ? "opacity-50" : "hover:bg-slate-50 cursor-pointer"
                   }`}
@@ -515,19 +597,19 @@ function AssignForm({
                     type="checkbox"
                     className="accent-brand-600 h-3.5 w-3.5"
                     disabled={has}
-                    checked={picked.has(u.id)}
+                    checked={picked.has(x.id)}
                     onChange={(e) =>
                       setPicked((p) => {
                         const n = new Set(p);
-                        if (e.target.checked) n.add(u.id);
-                        else n.delete(u.id);
+                        if (e.target.checked) n.add(x.id);
+                        else n.delete(x.id);
                         return n;
                       })
                     }
                   />
-                  <span className="flex-1 min-w-0 truncate text-slate-800">{u.name}</span>
+                  <span className="flex-1 min-w-0 truncate text-slate-800">{x.label}</span>
                   <span className="text-[11px] text-slate-400 shrink-0">
-                    {has ? "already assigned" : departments.get(u.departmentId ?? "") ?? "—"}
+                    {has ? "already assigned" : x.note}
                   </span>
                 </label>
               );
@@ -543,10 +625,14 @@ function AssignForm({
           <span className="text-[11.5px] text-slate-400 mr-auto">
             {busy
               ? `Assigning… ${progress}/${picked.size}`
-              : !courseId
-              ? "Pick a training first."
+              : !anchor
+              ? byCourse
+                ? "Pick a training first."
+                : "Pick a person first."
               : picked.size === 0
-              ? "Pick who should take it."
+              ? byCourse
+                ? "Pick who should take it."
+                : "Pick the training to assign."
               : "Due in 30 days from today."}
           </span>
         )}
@@ -556,10 +642,10 @@ function AssignForm({
         <button
           type="button"
           onClick={submit}
-          disabled={busy || !courseId || picked.size === 0}
+          disabled={busy || !anchor || picked.size === 0}
           className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          {busy ? "Assigning…" : `Assign to ${picked.size}`}
+          {busy ? "Assigning…" : `Assign ${picked.size}`}
         </button>
       </div>
     </div>

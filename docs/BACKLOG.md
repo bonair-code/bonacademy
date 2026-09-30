@@ -1276,3 +1276,16 @@ adını içeriyor (ör. EWIS afişi); iki metin üst üste binince ikisi de
 okunmuyordu. Başlık ve kategori kapağın altına, kart gövdesine taşındı —
 öğrenci kartı (Dashboard), Courses kartı ve kurs formundaki önizleme, üçü de
 aynı düzende.
+
+### Atama penceresi iki yönlü (30.09.2026)
+Yalnızca "bir eğitim → çok kişi" yönü vardı. Üstte segment eklendi:
+
+- **By training** — bir eğitim seçilir, kişiler departman/isim filtresiyle
+  işaretlenir. Dönemsel yenilemeler için.
+- **By person** — bir kişi seçilir, eğitimler işaretlenir. İşe yeni başlayan
+  personele altı eğitimi birden vermek için; tek yön bırakmak bunu altı ayrı
+  pencere yapıyordu.
+
+`assignCourses` tek kişiye çok kurs alabiliyor, o yüzden By person tek
+çağrıda tamamlanıyor; By course kişiler üzerinde döngüyle ilerliyor.
+Zaten atanmış kalemler iki yönde de seçilemiyor.
