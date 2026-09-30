@@ -1038,3 +1038,11 @@ Düğme yalnızca ADMIN'e çıkıyor. Firestore kuralı dış kaydı admin'e ve 
 departmanının müdürüne açıyor; içe aktarılan kayıtlarda `userDepartmentId`
 boş olduğu için müdür kendi kaydını bile değiştiremez — düğmeyi ona göstermek
 tıklandığında yetki hatası verirdi.
+
+### Dashboard listesi: başlık ve kaydırma (30.09.2026)
+- "Act on these" → **"Needs attention"**. Emir değil durum bildiriyor ve
+  listenin içeriğini doğru anlatıyor (süresi dolmuş + hiç alınmamış + yaklaşan).
+- Liste artık **bütün** kayıtları gösteriyor; bölüm sabit yükseklikte
+  (`max-h-[520px]`) kalıp kendi içinde kayıyor. Eskiden ilk 8 gösterilip
+  gerisi "see the full matrix" bağlantısına havale ediliyordu — açığın
+  tamamını görmek için sayfa değiştirmek gerekiyordu. O satır kaldırıldı.

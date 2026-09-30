@@ -385,9 +385,10 @@ function StaffDashboard() {
         out[at] = { ...out[at], extra: (out[at].extra ?? 0) + 1 };
       }
     }
-    return out
-      .sort((a, b) => (a.days ?? 99999) - (b.days ?? 99999))
-      .slice(0, 8);
+    // Hepsi gösterilir; liste kendi içinde kayar. Eskiden ilk 8 gösterilip
+    // gerisi "see the full matrix" bağlantısına havale ediliyordu — açığın
+    // tamamını görmek için sayfa değiştirmek gerekiyordu.
+    return out.sort((a, b) => (a.days ?? 99999) - (b.days ?? 99999));
   }, [list]);
 
   const totalRows = useMemo(() => {
@@ -448,7 +449,7 @@ function StaffDashboard() {
       <div className="card">
         <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
           <span className="text-[13px] font-bold text-slate-900">
-            Act on these <span className="text-slate-400 font-normal">({totalRows})</span>
+            Needs attention <span className="text-slate-400 font-normal">({totalRows})</span>
           </span>
           <Segmented
             value={tab}
@@ -469,21 +470,15 @@ function StaffDashboard() {
             Nothing outstanding here.
           </p>
         ) : (
-          <div className="p-2.5 space-y-2">
+          // Yükseklik sabit: bölüm kaç kayıt olursa olsun aynı boyda kalır,
+          // fazlası içeride kaydırılır.
+          <div className="p-2.5 space-y-2 max-h-[520px] overflow-y-auto">
             {shown.map((f) => (
               <FindingRow key={`${f.userId}|${f.courseId}|${f.kind}`} f={f} />
             ))}
           </div>
         )}
 
-        {totalRows > shown.length && (
-          <div className="px-5 py-2.5 border-t border-slate-100 text-[11px] text-slate-500">
-            Showing the {shown.length} most urgent of {totalRows}.{" "}
-            <Link to="/follow-up" className="font-semibold text-brand-700 hover:underline">
-              See the full matrix
-            </Link>
-          </div>
-        )}
       </div>
 
       {/* ── Kendi eğitimi — yöneticide çoğu zaman boş, o yüzden tek satır ── */}
