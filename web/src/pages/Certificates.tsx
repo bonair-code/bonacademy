@@ -1,20 +1,32 @@
 import { PageHead } from "../components/PageHead";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
-import { CertificateSheet, fmtTs, type Cert } from "../components/CertificateSheet";
+import { CertificateSheet, type Cert } from "../components/CertificateSheet";
 import { printCertificate } from "../lib/print";
+import { Modal } from "../components/Modal";
+import { ExternalCertForm, type ExternalRecord } from "../components/ExternalCertForm";
 
-/** issuedAt + geçerlilik süresi = yenileme tarihi. Süre yoksa null. */
-function renewalDate(
-  issuedAt: Timestamp | null | undefined,
-  every: number | null,
-  unit: string
-): Date | null {
-  const base = issuedAt?.toDate?.();
-  if (!base || !every || unit === "NONE") return null;
+/**
+ * Kişinin eğitim kayıtları — **eğitim başına** bir satır, kayıt başına değil.
+ *
+ * Eskiden sayfa iki ayrı tabloydu: BonAcademy sertifikaları ve dış kayıtlar.
+ * Aynı eğitimin hem sistem sertifikası hem dış belgesi hem de kâğıttan
+ * aktarılmış kaydı olabiliyor; iki tablo bunları ilişkilendirmediği için
+ * hangisinin geçerli olduğu görünmüyordu. Artık her eğitim tek grup:
+ * üstte geçerli olan kayıt ve kalan gün, altında aynı eğitimin geçmişi.
+ */
+
+const DAY = 86400000;
+const fmt = (d?: Date | null) => (d ? d.toLocaleDateString("tr-TR") : "—");
+
+type Course = { every: number | null; unit: string; title: string; methods: string[] };
+
+/** Sertifikanın yenileme tarihi kursun tekrar periyodundan gelir. */
+function addValidity(base: Date, every: number | null, unit: string): Date | null {
+  if (!every || unit === "NONE") return null;
   const d = new Date(base);
   if (unit === "DAY") d.setDate(d.getDate() + every);
   else if (unit === "MONTH") d.setMonth(d.getMonth() + every);
@@ -23,279 +35,401 @@ function renewalDate(
   return d;
 }
 
-/** "1 yr 3 mo left" / "42 days left" / "Expired 12 days ago" */
-function remainingText(due: Date): string {
-  const days = Math.round((due.getTime() - Date.now()) / 86400000);
-  if (days < 0) {
-    const past = Math.abs(days);
-    return past === 0 ? "Expires today" : `Expired ${past} day${past === 1 ? "" : "s"} ago`;
-  }
-  if (days === 0) return "Expires today";
-  if (days < 60) return `${days} day${days === 1 ? "" : "s"} left`;
+type Source = "BONACADEMY" | "EXTERNAL" | "PAPER";
 
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months === 1 ? "" : "s"} left`;
+type Record_ = {
+  id: string;
+  source: Source;
+  /** Kaynağın kendi etiketi: sağlayıcı adı ya da "BonAcademy". */
+  label: string;
+  date: Date | null;
+  expiry: Date | null;
+  serialNo: string | null;
+  fileUrl: string | null;
+  method: string | null;
+  /** Sistem sertifikasıysa belge burada — modalda gösterilir. */
+  cert: Cert | null;
+  /** Dış kayıtsa düzenlenebilir hâli. */
+  external: ExternalRecord | null;
+};
 
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  return rem === 0
-    ? `${years} year${years === 1 ? "" : "s"} left`
-    : `${years} yr ${rem} mo left`;
-}
+type Group = {
+  key: string;
+  title: string;
+  records: Record_[];
+  /** En son TAMAMLANAN kayıt — geçerliliği bu belirler. */
+  current: Record_;
+};
+
+const SOURCE_LABEL: Record<Source, string> = {
+  BONACADEMY: "BonAcademy",
+  EXTERNAL: "External",
+  PAPER: "On paper",
+};
 
 export function Certificates() {
-  const { profile } = useAuth();
-  const [rows, setRows] = useState<Cert[]>([]);
+  const { profile, role } = useAuth();
+  const [certs, setCerts] = useState<any[]>([]);
+  const [externals, setExternals] = useState<any[]>([]);
+  const [courses, setCourses] = useState<Map<string, Course>>(new Map());
   const [view, setView] = useState<Cert | null>(null);
-  // Yenileme tarihi kursun geçerlilik süresinden (recurrence) hesaplanır.
-  const [courses, setCourses] = useState<Map<string, { every: number | null; unit: string }>>(
-    new Map()
-  );
+  const [edit, setEdit] = useState<ExternalRecord | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [toast, setToast] = useState<string | null>(null);
+
+  /**
+   * Dış kaydı Firestore kuralları yalnızca ADMIN'e ve kaydın departmanının
+   * müdürüne açıyor. İçe aktarılan kayıtlarda `userDepartmentId` boş olduğu
+   * için müdür kendi kaydını bile değiştiremez — düğmeyi ona göstermek
+   * tıklandığında yetki hatası verirdi.
+   */
+  const canEdit = role === "ADMIN";
 
   useEffect(() => {
     if (!profile) return;
-    return onSnapshot(
+    const u1 = onSnapshot(
       query(collection(db, "certificates"), where("userId", "==", profile.uid)),
-      (snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Cert, "id">) })))
+      (s) => setCerts(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
     );
-  }, [profile]);
-
-  useEffect(() => {
-    return onSnapshot(collection(db, "courses"), (snap) =>
+    const u2 = onSnapshot(
+      query(collection(db, "externalTrainings"), where("userId", "==", profile.uid)),
+      (s) => setExternals(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
+      () => {}
+    );
+    const u3 = onSnapshot(collection(db, "courses"), (s) =>
       setCourses(
         new Map(
-          snap.docs.map((d) => {
+          s.docs.map((d) => {
             const x = d.data() as any;
-            return [d.id, { every: x.recurrenceEvery ?? null, unit: x.recurrenceUnit ?? "NONE" }];
+            return [
+              d.id,
+              {
+                every: x.recurrenceEvery ?? null,
+                unit: x.recurrenceUnit ?? "NONE",
+                title: x.title ?? "",
+                methods: (x.methods ?? []) as string[],
+              },
+            ];
           })
         )
       )
     );
-  }, []);
+    return () => {
+      u1();
+      u2();
+      u3();
+    };
+  }, [profile]);
 
-  // En yeni sertifika üstte.
-  const sorted = [...rows].sort(
-    (a, b) => (b.issuedAt?.toMillis?.() ?? 0) - (a.issuedAt?.toMillis?.() ?? 0)
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const courseList = useMemo(
+    () =>
+      [...courses.entries()].map(([id, c]) => ({
+        id,
+        title: c.title,
+        recurrenceEvery: c.every,
+        recurrenceUnit: c.unit,
+        methods: c.methods,
+      })),
+    [courses]
   );
+
+  const groups = useMemo<Group[]>(() => {
+    const byKey = new Map<string, { title: string; records: Record_[] }>();
+    const push = (key: string, title: string, r: Record_) => {
+      const g = byKey.get(key) ?? { title, records: [] };
+      g.records.push(r);
+      if (!byKey.has(key)) byKey.set(key, g);
+    };
+
+    for (const c of certs) {
+      const date = (c.issuedAt as Timestamp)?.toDate?.() ?? null;
+      const course = courses.get(c.courseId);
+      push(c.courseId || `t:${c.courseTitle}`, course?.title || c.courseTitle || "", {
+        id: c.id,
+        source: "BONACADEMY",
+        label: "BonAcademy",
+        date,
+        expiry: date ? addValidity(date, course?.every ?? null, course?.unit ?? "NONE") : null,
+        serialNo: c.serialNo ?? null,
+        fileUrl: null,
+        method: null,
+        cert: c as Cert,
+        external: null,
+      });
+    }
+
+    for (const e of externals) {
+      const date = (e.completedAt as Timestamp)?.toDate?.() ?? null;
+      const course = e.courseId ? courses.get(e.courseId) : undefined;
+      const paper = !e.fileUrl;
+      push(e.courseId || `t:${e.title}`, course?.title || e.title || "", {
+        id: e.id,
+        source: paper ? "PAPER" : "EXTERNAL",
+        label: paper ? "On paper" : e.provider || "External",
+        date,
+        expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
+        serialNo: e.externalSerialNo ?? null,
+        fileUrl: e.fileUrl ?? null,
+        method: e.method ?? null,
+        cert: null,
+        external: e as ExternalRecord,
+      });
+    }
+
+    return [...byKey.entries()]
+      .map(([key, g]) => {
+        // Kazanan en son TAMAMLANAN kayıt; sıralama tarihe göre.
+        const records = [...g.records].sort(
+          (a, b) => (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0)
+        );
+        return { key, title: g.title, records, current: records[0] };
+      })
+      .sort((a, b) => {
+        // Önce süresi dolan/dolmak üzere olan; sonra tarihe göre.
+        const ea = a.current.expiry?.getTime() ?? Infinity;
+        const eb = b.current.expiry?.getTime() ?? Infinity;
+        return ea - eb;
+      });
+  }, [certs, externals, courses]);
+
+  const counts = useMemo(() => {
+    let valid = 0;
+    let soon = 0;
+    let expired = 0;
+    for (const g of groups) {
+      const e = g.current.expiry;
+      if (!e) {
+        valid++;
+        continue;
+      }
+      const days = Math.round((e.getTime() - Date.now()) / DAY);
+      if (days < 0) expired++;
+      else if (days <= 90) soon++;
+      else valid++;
+    }
+    return { valid, soon, expired };
+  }, [groups]);
 
   return (
     <div>
       <PageHead
         title="My Certificates"
-        subtitle="Certificates for the training you completed."
+        subtitle="One row per training — the record that counts, and everything behind it."
       />
-      <div className="card">
-        <div
-          className="px-5 py-3 relative"
-          style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
-        >
-          <div className="text-[13px] font-bold text-white">
-            Certificates <span className="text-white/60 font-normal">({sorted.length})</span>
-          </div>
-          <span
-            className="absolute bottom-0 left-0 right-0 h-0.5"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-          />
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
-            <thead>
-              <tr className="bg-slate-50 text-slate-500">
-                <th className="th w-10">#</th>
-                <th className="th">Certificate No</th>
-                <th className="th">Training</th>
-                <th className="th">Issued</th>
-                <th className="th">Valid Until</th>
-                <th className="th">Status</th>
-                <th className="th w-12 text-right no-print">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {sorted.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-slate-400">
-                    You have no certificates yet.
-                  </td>
-                </tr>
-              )}
-              {sorted.map((c, i) => {
-                const r = courses.get((c as any).courseId);
-                const due = renewalDate(c.issuedAt, r?.every ?? null, r?.unit ?? "NONE");
-                const expired = !!due && due.getTime() < Date.now();
-                // Son 60 gün: yenilemeyi planlamak için erken uyarı.
-                const expiringSoon =
-                  !!due && !expired && due.getTime() - Date.now() < 60 * 24 * 3600 * 1000;
-                return (
-                  <tr key={c.id} className="hover:bg-slate-50/70">
-                    <td className="td text-slate-400 tabular-nums">{i + 1}</td>
-                    <td className="td font-semibold text-slate-900 tabular-nums">{c.serialNo}</td>
-                    <td className="td text-slate-700">{c.courseTitle}</td>
-                    <td className="td tabular-nums text-slate-500">{fmtTs(c.issuedAt)}</td>
-                    <td className="td tabular-nums">
-                      <div
-                        className={expired ? "text-brand-700 font-semibold" : "text-slate-700"}
-                      >
-                        {due ? due.toLocaleDateString("tr-TR") : "—"}
-                      </div>
-                      {due && (
-                        <div
-                          className={`text-[11px] ${
-                            expired
-                              ? "text-brand-700"
-                              : expiringSoon
-                              ? "text-amber-700 font-medium"
-                              : "text-slate-400"
-                          }`}
-                        >
-                          {remainingText(due)}
-                        </div>
-                      )}
-                    </td>
-                    <td className="td">
-                      <span
-                        className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 ${
-                          expired
-                            ? "bg-red-50 text-red-700 ring-red-200"
-                            : expiringSoon
-                            ? "bg-amber-50 text-amber-700 ring-amber-200"
-                            : "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                        }`}
-                      >
-                        {expired ? "Expired" : expiringSoon ? "Expiring soon" : "Valid"}
-                      </span>
-                      {!due && (
-                        <span className="ml-2 text-[11px] text-slate-400">No renewal</span>
-                      )}
-                    </td>
-                    <td className="td text-right">
-                      <button
-                        onClick={() => setView(c)}
-                        className="btn-primary text-xs py-1 px-3"
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {groups.length > 0 && (
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <Tally n={counts.valid} label="In date" tone="#1f7a3c" />
+          <Tally n={counts.soon} label="Due in 90 days" tone="#8a5c08" />
+          <Tally n={counts.expired} label="Expired" tone="#b3241f" />
         </div>
-      </div>
-      <ExternalRecords />
+      )}
+
+      {groups.length === 0 ? (
+        <div className="card p-10 text-center text-sm text-slate-400">
+          You have no training records yet.
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {groups.map((g) => (
+            <TrainingGroup
+              key={g.key}
+              g={g}
+              expanded={!!open[g.key]}
+              onToggle={() => setOpen((p) => ({ ...p, [g.key]: !p[g.key] }))}
+              onView={setView}
+              onEdit={canEdit ? setEdit : undefined}
+            />
+          ))}
+        </div>
+      )}
 
       {view && <CertModal cert={view} onClose={() => setView(null)} />}
+
+      {edit && profile && (
+        <Modal
+          title="Edit Training Record"
+          subtitle={edit.title}
+          onClose={() => setEdit(null)}
+        >
+          <ExternalCertForm
+            user={{
+              id: profile.uid,
+              name: profile.name,
+              departmentId: profile.departmentId,
+            }}
+            course={null}
+            courses={courseList}
+            existing={edit}
+            onDone={(m) => {
+              setToast(m);
+              setEdit(null);
+            }}
+            onCancel={() => setEdit(null)}
+          />
+        </Modal>
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl no-print">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
 
-type ExternalRow = {
-  id: string;
-  title: string;
-  provider: string;
-  completedAt?: Timestamp | null;
-  expiresAt?: Timestamp | null;
-  fileUrl?: string;
-  externalSerialNo?: string | null;
-};
-
-/**
- * Dışarıdan alınmış eğitimler. BonAir sertifikası üretilmez — kişinin getirdiği
- * belge saklanır. Training History sayfası kaldırıldığı için personelin kendi
- * dış kayıtlarını görebileceği tek yer burası.
- */
-function ExternalRecords() {
-  const { profile } = useAuth();
-  const [rows, setRows] = useState<ExternalRow[]>([]);
-
-  useEffect(() => {
-    if (!profile) return;
-    return onSnapshot(
-      query(collection(db, "externalTrainings"), where("userId", "==", profile.uid)),
-      (snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
-      () => {}
-    );
-  }, [profile]);
-
-  if (rows.length === 0) return null;
-
-  const sorted = [...rows].sort(
-    (a, b) => (b.completedAt?.toMillis?.() ?? 0) - (a.completedAt?.toMillis?.() ?? 0)
+function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
+  return (
+    <div className="card px-4 py-3">
+      <div
+        className="text-[22px] font-bold tabular-nums leading-none tracking-[-0.025em]"
+        style={{ color: tone }}
+      >
+        {n}
+      </div>
+      <div className="text-[11.5px] text-slate-500 mt-1">{label}</div>
+    </div>
   );
+}
+
+/** Bir eğitim: geçerli kayıt üstte, geçmişi altında. */
+function TrainingGroup({
+  g,
+  expanded,
+  onToggle,
+  onView,
+  onEdit,
+}: {
+  g: Group;
+  expanded: boolean;
+  onToggle: () => void;
+  onView: (c: Cert) => void;
+  onEdit?: (r: ExternalRecord) => void;
+}) {
+  const cur = g.current;
+  const days = cur.expiry ? Math.round((cur.expiry.getTime() - Date.now()) / DAY) : null;
+  const state =
+    days === null
+      ? { chip: "No expiry", cls: "bg-slate-100 text-slate-600", tone: "#8e8e93" }
+      : days < 0
+      ? { chip: "Expired", cls: "bg-red-50 text-red-700", tone: "#b3241f" }
+      : days <= 90
+      ? { chip: "Due soon", cls: "bg-amber-50 text-amber-800", tone: "#8a5c08" }
+      : { chip: "In date", cls: "bg-emerald-50 text-emerald-700", tone: "#1f7a3c" };
+
+  const older = g.records.slice(1);
 
   return (
-    <div className="card mt-4">
-      <div
-        className="px-5 py-3 relative"
-        style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
-      >
-        <div className="text-[13px] font-bold text-white">
-          External Training <span className="text-white/60 font-normal">({sorted.length})</span>
-        </div>
+    <div className="card overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3">
         <span
-          className="absolute bottom-0 left-0 right-0 h-0.5"
-          style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
-        />
+          className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded shrink-0 ${state.cls}`}
+        >
+          {state.chip}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="text-[13px] font-semibold text-slate-900 truncate">
+            {g.title}
+            {cur.method && (
+              <span className="ml-1.5 bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10.5px] font-medium">
+                {cur.method}
+              </span>
+            )}
+          </div>
+          <div className="text-[11.5px] text-slate-500 truncate">
+            {cur.label}
+            {cur.serialNo ? ` · ${cur.serialNo}` : ""} · {fmt(cur.date)}
+            {cur.expiry ? ` → ${fmt(cur.expiry)}` : ""}
+          </div>
+        </div>
+
+        <div className="shrink-0 text-right leading-none" style={{ color: state.tone }}>
+          {days === null ? (
+            <span className="text-[12px] font-bold">—</span>
+          ) : (
+            <>
+              <span className="block text-[19px] font-bold tabular-nums tracking-[-0.02em]">
+                {Math.abs(days)}
+              </span>
+              <span className="block text-[10px] font-medium mt-0.5 opacity-80">
+                {days < 0 ? "days overdue" : "days left"}
+              </span>
+            </>
+          )}
+        </div>
+
+        <RecordActions r={cur} onView={onView} onEdit={onEdit} />
       </div>
-      <p className="px-5 py-2 text-[11px] text-slate-500 border-b border-slate-100 bg-slate-50">
-        Training you obtained outside BonAir. The certificate on file is the one you provided.
-      </p>
-      <div className="overflow-x-auto">
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="bg-slate-50 text-slate-500">
-              <th className="th w-10">#</th>
-              <th className="th">Training</th>
-              <th className="th">Provider</th>
-              <th className="th">Their Certificate No</th>
-              <th className="th">Completed</th>
-              <th className="th">Valid Until</th>
-              <th className="th w-24 text-right no-print">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {sorted.map((r, i) => {
-              const exp = r.expiresAt?.toDate?.() ?? null;
-              const expired = !!exp && exp.getTime() < Date.now();
-              return (
-                <tr key={r.id} className="hover:bg-slate-50/70">
-                  <td className="td text-slate-400 tabular-nums">{i + 1}</td>
-                  <td className="td font-semibold text-slate-900">{r.title}</td>
-                  <td className="td text-slate-600">{r.provider}</td>
-                  <td className="td tabular-nums text-slate-500">
-                    {r.externalSerialNo || "—"}
-                  </td>
-                  <td className="td tabular-nums text-slate-500">{fmtTs(r.completedAt)}</td>
-                  <td className="td tabular-nums">
-                    <span className={expired ? "text-brand-700 font-semibold" : "text-slate-700"}>
-                      {exp ? exp.toLocaleDateString("tr-TR") : "—"}
-                    </span>
-                    {expired && (
-                      <span className="ml-2 text-[10px] font-semibold text-brand-700">EXPIRED</span>
-                    )}
-                  </td>
-                  <td className="td text-right no-print">
-                    {/* Kâğıttan aktarılan kayıtların dijital kopyası yok. */}
-                    {r.fileUrl ? (
-                      <a
-                        href={r.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn-secondary text-xs py-1 px-3"
-                      >
-                        Open
-                      </a>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">On paper</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+
+      {older.length > 0 && (
+        <button
+          onClick={onToggle}
+          className="w-full text-left px-4 py-1.5 border-t border-slate-100 bg-slate-50/60 text-[11px] text-slate-500 hover:text-slate-800"
+        >
+          {expanded ? "Hide" : "Show"} {older.length} earlier record
+          {older.length === 1 ? "" : "s"}
+        </button>
+      )}
+
+      {expanded &&
+        older.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-3 px-4 py-2 border-t border-slate-100 bg-slate-50/40"
+          >
+            <span className="text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded bg-slate-100 text-slate-500 shrink-0">
+              {SOURCE_LABEL[r.source]}
+            </span>
+            <span className="min-w-0 flex-1 text-[11.5px] text-slate-600 truncate">
+              {r.label}
+              {r.serialNo ? ` · ${r.serialNo}` : ""} · {fmt(r.date)}
+              {r.expiry ? ` → ${fmt(r.expiry)}` : " · no expiry"}
+            </span>
+            <RecordActions r={r} onView={onView} onEdit={onEdit} small />
+          </div>
+        ))}
+    </div>
+  );
+}
+
+function RecordActions({
+  r,
+  onView,
+  onEdit,
+  small,
+}: {
+  r: Record_;
+  onView: (c: Cert) => void;
+  onEdit?: (e: ExternalRecord) => void;
+  small?: boolean;
+}) {
+  const cls = small ? "btn-secondary text-[11px] py-1 px-2.5" : "btn-secondary text-xs py-1.5 px-3";
+  return (
+    <div className="flex items-center gap-1.5 shrink-0 no-print">
+      {r.cert && (
+        <button onClick={() => onView(r.cert!)} className={cls}>
+          View
+        </button>
+      )}
+      {r.fileUrl && (
+        <a href={r.fileUrl} target="_blank" rel="noreferrer" className={cls}>
+          Open
+        </a>
+      )}
+      {/* Kâğıt kayıtta açılacak dosya yok; düzenleyip belge eklemek yine mümkün. */}
+      {onEdit && r.external && (
+        <button onClick={() => onEdit(r.external!)} className={cls}>
+          Edit
+        </button>
+      )}
     </div>
   );
 }

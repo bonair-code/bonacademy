@@ -1014,3 +1014,27 @@ olmasına rağmen görünmüyordu. Satırlar ayrı kartlara dönüştü:
 
 Aciliyet artık üç yerden okunuyor (şerit, zemin, rakam); eski `KindTag`
 rozetine gerek kalmadı, kaldırıldı.
+
+## My Certificates — eğitim bazlı gruplama (30.09.2026)
+
+Sayfa iki ayrı tabloydu: BonAcademy sertifikaları ve dış kayıtlar. Aynı
+eğitimin hem sistem sertifikası hem dış belgesi hem de kâğıttan aktarılmış
+kaydı olabiliyor (gerçek örnek: Talha Duygu'da Safety Training için üç kayıt)
+ve iki tablo bunları ilişkilendirmediği için hangisinin geçerli olduğu
+görünmüyordu.
+
+Artık **satır başına bir eğitim**: üstte geçerli olan kayıt (kaynak, numara,
+tarihler) ve sağda büyük rakamla kalan gün; altında "Show N earlier records"
+ile aynı eğitimin geçmişi. Üstte üç sayı: in date / due in 90 days / expired.
+Kazanan kayıt en son TAMAMLANAN — Dashboard ve Follow-Up ile aynı kural.
+
+### Düzenleme boşluğu kapatıldı
+Yüklenen kayıt hiçbir yerden düzeltilemiyordu (yanlış tarih, yeni belge).
+İki yere düzenleme eklendi:
+- **My Certificates** — her dış kaydın yanında "Edit".
+- **Follow-Up detay kartı** — dolu hücrede "Edit record".
+
+Düğme yalnızca ADMIN'e çıkıyor. Firestore kuralı dış kaydı admin'e ve kaydın
+departmanının müdürüne açıyor; içe aktarılan kayıtlarda `userDepartmentId`
+boş olduğu için müdür kendi kaydını bile değiştiremez — düğmeyi ona göstermek
+tıklandığında yetki hatası verirdi.

@@ -67,6 +67,8 @@ type CellState =
       certificateId?: string | null;
       /** Dış sertifikanın dosya bağlantısı. */
       externalUrl?: string | null;
+      /** Dış kaydın doküman id.si — düzenleme için. */
+      externalId?: string | null;
       /** Detay kartında gösterilenler. */
       serialNo?: string | null;
       instructor?: string | null;
@@ -144,6 +146,8 @@ export function TrainingMatrix() {
    * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
    */
   const [record, setRecord] = useState<{ user: UserRow; course: CourseRow } | null>(null);
+  /** Düzenlenecek dış kaydın id.si — detay kartındaki "Edit record" açar. */
+  const [editId, setEditId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -189,7 +193,7 @@ export function TrainingMatrix() {
       ),
       onSnapshot(
         scoped("externalTrainings", "userDepartmentId"),
-        (s) => setExternals(s.docs.map((d) => d.data())),
+        (s) => setExternals(s.docs.map((d) => ({ __id: d.id, ...(d.data() as any) }))),
         () => {}
       ),
     ];
@@ -213,6 +217,7 @@ export function TrainingMatrix() {
       expiresAt?: Date | null;
       certId?: string | null;
       url?: string | null;
+      extId?: string | null;
       serialNo?: string | null;
       instructor?: string | null;
       durationHours?: number | null;
@@ -245,6 +250,7 @@ export function TrainingMatrix() {
           external: e.provider ?? "External",
           expiresAt: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
           url: e.fileUrl ?? null,
+          extId: e.__id ?? null,
           serialNo: e.externalSerialNo ?? null,
           durationHours: e.durationHours ?? null,
           recordTitle: e.title ?? null,
@@ -287,6 +293,16 @@ export function TrainingMatrix() {
   }, [assignments]);
 
   const hover = useCellHover();
+
+  /** Düzenlenecek dış kayıt — id.den bulunur. */
+  const editRow = useMemo(
+    () => {
+      const e = editId ? (externals.find((x) => x.__id === editId) as any) : null;
+      // Form dokümanı `id` ile güncelliyor; listede alan adı `__id`.
+      return e ? { ...e, id: e.__id } : null;
+    },
+    [editId, externals]
+  );
 
   /**
    * Dış eğitim kaydını admin herkese, müdür yalnızca kendi departmanındaki
@@ -333,6 +349,7 @@ export function TrainingMatrix() {
         external: done.external,
         certificateId: done.certId ?? null,
         externalUrl: done.url ?? null,
+        externalId: done.extId ?? null,
         serialNo: done.serialNo ?? null,
         instructor: done.instructor ?? null,
         durationHours: done.durationHours ?? null,
@@ -621,7 +638,19 @@ export function TrainingMatrix() {
       </div>
 
       {hover.at && (
-        <CellDetail at={hover.at} onEnter={hover.holdOpen} onLeave={hover.closeNow} />
+        <CellDetail
+          at={hover.at}
+          onEnter={hover.holdOpen}
+          onLeave={hover.closeNow}
+          onEditRecord={
+            canRecordFor(hover.at.user)
+              ? (id) => {
+                  hover.closeNow();
+                  setEditId(id);
+                }
+              : undefined
+          }
+        />
       )}
 
       {record && (
@@ -643,6 +672,30 @@ export function TrainingMatrix() {
               setRecord(null);
             }}
             onCancel={() => setRecord(null)}
+          />
+        </Modal>
+      )}
+
+      {editRow && (
+        <Modal
+          title="Edit Training Record"
+          subtitle={`${editRow.userName ?? ""} · ${editRow.title ?? ""}`}
+          onClose={() => setEditId(null)}
+        >
+          <ExternalCertForm
+            user={{
+              id: editRow.userId,
+              name: editRow.userName ?? "",
+              departmentId: editRow.userDepartmentId ?? null,
+            }}
+            course={courses.find((c) => c.id === editRow.courseId) ?? null}
+            courses={courses}
+            existing={editRow}
+            onDone={(m) => {
+              setToast(m);
+              setEditId(null);
+            }}
+            onCancel={() => setEditId(null)}
           />
         </Modal>
       )}
@@ -743,10 +796,12 @@ function CellDetail({
   at,
   onEnter,
   onLeave,
+  onEditRecord,
 }: {
   at: HoverState;
   onEnter: () => void;
   onLeave: () => void;
+  onEditRecord?: (externalId: string) => void;
 }) {
   const { user, course, state, rect } = at;
   const W = 260;
@@ -878,11 +933,24 @@ function CellDetail({
           {state.instructor ? row("Instructor", state.instructor) : null}
           {row("Source", state.external ? `External — ${state.external}` : "BonAcademy")}
 
-          {(state.certificateId || state.externalUrl) && (
-            <div className="mt-2 pt-2 border-t border-slate-100 text-[10.5px] text-slate-400">
-              Click the cell to open the certificate.
-            </div>
-          )}
+          {/* Dolu hücrede kaydı düzeltmenin yolu yoktu: tarih yanlış
+              girildiyse ya da yeni belge geldiyse kişi sayfasına gitmek
+              gerekiyordu. Düzenleme buradan açılıyor. */}
+          <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+            <span className="text-[10.5px] text-slate-400">
+              {state.certificateId || state.externalUrl
+                ? "Click the cell to open the certificate."
+                : ""}
+            </span>
+            {onEditRecord && state.externalId && (
+              <button
+                onClick={() => onEditRecord(state.externalId!)}
+                className="text-[11px] font-semibold text-brand-700 hover:underline shrink-0"
+              >
+                Edit record
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>,
