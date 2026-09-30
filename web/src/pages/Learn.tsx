@@ -257,6 +257,7 @@ export function Learn() {
                       item={c}
                       done={!!consumed[c.id]}
                       onDone={() => markConsumed(c.id)}
+                      assignmentId={id}
                     />
                   ))}
                   {viewContents.length === 0 && (
@@ -448,10 +449,13 @@ function ContentViewer({
   item,
   done,
   onDone,
+  assignmentId,
 }: {
   item: Content;
   done: boolean;
   onDone: () => void;
+  /** SCORM ilerlemesi buna göre saklanır. */
+  assignmentId?: string;
 }) {
   return (
     <div className={`rounded-lg border p-3 ${done ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200"}`}>
@@ -480,6 +484,8 @@ function ContentViewer({
           src={`${SCORM_SERVE_BASE}/${item.basePath}${item.entryPoint}`}
           fileName={item.fileName}
           onDone={onDone}
+          assignmentId={assignmentId}
+          contentId={item.id}
         />
       )}
     </div>

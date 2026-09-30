@@ -1114,3 +1114,33 @@ etiketi — basılı evraktaki antet mantığı.
 
 Logo koyu metinli olduğu için beyaz zemine oturmak zorunda; grafit menüde
 doğrudan kullanılamıyor.
+
+## Belge önizleme ve SCORM'da kaldığı yerden devam (30.09.2026)
+
+### Uygulama içi belge önizleme
+Yeni bileşen `components/FilePreview.tsx`. "Open" bağlantıları dosyayı yeni
+sekmede açıyordu; kullanıcı uygulamadan çıkıyor, geri dönmek için sekme
+kapatıyordu. Belge artık pencere içinde açılıyor, üstünde **Print** ve
+**Download** düğmeleriyle.
+
+Dosya `fetch` ile alınıp **blob** URL'ine çevriliyor. Sebebi: Storage adresi
+başka bir origin, tarayıcı oradaki iframe'i yazdırmaya izin vermiyor ve
+`download` özniteliğini yok sayıyor. Blob aynı origin sayıldığından ikisi de
+çalışıyor (Storage CORS'u uygulama adresine zaten açık). Alınamazsa doğrudan
+adrese düşüyor ve "Open in new tab" gösteriyor — sessizce boş kutu değil.
+
+Bağlandığı yerler: My Certificates, StaffDetail (eğitim tablosu, satır menüsü
+ve External Certificates paneli).
+
+### SCORM ilerlemesi
+`ScormPlayer` yalnızca bellekte `cmi` tutuyordu; sayfa kapanınca öğrenci
+eğitime baştan başlıyordu. Artık `assignments/{id}/scorm/{contentId}` altında
+saklanıyor (`userId` + `cmi`), kural zaten bu yolu kişinin kendisine açıyordu.
+
+- Yazma `LMSSetValue`, `LMSCommit`, `LMSFinish`/`Terminate` üzerinden, 800 ms
+  gecikmeli — paketler sayfa geçişinde arka arkaya onlarca değer yazıyor.
+  Bileşen sökülürken bekleyen yazma hemen gönderiliyor.
+- Okuma iframe basılmadan ÖNCE: paket `LMSInitialize` sırasında
+  `lesson_location` / `suspend_data` okuyor, sonradan yüklemek işe yaramaz.
+  Durum gelene kadar "Restoring your progress…" gösteriliyor.
+- Kurs önizlemesinde (`CourseDetail`) id verilmiyor, ilerleme saklanmıyor.

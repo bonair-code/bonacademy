@@ -19,6 +19,7 @@ import { RowMenu } from "../components/RowMenu";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { requirementFor } from "../lib/requirements";
 import { PrintButton } from "../components/PrintButton";
+import { FilePreview } from "../components/FilePreview";
 
 type UserRow = {
   id: string;
@@ -44,6 +45,7 @@ type ExternalRow = {
   completedAt?: Timestamp | null;
   expiresAt?: Timestamp | null;
   fileUrl?: string;
+  fileName?: string | null;
   externalSerialNo?: string | null;
   /** Metod bazlı eğitimde bu kaydın metodu (ör. NDT → PT). */
   method?: string | null;
@@ -86,6 +88,9 @@ export function StaffDetail() {
   const [certs, setCerts] = useState<any[]>([]);
   const [assignments, setAssignments] = useState<any[]>([]);
   const [externals, setExternals] = useState<ExternalRow[]>([]);
+  const [preview, setPreview] = useState<{ url: string; name: string; title: string } | null>(
+    null
+  );
   const [dialog, setDialog] = useState<
     | { kind: "add"; course: CourseRow | null }
     | { kind: "remove"; row: ExternalRow }
@@ -349,15 +354,19 @@ export function StaffDetail() {
                       {l.external ? (
                         // Belgesi olmayan (kâğıt) kayıtta link yerine düz metin.
                         l.external.fileUrl ? (
-                          <a
-                            href={l.external.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            onClick={() =>
+                              setPreview({
+                                url: l.external!.fileUrl!,
+                                name: l.external!.fileName ?? "certificate.pdf",
+                                title: l.external!.title,
+                              })
+                            }
                             className="text-sky-700 hover:underline text-[12px]"
                             title={`Provider: ${l.external.provider}`}
                           >
                             External · {l.external.provider}
-                          </a>
+                          </button>
                         ) : (
                           <span
                             className="text-slate-500 text-[12px]"
@@ -398,11 +407,11 @@ export function StaffDetail() {
                                           label: "Open document",
                                           icon: "↗",
                                           onClick: () =>
-                                            window.open(
-                                              l.external!.fileUrl,
-                                              "_blank",
-                                              "noreferrer"
-                                            ),
+                                            setPreview({
+                                              url: l.external!.fileUrl!,
+                                              name: l.external!.fileName ?? "certificate.pdf",
+                                              title: l.external!.title,
+                                            }),
                                         },
                                       ]
                                     : []),
@@ -523,14 +532,18 @@ export function StaffDetail() {
                             koşulsuz "Open" linki ölü bağlantı basıyordu. */}
                         <td className="td">
                           {e.fileUrl ? (
-                            <a
-                              href={e.fileUrl}
-                              target="_blank"
-                              rel="noreferrer"
+                            <button
+                              onClick={() =>
+                                setPreview({
+                                  url: e.fileUrl!,
+                                  name: e.fileName ?? "certificate.pdf",
+                                  title: e.title,
+                                })
+                              }
                               className="text-[12px] text-brand-700 hover:underline"
                             >
                               Open
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-[11px] text-slate-400">On paper</span>
                           )}
@@ -563,6 +576,15 @@ export function StaffDetail() {
           </div>
         )}
       </div>
+
+      {preview && (
+        <FilePreview
+          url={preview.url}
+          fileName={preview.name}
+          title={preview.title}
+          onClose={() => setPreview(null)}
+        />
+      )}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl">

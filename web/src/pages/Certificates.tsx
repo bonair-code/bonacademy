@@ -8,6 +8,7 @@ import { CertificateSheet, type Cert } from "../components/CertificateSheet";
 import { printCertificate } from "../lib/print";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm, type ExternalRecord } from "../components/ExternalCertForm";
+import { FilePreview } from "../components/FilePreview";
 
 /**
  * Kişinin eğitim kayıtları — **eğitim başına** bir satır, kayıt başına değil.
@@ -74,6 +75,7 @@ export function Certificates() {
   const [courses, setCourses] = useState<Map<string, Course>>(new Map());
   const [view, setView] = useState<Cert | null>(null);
   const [edit, setEdit] = useState<ExternalRecord | null>(null);
+  const [preview, setPreview] = useState<{ url: string; name: string; title: string } | null>(null);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [toast, setToast] = useState<string | null>(null);
 
@@ -244,6 +246,7 @@ export function Certificates() {
               expanded={!!open[g.key]}
               onToggle={() => setOpen((p) => ({ ...p, [g.key]: !p[g.key] }))}
               onView={setView}
+              onPreview={setPreview}
               onEdit={canEdit ? setEdit : undefined}
             />
           ))}
@@ -251,6 +254,15 @@ export function Certificates() {
       )}
 
       {view && <CertModal cert={view} onClose={() => setView(null)} />}
+
+      {preview && (
+        <FilePreview
+          url={preview.url}
+          fileName={preview.name}
+          title={preview.title}
+          onClose={() => setPreview(null)}
+        />
+      )}
 
       {edit && profile && (
         <Modal
@@ -305,12 +317,14 @@ function TrainingGroup({
   expanded,
   onToggle,
   onView,
+  onPreview,
   onEdit,
 }: {
   g: Group;
   expanded: boolean;
   onToggle: () => void;
   onView: (c: Cert) => void;
+  onPreview: (p: { url: string; name: string; title: string }) => void;
   onEdit?: (r: ExternalRecord) => void;
 }) {
   const cur = g.current;
@@ -366,7 +380,7 @@ function TrainingGroup({
           )}
         </div>
 
-        <RecordActions r={cur} onView={onView} onEdit={onEdit} />
+        <RecordActions r={cur} onView={onView} onPreview={onPreview} title={g.title} onEdit={onEdit} />
       </div>
 
       {older.length > 0 && (
@@ -393,7 +407,7 @@ function TrainingGroup({
               {r.serialNo ? ` · ${r.serialNo}` : ""} · {fmt(r.date)}
               {r.expiry ? ` → ${fmt(r.expiry)}` : " · no expiry"}
             </span>
-            <RecordActions r={r} onView={onView} onEdit={onEdit} small />
+            <RecordActions r={r} onView={onView} onPreview={onPreview} title={g.title} onEdit={onEdit} small />
           </div>
         ))}
     </div>
@@ -403,11 +417,15 @@ function TrainingGroup({
 function RecordActions({
   r,
   onView,
+  onPreview,
+  title,
   onEdit,
   small,
 }: {
   r: Record_;
   onView: (c: Cert) => void;
+  onPreview: (p: { url: string; name: string; title: string }) => void;
+  title: string;
   onEdit?: (e: ExternalRecord) => void;
   small?: boolean;
 }) {
@@ -419,10 +437,20 @@ function RecordActions({
           View
         </button>
       )}
+      {/* Belge uygulamanın içinde açılır; yazdırma ve indirme orada. */}
       {r.fileUrl && (
-        <a href={r.fileUrl} target="_blank" rel="noreferrer" className={cls}>
+        <button
+          onClick={() =>
+            onPreview({
+              url: r.fileUrl!,
+              name: r.external?.fileName ?? "certificate.pdf",
+              title,
+            })
+          }
+          className={cls}
+        >
           Open
-        </a>
+        </button>
       )}
       {/* Kâğıt kayıtta açılacak dosya yok; düzenleyip belge eklemek yine mümkün. */}
       {onEdit && r.external && (
