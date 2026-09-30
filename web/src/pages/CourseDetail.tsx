@@ -115,6 +115,9 @@ export function CourseDetail() {
   const [c, setC] = useState<Course | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [sectionCount, setSectionCount] = useState(0);
+  /** İçinde gerçekten materyal olan bölüm sayısı — boş kabuk bölümler sayılmaz. */
+  const [filledCount, setFilledCount] = useState(0);
+  const [publishBusy, setPublishBusy] = useState(false);
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -137,7 +140,9 @@ export function CourseDetail() {
         revisionDate: data.revisionDate ?? null,
         ...readRecurrence(data),
         passingScore: data.passingScore ?? 70,
-        isActive: data.isActive ?? true,
+        // Alan yoksa YAYINDA DEĞİL sayılır. Eskiden tersiydi ve alanı olmayan
+        // kurs editörde "yayında" görünüyordu.
+        isActive: data.isActive ?? false,
         scorm: data.scorm ?? null,
         exam: {
           questionCount: 10,
@@ -153,9 +158,15 @@ export function CourseDetail() {
     const unQ = onSnapshot(collection(db, "courses", id, "questions"), (snap) =>
       setQuestions(snap.docs.map((q) => ({ id: q.id, ...(q.data() as Omit<Question, "id">) })))
     );
-    const unS = onSnapshot(collection(db, "courses", id, "sections"), (snap) =>
-      setSectionCount(snap.size)
-    );
+    const unS = onSnapshot(collection(db, "courses", id, "sections"), (snap) => {
+      setSectionCount(snap.size);
+      setFilledCount(
+        snap.docs.filter((d) => {
+          const s = d.data() as { contents?: unknown[]; content?: unknown };
+          return Array.isArray(s.contents) ? s.contents.length > 0 : s.content != null;
+        }).length
+      );
+    });
     return () => {
       unC();
       unQ();
@@ -229,7 +240,8 @@ export function CourseDetail() {
         recurrenceEvery: c.recurrenceUnit === "NONE" ? null : c.recurrenceEvery ?? 1,
         recurrenceUnit: c.recurrenceUnit,
         passingScore: c.passingScore,
-        isActive: c.isActive,
+        // isActive BURADA YAZILMAZ — yayın kararı publishCourse Function'ından
+        // geçiyor (güvenlik kuralı da istemcinin bu alana dokunmasını engelliyor).
         exam: c.exam,
         updatedAt: serverTimestamp(),
       });
@@ -277,17 +289,52 @@ export function CourseDetail() {
   const readiness: Record<number, boolean | null> = {
     // Revizyon numarası denetimde zorunlu; başlık zaten hep dolu.
     1: !!c.revisionNo.trim(),
-    2: externalOnly ? null : sectionCount > 0,
+    2: externalOnly ? null : filledCount > 0,
     3: externalOnly ? null : true,
     4: externalOnly || !c.exam.required ? null : questions.length >= c.exam.questionCount,
     5: c.isActive,
   };
+
+  /**
+   * Yayına çıkmayı engelleyen sebepler. Aynı kontrol sunucuda da var
+   * (`publishBlockers`, functions/src/index.ts) — burası sadece kullanıcıya
+   * sebebi önceden göstermek için; asıl karar sunucuda veriliyor.
+   */
+  const blockers: string[] = externalOnly
+    ? []
+    : [
+        ...(sectionCount === 0
+          ? ["Kursun hiç bölümü yok."]
+          : filledCount === 0
+          ? ["Bölümler var ama hiçbirinde içerik yok."]
+          : []),
+        ...(c.exam.required && questions.length === 0 ? ["Sınav zorunlu ama soru bankası boş."] : []),
+      ];
+  if (!c.revisionNo.trim()) blockers.unshift("Revision No boş.");
+
+  /** Yayına al / yayından çıkar. isActive'i yalnızca bu Function yazabiliyor. */
+  async function setPublished(active: boolean) {
+    if (!id) return;
+    setErr(null);
+    setPublishBusy(true);
+    try {
+      await httpsCallable(functions, "publishCourse")({ courseId: id, active });
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setPublishBusy(false);
+    }
+  }
   const applicable = stepNos.filter((n) => readiness[n] !== null);
   const doneCount = applicable.filter((n) => readiness[n]).length;
 
   const railLabel: Record<number, string> = {
     1: "General information",
-    2: externalOnly ? "Content" : `Content · ${sectionCount} section${sectionCount === 1 ? "" : "s"}`,
+    2: externalOnly
+      ? "Content"
+      : `Content · ${sectionCount} section${sectionCount === 1 ? "" : "s"}${
+          sectionCount > filledCount ? ` · ${sectionCount - filledCount} empty` : ""
+        }`,
     3: c.exam.required ? `Exam · pass ${c.passingScore}%` : "Exam · not required",
     4: `Question bank · ${questions.length}`,
     5: c.isActive ? "Published" : "Summary & publish",
@@ -330,12 +377,12 @@ export function CourseDetail() {
           className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded shrink-0 ${
             !c.isActive
               ? "bg-slate-100 text-slate-600"
-              : !externalOnly && sectionCount === 0
+              : !externalOnly && filledCount === 0
               ? "bg-amber-50 text-amber-800"
               : "bg-emerald-50 text-emerald-700"
           }`}
         >
-          {!c.isActive ? "Draft" : !externalOnly && sectionCount === 0 ? "Empty" : "Published"}
+          {!c.isActive ? "Draft" : !externalOnly && filledCount === 0 ? "Empty" : "Published"}
         </span>
         {saved && <span className="text-[11px] font-semibold text-emerald-600">✓ Saved</span>}
         <button onClick={() => void save()} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
@@ -619,7 +666,14 @@ export function CourseDetail() {
             label="Validity Period"
             value={recurText(c.recurrenceEvery, c.recurrenceUnit)}
           />
-          <SummaryRow label="Sections" value={String(sectionCount)} />
+          <SummaryRow
+            label="Sections"
+            value={
+              sectionCount > filledCount
+                ? `${sectionCount} (${sectionCount - filledCount} without content)`
+                : String(sectionCount)
+            }
+          />
           {c.exam.required && (
             <SummaryRow label="Question Bank" value={`${questions.length} question(s)`} />
           )}
@@ -630,17 +684,39 @@ export function CourseDetail() {
           {c.exam.required && (
             <SummaryRow label="Passing Score" value={`${c.passingScore}%`} />
           )}
-          <label className="flex items-center gap-2 mt-4 text-sm font-medium text-slate-800">
+          <label
+            className={`flex items-center gap-2 mt-4 text-sm font-medium ${
+              !c.isActive && blockers.length ? "text-slate-400" : "text-slate-800"
+            }`}
+          >
             <input
               type="checkbox"
               checked={c.isActive}
-              onChange={() => set("isActive", !c.isActive)}
-              className="accent-brand-600 h-4 w-4"
+              disabled={publishBusy || (!c.isActive && blockers.length > 0)}
+              onChange={() => setPublished(!c.isActive)}
+              className="accent-brand-600 h-4 w-4 disabled:opacity-40"
             />
             {externalOnly
               ? "Published (tracked as a requirement)"
               : "Published (assignable to employees)"}
           </label>
+
+          {/* Neden yayınlanamıyor — kutuyu kapalı bırakıp sebebi söylemeden
+              geçmek, kullanıcıyı boş kursu yayınlamaya çalışırken bırakıyordu. */}
+          {!c.isActive && blockers.length > 0 && (
+            <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+              <p className="text-[11.5px] font-semibold text-amber-900">
+                Yayına alınamaz — önce şunlar:
+              </p>
+              <ul className="mt-1 space-y-0.5">
+                {blockers.map((b) => (
+                  <li key={b} className="text-[11.5px] text-amber-800">
+                    • {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </Section>
       )}
@@ -668,20 +744,36 @@ export function CourseDetail() {
             >
               Next →
             </button>
+          ) : blockers.length > 0 ? (
+            /* Yayınlanamıyorsa düğme "Save" olur — devre dışı bırakmak son
+               adımdaki değişiklikleri kaydetmeyi de imkânsız kılıyordu. */
+            <button
+              onClick={async () => {
+                if (await save()) navigate("/courses");
+              }}
+              className="btn-primary"
+            >
+              Save
+            </button>
           ) : (
             <button
               onClick={async () => {
                 if (!(await save())) return;
                 try {
-                  // Yayın = yeni revizyon. Anlık kopya Function tarafında yazılır.
-                  await httpsCallable(functions, "publishCourse")({ courseId: id });
+                  // Yayın = yeni revizyon. Anlık kopya ve isActive Function
+                  // tarafında yazılır; içerik yoksa Function reddediyor.
+                  await httpsCallable(functions, "publishCourse")({
+                    courseId: id,
+                    active: true,
+                  });
                 } catch (e) {
                   setErr((e as Error).message);
                   return;
                 }
                 navigate("/courses");
               }}
-              className="btn-primary"
+              disabled={publishBusy}
+              className="btn-primary disabled:opacity-40"
             >
               Save &amp; Publish
             </button>

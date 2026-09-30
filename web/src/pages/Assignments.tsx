@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
-import { httpsCallable } from "firebase/functions";
-import { db, functions } from "../lib/firebase";
+import { db } from "../lib/firebase";
 import { isStaffRole, useAuth } from "../lib/auth";
+import { assignCourses, skipNote } from "../lib/assign";
 import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { PrintButton } from "../components/PrintButton";
@@ -107,9 +107,16 @@ export function Assignments() {
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
 
-  /** Atanabilir eğitimler: dışarıdan alınanlar sistemde tamamlanamaz. */
+  /**
+   * Atanabilir eğitimler: dışarıdan alınanlar sistemde tamamlanamaz, yayında
+   * olmayanlar da atanmaz — eskiden "(draft)" etiketiyle listede duruyorlardı
+   * ve seçilebiliyorlardı, atanan kişi de hiç ilerleyemiyordu.
+   */
   const assignable = useMemo(
-    () => courses.filter((c) => c.delivery !== "EXTERNAL_ONLY").sort((a, b) => a.title.localeCompare(b.title, "tr")),
+    () =>
+      courses
+        .filter((c) => c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false)
+        .sort((a, b) => a.title.localeCompare(b.title, "tr")),
     [courses]
   );
 
@@ -443,7 +450,7 @@ function AssignForm({
       .map((c) => ({
         id: c.id,
         label: c.title,
-        note: c.isActive === false ? "draft" : "",
+        note: "",
       }));
   }, [byCourse, users, courses, dept, q, departments]);
 
@@ -456,25 +463,33 @@ function AssignForm({
     setErr(null);
     setProgress(0);
     try {
-      const fn = httpsCallable(functions, "assignCourses");
       let created = 0;
+      const skipped: string[] = [];
 
       if (byCourse) {
         // Fonksiyon kişi başına çalışıyor; kişiler döngüyle geçiliyor.
         for (const uid of Array.from(picked)) {
-          const res = await fn({ userId: uid, courseIds: [anchor] });
-          created += (res.data as { created?: number })?.created ?? 0;
+          const r = await assignCourses(uid, [anchor]);
+          created += r.created;
+          skipped.push(...r.skipped);
           setProgress((p) => p + 1);
         }
         const title = courses.find((c) => c.id === anchor)?.title ?? "Training";
-        onDone(`${title} assigned to ${created} ${created === 1 ? "person" : "people"}.`);
+        onDone(
+          `${title} assigned to ${created} ${created === 1 ? "person" : "people"}.` +
+            skipNote(skipped)
+        );
       } else {
         // Tek kişiye çok eğitim: fonksiyon bunu tek çağrıda yapıyor.
-        const res = await fn({ userId: anchor, courseIds: Array.from(picked) });
-        created = (res.data as { created?: number })?.created ?? 0;
+        const r = await assignCourses(anchor, Array.from(picked));
+        created = r.created;
+        skipped.push(...r.skipped);
         setProgress(picked.size);
         const name = users.find((u) => u.id === anchor)?.name ?? "the employee";
-        onDone(`${created} training${created === 1 ? "" : "s"} assigned to ${name}.`);
+        onDone(
+          `${created} training${created === 1 ? "" : "s"} assigned to ${name}.` +
+            skipNote(skipped)
+        );
       }
     } catch (e) {
       setErr((e as Error).message);
@@ -522,7 +537,6 @@ function AssignForm({
             ? courses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.title}
-                  {c.isActive === false ? " (draft)" : ""}
                 </option>
               ))
             : [...users]

@@ -9,10 +9,10 @@ import {
   onSnapshot,
   query,
   serverTimestamp,
-  updateDoc,
   where,
 } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../lib/firebase";
 import type { Timestamp } from "firebase/firestore";
 import { orderBy } from "firebase/firestore";
 import { useAuth } from "../lib/auth";
@@ -39,7 +39,8 @@ type Course = {
 };
 
 /** Kurs başına bölüm ve soru sayısı — kartta "içeriği var mı" bunu söyler. */
-type Counts = { sections: number; questions: number };
+/** `filled` = içinde gerçekten materyal olan bölüm sayısı. */
+type Counts = { sections: number; filled: number; questions: number };
 
 type Dialog =
   | { kind: "delete"; course: Course }
@@ -154,19 +155,23 @@ export function Courses() {
       const out: Record<string, Counts> = {};
       await Promise.all(
         ids.map(async (id) => {
-          try {
-            const [s, q] = await Promise.all([
-              getDocs(collection(db, "courses", id, "sections")),
-              getDocs(collection(db, "courses", id, "questions")),
-            ]);
-            out[id] = { sections: s.size, questions: q.size };
-          } catch {
-            // Sayılamazsa kart yine basılır; yalnızca içerik satırı "—" olur.
-          }
+          const [s, q] = await Promise.all([
+            getDocs(collection(db, "courses", id, "sections")),
+            getDocs(collection(db, "courses", id, "questions")),
+          ]);
+          const filled = s.docs.filter((d) => {
+            const x = d.data() as { contents?: unknown[]; content?: unknown };
+            return Array.isArray(x.contents) ? x.contents.length > 0 : x.content != null;
+          }).length;
+          out[id] = { sections: s.size, filled, questions: q.size };
         })
       );
       if (alive) setCounts(out);
-    })();
+    })().catch((e) => {
+      // Sayım patlarsa "Empty" sessizce "Published"a düşüyordu; bu projede
+      // aynı kalıptan üç hata çıktı, artık ekranda görünüyor.
+      if (alive) setErr(`Bölüm sayıları okunamadı: ${(e as Error).message}`);
+    });
     return () => {
       alive = false;
     };
@@ -174,7 +179,7 @@ export function Courses() {
   }, [courses.map((c) => c.id).join(",")]);
 
   /** Yayında olup içeriği olmayan kurslar — listenin üstünde uyarı verilir. */
-  const emptyCount = courses.filter((c) => c.isActive && counts[c.id]?.sections === 0).length;
+  const emptyCount = courses.filter((c) => c.isActive && counts[c.id]?.filled === 0).length;
 
   /**
    * Arama başlığın yanında kategoriye ve revizyon numarasına da bakar;
@@ -188,7 +193,7 @@ export function Courses() {
         if (!hay.includes(needle)) return false;
       }
       if (!fStatus) return true;
-      const empty = counts[c.id]?.sections === 0;
+      const empty = counts[c.id]?.filled === 0;
       if (fStatus === "DRAFT") return !c.isActive;
       if (fStatus === "EMPTY") return c.isActive && empty;
       if (fStatus === "PUBLISHED") return c.isActive && !empty;
@@ -196,12 +201,19 @@ export function Courses() {
     });
   }, [courses, counts, q, fStatus]);
 
+  /**
+   * Yayına al / yayından çıkar. isActive'i artık yalnızca publishCourse
+   * Function'ı yazabiliyor: içeriği olmayan kurs yayınlanmasın diye. Buradan
+   * doğrudan updateDoc yapmak güvenlik kuralına takılır.
+   */
   async function toggleActive(c: Course) {
-    await updateDoc(doc(db, "courses", c.id), {
-      isActive: !c.isActive,
-      updatedAt: serverTimestamp(),
-    });
-    setToast(`${c.title} ${c.isActive ? "deactivated" : "activated"}.`);
+    setErr(null);
+    try {
+      await httpsCallable(functions, "publishCourse")({ courseId: c.id, active: !c.isActive });
+      setToast(`${c.title} ${c.isActive ? "deactivated" : "activated"}.`);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
   }
 
   return (

@@ -156,9 +156,54 @@ export const deleteUser = onCall({ region: "europe-west3" }, async (req) => {
 });
 
 /**
- * Kursu yayınlar ve revizyonu bir artırır. Her yayın, o anki kurs halinin
- * anlık kopyasını courses/{cid}/revisions/{n} altına yazar — güvenlik kuralları
- * bu koleksiyona client yazmasına izin vermiyor (denetim izi bozulmasın).
+ * Bir bölümün gerçekten içeriği var mı? İçerik, bölüm dokümanındaki `contents`
+ * dizisinde tutuluyor; tek içerikli eski kayıtlarda `content` alanında.
+ *
+ * Boş kabuk bölüm ("Bölüm 1" yazıp içine bir şey koymamak) öğrenci tarafında
+ * "No content in this section" ekranı demek — bölüm SAYMAK yeterli değil.
+ */
+function sectionHasContent(d: any): boolean {
+  const s = d ?? {};
+  if (Array.isArray(s.contents)) return s.contents.length > 0;
+  return s.content != null;
+}
+
+/**
+ * Kursun yayına çıkmasını engelleyen sebepler. Boş dizi = yayınlanabilir.
+ *
+ * Tek gerçek zorlama noktası burası: `isActive` eskiden istemciden doğrudan
+ * yazılıyordu, bu yüzden içi bomboş altı kurs yayında kalmıştı ve atanan kişi
+ * `/learn`'de hiç ilerleyemiyordu (bölüm yok → tamamla düğmesi yok → durum
+ * PENDING'de donuyor).
+ *
+ * EXTERNAL_ONLY (takip edilen dış eğitim) istisna: onun içeriği bizde değil,
+ * kişinin elindeki belgede.
+ */
+function publishBlockers(
+  c: any,
+  sections: { size: number; docs: { data(): any }[] },
+  questions: { size: number }
+): string[] {
+  if ((c?.delivery ?? "ONLINE") === "EXTERNAL_ONLY") return [];
+  const out: string[] = [];
+  if (sections.size === 0) {
+    out.push("Kursun hiç bölümü yok.");
+  } else if (!sections.docs.some((d) => sectionHasContent(d.data()))) {
+    out.push("Bölümler var ama hiçbirinde içerik yok (video/PDF/SCORM ekle).");
+  }
+  if (c?.exam?.required && questions.size === 0)
+    out.push("Sınav zorunlu işaretli ama soru bankası boş.");
+  return out;
+}
+
+/**
+ * Kursu yayınlar/yayından alır ve revizyonu arşivler. Her yayın, o anki kurs
+ * halinin anlık kopyasını courses/{cid}/revisions/{n} altına yazar — güvenlik
+ * kuralları bu koleksiyona client yazmasına izin vermiyor (denetim izi
+ * bozulmasın).
+ *
+ * `isActive` SADECE buradan yazılır; güvenlik kuralı istemcinin bu alana
+ * dokunmasını engelliyor.
  */
 export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
@@ -192,6 +237,20 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
     db.collection(`courses/${courseId}/questions`).get(),
   ]);
 
+  // `active` verilmezse yayınlama sayılır — eski çağrı biçimi bozulmasın.
+  const active = req.data?.active === undefined ? true : Boolean(req.data.active);
+
+  // Yayından ALMA doğrulama istemez: içi boşalmış bir kursu kapatmak her zaman
+  // serbest olmalı, yoksa hatalı yayınlanmış kurs kapatılamaz hale gelir.
+  if (!active) {
+    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
+    return { revisionNo, active: false };
+  }
+
+  const blockers = publishBlockers(c, sections, questions);
+  if (blockers.length)
+    throw new HttpsError("failed-precondition", blockers.join(" "));
+
   // Append-only arşiv: aynı revizyon numarası tekrar yayınlanabilir, her yayın
   // ayrı kayıt olur — denetim izi bozulmasın.
   await db.collection(`courses/${courseId}/revisions`).add({
@@ -224,11 +283,12 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
   });
 
   await ref.update({
+    isActive: true,
     lastPublishedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  return { revisionNo };
+  return { revisionNo, active: true };
 });
 
 /**
@@ -255,21 +315,55 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
   if (!userSnap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
   const userDepartmentId = userSnap.data()?.departmentId ?? null;
 
+  // Müdür yalnızca kendi departmanına atar. Bu kontrol eksikti: arayüz müdüre
+  // sadece kendi personelini gösteriyordu ama çağrı doğrudan yapılabiliyordu.
+  if (callerRole === "MANAGER" && userDepartmentId !== caller.data()?.departmentId)
+    throw new HttpsError("permission-denied", "Yalnızca kendi departmanına atama yapabilirsin.");
+
+  // Son teslim süresi çağrıdan gelebilir (matristeki atama penceresi kullanıyor).
+  const rawDue = Number(req.data?.dueDays);
+  const dueDays = Number.isFinite(rawDue) ? Math.min(Math.max(Math.round(rawDue), 1), 365) : 30;
+
   const now = Timestamp.now();
-  const dueDate = Timestamp.fromMillis(now.toMillis() + 30 * 24 * 3600 * 1000);
+  const dueDate = Timestamp.fromMillis(now.toMillis() + dueDays * 24 * 3600 * 1000);
 
   let created = 0;
+  const skipped: { courseId: string; reason: string }[] = [];
   for (const courseId of courseIds) {
     const courseSnap = await db.doc(`courses/${courseId}`).get();
-    if (!courseSnap.exists) continue;
+    if (!courseSnap.exists) {
+      skipped.push({ courseId, reason: "Kurs bulunamadı." });
+      continue;
+    }
+    const course = courseSnap.data() as any;
+
+    // Yayında olmayan ya da içi boş kursa atama yapılmaz — kişi açtığında
+    // yapacak bir şey bulamaz ve atama sonsuza kadar PENDING kalır.
+    if (course.isActive === false) {
+      skipped.push({ courseId, reason: "Kurs yayında değil." });
+      continue;
+    }
+    const [secs, qs] = await Promise.all([
+      db.collection(`courses/${courseId}/sections`).get(),
+      db.collection(`courses/${courseId}/questions`).get(),
+    ]);
+    const blockers = publishBlockers(course, secs, qs);
+    if (blockers.length) {
+      skipped.push({ courseId, reason: blockers.join(" ") });
+      continue;
+    }
+
     const id = `${userId}_${courseId}`;
     const ref = db.doc(`assignments/${id}`);
-    if ((await ref.get()).exists) continue; // idempotent
+    if ((await ref.get()).exists) {
+      skipped.push({ courseId, reason: "Zaten atanmış." });
+      continue; // idempotent
+    }
     await ref.set({
       userId,
       userDepartmentId,
       courseId,
-      courseTitle: courseSnap.data()?.title || "",
+      courseTitle: course.title || "",
       status: "PENDING",
       cycleNumber: 1,
       sectionsDone: [],
@@ -280,7 +374,9 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
     });
     created++;
   }
-  return { created };
+  // `skipped` geri dönüyor: arayüz "20 kişiye atadım" deyip 12'sini sessizce
+  // atlamasın, sebebini gösterebilsin.
+  return { created, skipped };
 });
 
 /**

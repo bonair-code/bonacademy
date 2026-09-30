@@ -63,7 +63,13 @@ service cloud.firestore {
       allow read: if signedIn(); // yalnızca meta (sorular ayrı alt-koleksiyonda)
       allow create: if isAdmin()
                     || (isInstructor() && request.resource.data.ownerInstructorId == request.auth.uid);
-      allow update, delete: if isAdmin() || ownsCourse(cid);
+      // isActive'e istemci DOKUNAMAZ — yayın kararı publishCourse Function'ından
+      // geçer, çünkü içeriği olmayan kurs yayınlanmamalı (atanan kişi /learn'de
+      // hiç ilerleyemiyor). Alanı hiç göndermemek de geçerli: değişmemiş sayılır.
+      allow update: if (isAdmin() || ownsCourse(cid))
+                    && (!request.resource.data.diff(resource.data).affectedKeys()
+                          .hasAny(['isActive']));
+      allow delete: if isAdmin() || ownsCourse(cid);
 
       // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). İçerik kurs
       // materyalidir → çalışan okuyabilir (sıra/başlık/SCORM yolu); yalnızca
