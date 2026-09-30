@@ -416,6 +416,13 @@ function StaffDashboard() {
         subtitle={role === "MANAGER" ? "Your department at a glance." : "The organisation at a glance."}
       />
 
+      {/* Okuma reddedilirse tablo eksik olur; sessiz kalmak yerine söyle. */}
+      {c.error && (
+        <p className="mb-3 text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Some records could not be read, so these numbers may be incomplete: {c.error}
+        </p>
+      )}
+
       {/* ── Tek oran, tek cümle ─────────────────────────────── */}
       <div className="card px-5 py-5 mb-3 flex items-center gap-6 flex-wrap">
         <ComplianceRing pct={pct} color={ringColor} />

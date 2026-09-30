@@ -1246,3 +1246,26 @@ görseli devleşip ikinci sayfaya taşıyordu.
 14pt / künye 10.5pt / çağrı 12pt / adres 8pt. `lib/print.ts` içinde
 `printQr()`. Künyeye eğitmen adı da eklendi — duvara asılan kâğıtta hangi
 oturum olduğu belli olsun.
+
+## Eğitmen Follow-Up'ta her şeyi eksik görüyordu (30.09.2026)
+
+**Belirti:** Eğitmen hesabıyla Training Follow-Up açıldığında neredeyse bütün
+hücreler kırmızı "—" (Never taken) çıkıyordu; admin'de aynı satırlar dolu.
+
+**Sebep:** `externalTrainings` okuma kuralı eğitmene kapalıydı (admin, kişinin
+kendisi ve departman müdürü). Eğitimlerin çoğu dış kayıtla kapanıyor —
+464 içe aktarılan kayıt dahil — dolayısıyla eğitmen hiçbirini göremiyor,
+matris de "eksik" diye gösteriyordu. Kurala `isInstructor()` eklendi;
+eğitmen zaten bütün kullanıcıları ve sertifikaları okuyabiliyordu, tutarsızlık
+buradaydı.
+
+**İkinci ve daha tehlikeli sebep:** dinleyicinin hata işleyicisi `() => {}`
+idi. Yetki reddi sessizce yutuluyor, ekran hatayı söylemek yerine **kendinden
+emin biçimde yanlış tablo** gösteriyordu. `TrainingMatrix` ve `compliance.ts`
+içindeki bütün sessiz işleyiciler kaldırıldı; `useCompliance` artık `error`
+döndürüyor ve Dashboard "bazı kayıtlar okunamadı, sayılar eksik olabilir"
+uyarısı basıyor.
+
+Bu, projede üçüncü kez aynı kalıptan çıkan hata (yoklama eşleştirmesi ve
+PDF ilerlemesi de sessiz hatadan bozulmuştu). Yeni dinleyicilerde hata
+işleyicisi boş bırakılmamalı.

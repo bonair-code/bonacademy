@@ -41,6 +41,8 @@ export type ComplianceSummary = {
   /** Açığı olan personel sayısı (aynı kişi birden çok satırda sayılmaz). */
   staffAtRisk: number;
   staffTotal: number;
+  /** Okuma reddedildiyse mesaj — ekran yanlış tabloyu doğruymuş gibi sunmasın. */
+  error: string | null;
 };
 
 type AnyRow = Record<string, any>;
@@ -66,6 +68,7 @@ export function useCompliance(
   const [assignments, setAssignments] = useState<AnyRow[]>([]);
   const [externals, setExternals] = useState<AnyRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     if (!profile || !role) return;
@@ -75,7 +78,9 @@ export function useCompliance(
     const dept = profile.departmentId;
     const scoped = (name: string, field: string) =>
       seesAll ? query(collection(db, name)) : query(collection(db, name), where(field, "==", dept));
-    const silent = () => {};
+    // Okuma reddedilirse veri boş kalır ve ekran "eksik" gösterir; sessizce
+    // yutmak yanlış tabloyu doğruymuş gibi sunuyordu.
+    const onErr = (e: { message: string }) => setErr(e.message);
 
     const subs = [
       onSnapshot(
@@ -93,11 +98,11 @@ export function useCompliance(
         setScopes(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
       ),
       onSnapshot(scoped("certificates", "userDepartmentId"), (s) =>
-        setCerts(s.docs.map((d) => d.data() as AnyRow)), silent),
+        setCerts(s.docs.map((d) => d.data() as AnyRow)), onErr),
       onSnapshot(scoped("assignments", "userDepartmentId"), (s) =>
-        setAssignments(s.docs.map((d) => d.data() as AnyRow)), silent),
+        setAssignments(s.docs.map((d) => d.data() as AnyRow)), onErr),
       onSnapshot(scoped("externalTrainings", "userDepartmentId"), (s) =>
-        setExternals(s.docs.map((d) => d.data() as AnyRow)), silent),
+        setExternals(s.docs.map((d) => d.data() as AnyRow)), onErr),
     ];
     return () => subs.forEach((u) => u());
   }, [profile?.uid, profile?.departmentId, role]);
@@ -226,6 +231,7 @@ export function useCompliance(
 
     return {
       loading,
+      error: err,
       findings,
       missing: findings.filter((f) => f.kind === "MISSING").length,
       expired: findings.filter((f) => f.kind === "EXPIRED").length,

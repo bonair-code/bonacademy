@@ -196,7 +196,9 @@ export function TrainingMatrix() {
       onSnapshot(
         scoped("externalTrainings", "userDepartmentId"),
         (s) => setExternals(s.docs.map((d) => ({ __id: d.id, ...(d.data() as any) }))),
-        () => {}
+        // Sessizce yutulursa dış kayıtlar boş kalır ve matris "hepsi eksik"
+        // gösterir — yanlış olduğunu söylemeden. Hata görünür olmalı.
+        onErr
       ),
     ];
     return () => subs.forEach((u) => u());

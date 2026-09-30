@@ -116,7 +116,11 @@ service cloud.firestore {
       function targetDept(uid) {
         return get(/databases/$(database)/documents/users/$(uid)).data.departmentId;
       }
+      // Eğitmen de okur: Training Follow-Up ve kişi kaydı ona açık ve
+      // eğitimlerin çoğu dış kayıtla kapanıyor. Okuyamadığında matris
+      // sessizce "hepsi eksik" gösteriyordu.
       allow read: if isAdmin()
+                  || isInstructor()
                   || isSelf(resource.data.userId)
                   || (isManager() && resource.data.userDepartmentId == myDept());
       allow create: if isAdmin()
