@@ -152,6 +152,16 @@ function makeSsoHandler(cfg) {
       return;
     }
 
+    /* Her istek için tek satır erişim kaydı.
+     *
+     * Olmadığı sürece hata ayıklamak tahmine dayanıyordu: Cloud Run yalnız
+     * HTTP kodunu kaydediyor, hangi adımın (start/redeem/roster) çalıştığını
+     * söylemiyor. "Bilet üretildi ama kullanılmadı" ile "bilet hiç
+     * üretilmedi" ayrımı bu satır olmadan görünmüyor.
+     *
+     * Bilet ve token BİLEREK yazılmıyor — log'a düşen bir bilet, oturum
+     * açmaya yeter. */
+    const t0 = Date.now();
     try {
       if (action === "start") {
         return await start(req, res, appId, idpProjectId,
@@ -165,6 +175,9 @@ function makeSsoHandler(cfg) {
     } catch (err) {
       console.error("[sso:" + appId + "] " + action + " hatasi:", err);
       fail(res, 500, "internal", "Beklenmeyen hata.");
+    } finally {
+      console.log("[sso:" + appId + "] " + (action || "-") + " -> " +
+        res.statusCode + " (" + (Date.now() - t0) + "ms) origin=" + (req.headers.origin || "-"));
     }
   };
 }

@@ -43,6 +43,19 @@
             "value": "public,max-age=31536000,immutable"
           }
         ]
+      },
+      {
+        "//": "index.html ASLA önbelleğe alınmamalı. Paket adları içerik özetiyle değişiyor ve immutable olarak 1 yıl saklanıyor; hangi paketin yükleneceğini söyleyen tek yer index.html. Firebase varsayılanı olan max-age=3600 ile, dağıtımdan sonra kullanıcılar bir saat boyunca ESKİ sayfayı ve eski paketi kullanmaya devam ediyordu — SSO kodu eklendiği halde tarayıcıya hiç ulaşmadı. Kural İSTEK YOLUNA göre eşleştiği için kök yol ayrıca yazılıyor.",
+        "source": "/",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+        ]
       }
     ]
   },
