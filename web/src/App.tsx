@@ -6,6 +6,7 @@ import { Dashboard } from "./pages/Dashboard";
 import { Courses } from "./pages/Courses";
 import { CourseDetail } from "./pages/CourseDetail";
 import { Users } from "./pages/Users";
+import { Assignments } from "./pages/Assignments";
 import { Settings } from "./pages/Settings";
 import { Learn } from "./pages/Learn";
 import { Certificates } from "./pages/Certificates";
@@ -115,6 +116,14 @@ function AuthedApp() {
           element={
             <Only roles={["ADMIN", "MANAGER"]}>
               <Placeholder title="Planlar" />
+            </Only>
+          }
+        />
+        <Route
+          path="/assignments"
+          element={
+            <Only roles={["ADMIN", "MANAGER"]}>
+              <Assignments />
             </Only>
           }
         />

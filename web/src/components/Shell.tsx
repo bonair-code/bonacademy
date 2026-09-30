@@ -58,6 +58,12 @@ const Icon = {
       <path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" />
     </svg>
   ),
+  assign: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 6h11M4 12h7M4 18h10" />
+      <path d="M17.5 14.5v6M14.5 17.5h6" />
+    </svg>
+  ),
   settings: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <circle cx="12" cy="12" r="3" />
@@ -114,6 +120,13 @@ const NAV: NavItem[] = [
     roles: ["ADMIN", "INSTRUCTOR"],
     group: "Training",
     icon: Icon.classes,
+  },
+  {
+    to: "/assignments",
+    label: "Assign Training",
+    roles: ["ADMIN", "MANAGER"],
+    group: "Training",
+    icon: Icon.assign,
   },
   {
     to: "/users",

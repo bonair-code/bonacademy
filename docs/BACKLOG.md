@@ -1144,3 +1144,44 @@ saklanıyor (`userId` + `cmi`), kural zaten bu yolu kişinin kendisine açıyord
   `lesson_location` / `suspend_data` okuyor, sonradan yüklemek işe yaramaz.
   Durum gelene kadar "Restoring your progress…" gösteriliyor.
 - Kurs önizlemesinde (`CourseDetail`) id verilmiyor, ilerleme saklanmıyor.
+
+## Eğitim atama sayfası + yoklama eşleştirmesi (30.09.2026)
+
+### `/assignments` — Assign Training
+Menüde Training grubunda, ADMIN ve MANAGER'a açık. Atama eskiden yalnızca
+Users satır menüsünde kişi kişi yapılabiliyordu: bir eğitimi 20 kişiye vermek
+20 ayrı pencere demekti ve "kime ne zaman ne atadım" sorusunun cevabı hiçbir
+yerde yoktu.
+
+- Üstte üç sayı: açık / vadesi geçmiş / tamamlanmış.
+- Liste: kişi (departmanıyla), eğitim, atanma tarihi, vade (geçmişse kaç gün
+  geciktiği), durum, tamamlanma tarihi ve nasıl tamamlandığı (online /
+  sınıf / dış sertifika). Arama + eğitim/departman/durum filtresi, yazdırma.
+- Toplu atama penceresi: bir eğitim seçilir, kişiler departman ve isim
+  filtresiyle işaretlenir. **Zaten atanmış olanlar seçilemez** — fonksiyon
+  onları zaten atlıyordu ama seçilebilir göstermek "20 kişiye atadım" deyip
+  12'sinin sessizce atlanmasına yol açıyordu.
+- `assignCourses` kişi başına çalışıyor; toplu atama istemcide döngüyle ve
+  ilerleme göstererek yapılıyor.
+
+Müdür yalnızca kendi departmanını görür (sorgular `userDepartmentId` /
+`departmentId` ile daraltılıyor — kapsamsız sorgu kural tarafından reddedilir).
+
+### QR yoklama: ad/soyad ayrı ve büyük harf
+Tek kutuda "talha duygu" ile "Duygu Talha" ayırt edilemiyordu. Form artık
+**First Name** ve **Surname** soruyor, ikisi de Türkçe kurallarıyla BÜYÜK
+harfe çevriliyor (i→İ); doğum yeri de öyle. `fullName` bunlardan üretiliyor.
+
+### Katılımcı → personel eşleştirmesi
+QR formu girişsiz açıldığı için orada `users` okunamıyor — eşleştirme ancak
+eğitmen/admin oturumunda yapılabilir. Oturum detay sayfası artık:
+- Katılımcı adını personel listesiyle karşılaştırıp **tek aday varsa**
+  otomatik yazıyor ("Soyad Ad" sırası da deneniyor). İki aynı isim varsa
+  seçim yapmıyor.
+- **Staff** kolonu açılır listeye dönüştü: eğitmen yanlış eşleşmeyi
+  düzeltebiliyor ya da "Not staff — external" diyebiliyor. `matchChecked`
+  bayrağı otomatik eşleştirmenin elle seçimi ezmesini engelliyor.
+
+Eşleşme yazıldığı an sertifika o kişiye bağlanıyor ve Training Follow-Up
+hücresi kendiliğinden doluyor — matris tamamlamaları `certificates`
+koleksiyonundan okuyor.
