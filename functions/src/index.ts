@@ -222,6 +222,18 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
   if (caller?.role !== "ADMIN" && !isOwner)
     throw new HttpsError("permission-denied", "Bu kursu yayınlama yetkin yok.");
 
+  // `active` verilmezse yayınlama sayılır — eski çağrı biçimi bozulmasın.
+  const active = req.data?.active === undefined ? true : Boolean(req.data.active);
+
+  // Yayından ALMA hiçbir ön koşul istemez ve BURADA, her kontrolden önce
+  // duruyor: yanlışlıkla yayınlanmış ya da içi boşalmış bir kurs her zaman
+  // kapatılabilmeli. Aşağıdaki Revision No kontrolünün altında kalsaydı,
+  // revizyon numarası olmayan bir kurs yayından da alınamazdı.
+  if (!active) {
+    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
+    return { active: false };
+  }
+
   // Revizyon numarası ELLE girilir (kurs formundaki Revision No alanı).
   // Function numarayı üretmez; yalnızca o anki halin kopyasını arşivler.
   const revisionNo = String(c.revisionNo ?? "").trim();
@@ -236,16 +248,6 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
     db.collection(`courses/${courseId}/sections`).get(),
     db.collection(`courses/${courseId}/questions`).get(),
   ]);
-
-  // `active` verilmezse yayınlama sayılır — eski çağrı biçimi bozulmasın.
-  const active = req.data?.active === undefined ? true : Boolean(req.data.active);
-
-  // Yayından ALMA doğrulama istemez: içi boşalmış bir kursu kapatmak her zaman
-  // serbest olmalı, yoksa hatalı yayınlanmış kurs kapatılamaz hale gelir.
-  if (!active) {
-    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
-    return { revisionNo, active: false };
-  }
 
   const blockers = publishBlockers(c, sections, questions);
   if (blockers.length)
