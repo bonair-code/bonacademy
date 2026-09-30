@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -19,6 +18,8 @@ import {
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { FilePreview } from "../components/FilePreview";
+import { AnchoredCard } from "../components/AnchoredCard";
+import { AssignOne } from "../components/AssignOne";
 
 /**
  * Training Follow-Up Form — personel × eğitim matrisi.
@@ -41,6 +42,7 @@ type CourseRow = {
   id: string;
   title: string;
   isActive?: boolean;
+  delivery?: string;
   /** Eğitim metodlara bölünüyorsa listesi. */
   methods?: string[];
   recurrenceEvery?: number | null;
@@ -147,6 +149,16 @@ export function TrainingMatrix() {
    * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
    */
   const [record, setRecord] = useState<{ user: UserRow; course: CourseRow } | null>(null);
+  /**
+   * Eksik hücreye tıklayınca açılan eylem menüsü. Tıklama eskiden doğrudan
+   * kayıt formunu açıyordu; artık iki yol var (kayıt gir / eğitim ata), o
+   * yüzden arada bir seçim gerekiyor.
+   */
+  const [menu, setMenu] = useState<HoverState | null>(null);
+  /** Tek hücreden atama. */
+  const [assign, setAssign] = useState<{ user: UserRow; course: CourseRow } | null>(null);
+  /** Bir kişinin bütün eksiklerini birden atama. */
+  const [bulk, setBulk] = useState<{ user: UserRow; courses: CourseRow[] } | null>(null);
   /** Düzenlenecek dış kaydın id.si — detay kartındaki "Edit record" açar. */
   const [editId, setEditId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
@@ -315,6 +327,14 @@ export function TrainingMatrix() {
    */
   const canRecordFor = (u: UserRow) =>
     role === "ADMIN" || (role === "MANAGER" && u.departmentId === profile?.departmentId);
+
+  /**
+   * Atanabilir eğitim: dışarıdan alınan eğitim sistemde tamamlanamaz, yayında
+   * olmayanın da içeriği yok. İkisi de sunucuda reddediliyor; düğmeyi hiç
+   * göstermemek daha dürüst.
+   */
+  const canAssignCourse = (c: CourseRow) =>
+    c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false;
 
   function cellFor(u: UserRow, c: CourseRow): CellState {
     /**
@@ -576,12 +596,35 @@ export function TrainingMatrix() {
                       {/* İsme tıklayınca kişinin tam kaydı — eksikler, dış
                           sertifikalar, yetkiler ve kişi bazlı PDF. */}
                       <td className="sticky left-0 z-10 bg-white hover:bg-slate-50 font-semibold px-3 py-1.5 border-b border-r border-slate-200 whitespace-nowrap">
-                        <Link
-                          to={`/team/${u.id}`}
-                          className="text-slate-900 hover:text-brand-700 hover:underline"
-                        >
-                          {u.name}
-                        </Link>
+                        <span className="group/row flex items-center gap-1.5">
+                          <Link
+                            to={`/team/${u.id}`}
+                            className="text-slate-900 hover:text-brand-700 hover:underline min-w-0 truncate"
+                          >
+                            {u.name}
+                          </Link>
+                          {/* Eksiği olan kişide tek tek hücre gezmek yerine
+                              hepsini bir kerede atama kısayolu. */}
+                          {(() => {
+                            if (!canRecordFor(u)) return null;
+                            const missing = visibleCourses.filter(
+                              (c) => cellFor(u, c).kind === "MISSING" && canAssignCourse(c)
+                            );
+                            if (missing.length === 0) return null;
+                            return (
+                              <button
+                                type="button"
+                                title={`Assign ${missing.length} missing training${
+                                  missing.length === 1 ? "" : "s"
+                                }`}
+                                onClick={() => setBulk({ user: u, courses: missing })}
+                                className="ml-auto shrink-0 opacity-0 group-hover/row:opacity-100 focus:opacity-100 text-[10px] font-bold text-white bg-brand-600 hover:bg-brand-700 rounded px-1.5 py-0.5 no-print"
+                              >
+                                +{missing.length}
+                              </button>
+                            );
+                          })()}
+                        </span>
                       </td>
                       {visibleCourses.map((c) => {
                         const st = cellFor(u, c);
@@ -596,20 +639,28 @@ export function TrainingMatrix() {
                             onMouseEnter={(e) => hover.enter(e.currentTarget, u, c, st)}
                             onMouseLeave={hover.leave}
                           >
-                            {/* Eksik hücre doğrudan kayıt formunu açar.
-                                Dış kaydı yalnızca admin ve kendi departmanının
-                                müdürü yazabilir (Firestore kuralı da böyle). */}
-                            {/* Eksik hücreden kayıt girilir. Metod bazlı
-                                eğitimde dolu hücreden de girilir — ikinci bir
-                                metod her zaman eklenebilmeli. */}
+                            {/* Eksik hücre eylem menüsü açar: eğitim ya başka
+                                yerde alınmış (kayıt girilir) ya da hiç
+                                alınmamış (atanır). Dış kaydı yalnızca admin ve
+                                kendi departmanının müdürü yazabilir (Firestore
+                                kuralı da böyle); eğitmen matrisi görür ama
+                                değiştiremez.
+
+                                Metod bazlı eğitimde dolu hücreden de girilir —
+                                ikinci bir metod her zaman eklenebilmeli. */}
                             {canRecordFor(u) &&
                             (st.kind === "MISSING" ||
                               (methodsOf(c).length > 0 && st.kind !== "NA")) ? (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  hover.leave();
-                                  setRecord({ user: u, course: c });
+                                onClick={(e) => {
+                                  hover.closeNow();
+                                  setMenu({
+                                    user: u,
+                                    course: c,
+                                    state: st,
+                                    rect: e.currentTarget.getBoundingClientRect(),
+                                  });
                                 }}
                                 className="group w-full h-full font-semibold"
                               >
@@ -662,7 +713,120 @@ export function TrainingMatrix() {
                 }
               : undefined
           }
+          onRecord={
+            canRecordFor(hover.at.user)
+              ? () => {
+                  const { user, course } = hover.at!;
+                  hover.closeNow();
+                  setRecord({ user, course });
+                }
+              : undefined
+          }
+          onAssign={
+            canRecordFor(hover.at.user) && canAssignCourse(hover.at.course)
+              ? () => {
+                  const { user, course } = hover.at!;
+                  hover.closeNow();
+                  setAssign({ user, course });
+                }
+              : undefined
+          }
         />
+      )}
+
+      {/* Hücre eylem menüsü */}
+      {menu && (
+        <AnchoredCard
+          rect={menu.rect}
+          width={210}
+          estimatedHeight={110}
+          onDismiss={() => setMenu(null)}
+        >
+          <div className="rounded-xl bg-white shadow-xl border border-slate-200 p-1.5 no-print">
+            <div className="px-2 pt-1 pb-1.5">
+              <p className="text-[12px] font-semibold text-slate-900 leading-tight truncate">
+                {menu.user.name}
+              </p>
+              <p className="text-[10.5px] text-slate-500 leading-tight truncate">
+                {menu.course.title}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setRecord({ user: menu.user, course: menu.course });
+                setMenu(null);
+              }}
+              className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
+            >
+              + Record training
+              <span className="block text-[10px] text-slate-400 font-normal leading-tight">
+                Already taken elsewhere
+              </span>
+            </button>
+            {canAssignCourse(menu.course) ? (
+              <button
+                onClick={() => {
+                  setAssign({ user: menu.user, course: menu.course });
+                  setMenu(null);
+                }}
+                className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
+              >
+                + Assign training
+                <span className="block text-[10px] text-slate-400 font-normal leading-tight">
+                  Take it in the system
+                </span>
+              </button>
+            ) : (
+              <p className="px-2 py-2 text-[10.5px] text-slate-400 leading-snug">
+                {menu.course.delivery === "EXTERNAL_ONLY"
+                  ? "Tracked externally — cannot be assigned."
+                  : "Not published — cannot be assigned."}
+              </p>
+            )}
+          </div>
+        </AnchoredCard>
+      )}
+
+      {/* Tek hücreden atama */}
+      {assign && (
+        <Modal
+          title="Assign Training"
+          subtitle={`${assign.user.name} · ${assign.course.title}`}
+          onClose={() => setAssign(null)}
+        >
+          <AssignOne
+            userId={assign.user.id}
+            courseIds={[assign.course.id]}
+            lines={[assign.course.title]}
+            onDone={(m) => {
+              setToast(m);
+              setAssign(null);
+            }}
+            onCancel={() => setAssign(null)}
+          />
+        </Modal>
+      )}
+
+      {/* Bir kişinin bütün eksikleri */}
+      {bulk && (
+        <Modal
+          title="Assign All Missing"
+          subtitle={`${bulk.user.name} · ${bulk.courses.length} training${
+            bulk.courses.length === 1 ? "" : "s"
+          }`}
+          onClose={() => setBulk(null)}
+        >
+          <AssignOne
+            userId={bulk.user.id}
+            courseIds={bulk.courses.map((c) => c.id)}
+            lines={bulk.courses.map((c) => c.title)}
+            onDone={(m) => {
+              setToast(m);
+              setBulk(null);
+            }}
+            onCancel={() => setBulk(null)}
+          />
+        </Modal>
       )}
 
       {record && (
@@ -818,19 +982,21 @@ function CellDetail({
   onLeave,
   onEditRecord,
   onPreviewFile,
+  onRecord,
+  onAssign,
 }: {
   at: HoverState;
   onEnter: () => void;
   onLeave: () => void;
   onEditRecord?: (externalId: string) => void;
   onPreviewFile?: (url: string, title: string) => void;
+  /** Eksik hücrede "kayıt gir" — verilmezse yetki yok. */
+  onRecord?: () => void;
+  /** Eksik hücrede "eğitim ata" — verilmezse yetki yok ya da atanamaz. */
+  onAssign?: () => void;
 }) {
   const { user, course, state, rect } = at;
   const W = 260;
-  // Ekranın sağına taşarsa sola, altına taşarsa üstüne açılır.
-  const left = Math.min(Math.max(8, rect.left + rect.width / 2 - W / 2), window.innerWidth - W - 8);
-  const below = rect.bottom + 8;
-  const openUp = below + 190 > window.innerHeight;
 
   const row = (k: string, v: React.ReactNode) => (
     <div className="flex gap-3 justify-between py-[3px]">
@@ -839,17 +1005,10 @@ function CellDetail({
     </div>
   );
 
-  return createPortal(
+  return (
+    <AnchoredCard rect={rect} width={W} onEnter={onEnter} onLeave={onLeave}>
     <div
-      onMouseEnter={onEnter}
-      onMouseLeave={onLeave}
-      className="fixed z-[80] rounded-xl bg-white shadow-xl border border-slate-200 px-3.5 py-3 text-[11.5px] no-print"
-      style={{
-        width: W,
-        left,
-        top: openUp ? undefined : below,
-        bottom: openUp ? window.innerHeight - rect.top + 8 : undefined,
-      }}
+      className="rounded-xl bg-white shadow-xl border border-slate-200 px-3.5 py-3 text-[11.5px] no-print"
       role="tooltip"
     >
       <div className="text-[12.5px] font-semibold text-slate-900 leading-snug">{user.name}</div>
@@ -900,14 +1059,34 @@ function CellDetail({
       ) : null}
 
       {state.kind === "MISSING" && !state.methodsMissing?.length && (
-        <>
-          <p className="text-[11.5px] text-red-700 font-semibold">
-            Never taken — required by this person's authorisation scope.
-          </p>
-          <p className="text-[10.5px] text-slate-400 mt-1.5 pt-1.5 border-t border-slate-100">
-            Click the cell to record training taken elsewhere.
-          </p>
-        </>
+        <p className="text-[11.5px] text-red-700 font-semibold">
+          Never taken — required by this person's authorisation scope.
+        </p>
+      )}
+
+      {/* Eksik hücrede iki yol var: eğitim ya başka yerde alınmış (kayıt
+          girilir) ya da hiç alınmamış (atanır). Kart 1 sn bekletip açıldığı
+          için eylemler burada da olmalı; yoksa kullanıcı menüyü ikinci kez
+          açmak zorunda kalıyor. */}
+      {state.kind === "MISSING" && (onRecord || onAssign) && (
+        <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+          {onRecord && (
+            <button
+              onClick={onRecord}
+              className="flex-1 text-[11px] font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md py-1.5"
+            >
+              + Record
+            </button>
+          )}
+          {onAssign && (
+            <button
+              onClick={onAssign}
+              className="flex-1 text-[11px] font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md py-1.5"
+            >
+              + Assign
+            </button>
+          )}
+        </div>
       )}
       {state.kind === "PLANNED" && (
         <p className="text-[11.5px] text-amber-800 font-semibold">
@@ -973,8 +1152,8 @@ function CellDetail({
           </div>
         </div>
       )}
-    </div>,
-    document.body
+    </div>
+    </AnchoredCard>
   );
 }
 
