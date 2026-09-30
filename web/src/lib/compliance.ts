@@ -3,6 +3,7 @@ import type { Timestamp } from "firebase/firestore";
 import { useEffect, useMemo, useState } from "react";
 import { db } from "./firebase";
 import { requirementFor, type Scope } from "./requirements";
+import { heldMethods, methodBreakdown, methodsOf, worstOf } from "./methods";
 import { isStaffRole, type Role } from "./auth";
 
 /**
@@ -132,6 +133,18 @@ export function useCompliance(
         });
     }
 
+    /** (userId, courseId) → o kursun bütün dış kayıtları; metod dökümü için. */
+    const methodRecs = new Map<string, { method?: string | null; date: Date; expiry: Date | null }[]>();
+    for (const e of externals) {
+      const d = (e.completedAt as Timestamp)?.toDate?.();
+      if (!d || !e.userId || !e.courseId) continue;
+      const k = `${e.userId}|${e.courseId}`;
+      methodRecs.set(k, [
+        ...(methodRecs.get(k) ?? []),
+        { method: e.method ?? null, date: d, expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null },
+      ]);
+    }
+
     const openAssignments = assignments.filter(
       (a) => a.status !== "COMPLETED" && a.status !== "EXAM_PASSED"
     );
@@ -154,6 +167,32 @@ export function useCompliance(
           courseId: c.id,
           courseTitle: c.title ?? "",
         };
+
+        /**
+         * Metod bazlı eğitim: en kötü metod belirler. Follow-Up matrisi ile
+         * AYNI kuralı kullanmak zorunda — iki ekranın farklı cevap vermesi
+         * daha önce başımıza gelmişti.
+         */
+        const ticked = heldMethods(u, c.id);
+        if (methodsOf(c as any).length > 0 && ticked.length > 0) {
+          const rows = methodBreakdown(ticked, methodRecs.get(k) ?? []);
+          const w = worstOf(rows);
+          if (w.missing.length > 0) {
+            findings.push({
+              ...base,
+              courseTitle: `${base.courseTitle} (${w.missing.join(", ")})`,
+              kind: "MISSING",
+              days: null,
+            });
+            continue;
+          }
+          if (w.expiry) {
+            const days = Math.round((w.expiry.getTime() - now) / DAY);
+            if (days < 0) findings.push({ ...base, kind: "EXPIRED", days });
+            else if (days <= 90) findings.push({ ...base, kind: "SOON", days });
+          }
+          continue;
+        }
         if (!d) {
           // Atanmış ve vadesi GELMEMİŞSE açık sayılmaz — iş sürüyor.
           // Vadesi geçmişse kişi o eğitime sahip değil demektir; eksik.

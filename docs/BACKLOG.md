@@ -947,3 +947,41 @@ kalemlerin gerekip gerekmediğini bilemem — Settings'ten gözden geçirilmeli.
 değişmedi. Şu an Certifying Staff → NDT Staff alt yetkisi tikli olanlar:
 **Cem GÜNGÖRMEZ** ve **Vehbi Kıvanç TÜRKER**. Bu ikisi yeni kapsama taşınırsa
 eski alt yetki silinebilir.
+
+## Metod bazlı eğitimler (30.09.2026)
+
+Bazı eğitimler tek belge değil, birkaç ayrı yetki demek. NDT tipik örnek: kişi
+PT ve MT'de yetkili olabilir, her metodun kendi belgesi ve kendi bitiş tarihi
+vardır. Sistem tek kurs = tek kayıt varsaydığı için ikinci metod girilemiyordu.
+
+**Düzeltilen hata:** matris kişi+kurs başına yalnızca EN SON kaydı alıyordu.
+PT 2028'e geçerli, MT 2025'te dolmuş bir kişide en son tarih kazanıyor ve kişi
+**uyumlu** görünüyordu. Artık kural açık: **en kötü metod belirler** — bir
+metodun belgesi yoksa eksik, hepsi varsa geçerlilik en erken dolana göre.
+
+### Model
+- `courses/{id}.methods: string[]` — Settings → Tracked Trainings formunda
+  virgülle girilir. Boşsa kurs metod bazlı değildir.
+- `users/{uid}.courseMethods: { [courseId]: string[] }` — kişinin o eğitimde
+  yetkili olduğu metodlar; Users formunda tiklenir. `createUser`/`updateUser`
+  alanı temizleyip yazıyor (boş kalan kurs anahtarları atılıyor).
+- `externalTrainings/{id}.method` — kaydın hangi metoda ait olduğu. Metod
+  yazılmamış eski kayıtlar hiçbir metodu kapatmaz; bilinmeyen bir belgeyle
+  yetkiyi geçerli saymak yanlış olurdu.
+
+### Ortak hesap
+`web/src/lib/methods.ts` — `methodsOf`, `heldMethods`, `methodBreakdown`,
+`worstOf`. Follow-Up matrisi ve Dashboard uygunluk hesabı **aynı** fonksiyonları
+kullanıyor; bu hesabın iki dosyada ayrı yazılması daha önce üç ekranın üç
+farklı cevap vermesine yol açmıştı.
+
+### Arayüz
+- Follow-Up hücresi eksik metodları yazıyor (ör. "MT"), detay kartında her
+  metodun kendi tarihi ayrı satırda.
+- Metod bazlı kursta **dolu hücreden de** kayıt girilebiliyor — ikinci metod
+  her zaman eklenebilmeli.
+- Kayıt formunun 1. adımında metod seçimi zorunlu; StaffDetail'de kayıt
+  satırında metod rozeti görünüyor.
+
+**Metod listesi henüz boş** — kullanıcı kendi listesini yazacak
+(Settings → Tracked Trainings → NDT training → Methods).

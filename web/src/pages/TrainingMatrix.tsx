@@ -8,6 +8,7 @@ import { isStaffRole, useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
 import { PrintButton } from "../components/PrintButton";
 import { exclusionFor, requirementFor } from "../lib/requirements";
+import { heldMethods, methodBreakdown, methodsOf, worstOf, type MethodRow } from "../lib/methods";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 
@@ -25,11 +26,15 @@ type UserRow = {
   subScopeIds?: string[];
   isActive?: boolean;
   role?: string;
+  /** Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar. */
+  courseMethods?: Record<string, string[]>;
 };
 type CourseRow = {
   id: string;
   title: string;
   isActive?: boolean;
+  /** Eğitim metodlara bölünüyorsa listesi. */
+  methods?: string[];
   recurrenceEvery?: number | null;
   recurrenceUnit?: string;
 };
@@ -44,7 +49,7 @@ type CellState =
   /** Gerekmiyor. `exemptBy` doluysa bir alt yetki bunu düşürmüş demektir. */
   | { kind: "NA"; exemptBy?: string | null }
   | { kind: "PLANNED" }
-  | { kind: "MISSING" }
+  | { kind: "MISSING"; methodsMissing?: string[]; methodRows?: MethodRow[] }
   | {
       kind: "DONE";
       date: Date;
@@ -61,6 +66,8 @@ type CellState =
       durationHours?: number | null;
       /** Dış kayıtta belgenin kendi başlığı; kurs adından farklı olabilir. */
       recordTitle?: string | null;
+      /** Metod bazlı eğitimde her metodun kendi tarihleri. */
+      methodRows?: MethodRow[];
     };
 
 const DAY = 86400000;
@@ -239,6 +246,29 @@ export function TrainingMatrix() {
     return m;
   }, [certs, externals]);
 
+  /**
+   * (userId, courseId) → o kursun BÜTÜN dış kayıtları. Metod bazlı eğitimde
+   * kişinin her metodu ayrı bir kayıt; `completions` yalnızca en sonu
+   * tuttuğu için burada tamamı gerekiyor.
+   */
+  const methodRecords = useMemo(() => {
+    const m = new Map<string, { method?: string | null; date: Date; expiry: Date | null }[]>();
+    for (const e of externals) {
+      const date = (e.completedAt as Timestamp)?.toDate?.();
+      if (!date || !e.userId || !e.courseId) continue;
+      const k = `${e.userId}|${e.courseId}`;
+      m.set(k, [
+        ...(m.get(k) ?? []),
+        {
+          method: e.method ?? null,
+          date,
+          expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
+        },
+      ]);
+    }
+    return m;
+  }, [externals]);
+
   const assignedSet = useMemo(() => {
     const s = new Set<string>();
     for (const a of assignments) {
@@ -259,6 +289,26 @@ export function TrainingMatrix() {
     role === "ADMIN" || (role === "MANAGER" && u.departmentId === profile?.departmentId);
 
   function cellFor(u: UserRow, c: CourseRow): CellState {
+    /**
+     * Metod bazlı eğitim (ör. NDT): kişinin tikli her metodu ayrı takip
+     * edilir ve EN KÖTÜSÜ hücreyi belirler. Eskiden yalnızca en son kayıt
+     * dikkate alınıyordu; PT geçerli, MT dolmuş bir kişi uyumlu görünüyordu.
+     */
+    const ticked = heldMethods(u, c.id);
+    if (methodsOf(c).length > 0 && ticked.length > 0) {
+      const rows = methodBreakdown(ticked, methodRecords.get(`${u.id}|${c.id}`) ?? []);
+      const { missing, date, expiry } = worstOf(rows);
+      if (missing.length > 0) return { kind: "MISSING", methodsMissing: missing, methodRows: rows };
+      return {
+        kind: "DONE",
+        date: date!,
+        expires: expiry,
+        days: expiry ? Math.round((expiry.getTime() - Date.now()) / DAY) : null,
+        external: "External",
+        methodRows: rows,
+      };
+    }
+
     const done = completions.get(`${u.id}|${c.id}`);
     if (done) {
       // Dış belgenin geçerliliği kursun tekrar süresinden değil, belgenin
@@ -520,17 +570,24 @@ export function TrainingMatrix() {
                             {/* Eksik hücre doğrudan kayıt formunu açar.
                                 Dış kaydı yalnızca admin ve kendi departmanının
                                 müdürü yazabilir (Firestore kuralı da böyle). */}
-                            {st.kind === "MISSING" && canRecordFor(u) ? (
+                            {/* Eksik hücreden kayıt girilir. Metod bazlı
+                                eğitimde dolu hücreden de girilir — ikinci bir
+                                metod her zaman eklenebilmeli. */}
+                            {canRecordFor(u) &&
+                            (st.kind === "MISSING" ||
+                              (methodsOf(c).length > 0 && st.kind !== "NA")) ? (
                               <button
                                 type="button"
                                 onClick={() => {
                                   hover.leave();
                                   setRecord({ user: u, course: c });
                                 }}
-                                className="group w-full h-full font-bold"
+                                className="group w-full h-full font-semibold"
                                 title={`Record ${c.title} for ${u.name}`}
                               >
-                                <span className="group-hover:hidden">—</span>
+                                <span className="group-hover:hidden">
+                                  <Cell state={st} />
+                                </span>
                                 <span className="hidden group-hover:inline">+ add</span>
                               </button>
                             ) : (
@@ -686,7 +743,34 @@ function CellDetail({ at }: { at: HoverState }) {
         </p>
       )}
 
-      {state.kind === "MISSING" && (
+      {/* Metod bazlı eğitimde her metodun kendi tarihi ayrı gösterilir;
+          tek bir "en kötü" değer neyin eksik olduğunu söylemiyor. */}
+      {state.kind !== "NA" && state.kind !== "PLANNED" && state.methodRows?.length ? (
+        <div className="border-t border-slate-100 pt-1.5">
+          {state.methodRows.map((r) => (
+            <div key={r.method} className="flex gap-3 justify-between py-[3px]">
+              <span className="text-slate-500 shrink-0 font-medium">{r.method}</span>
+              <span
+                className={`text-right min-w-0 ${
+                  !r.date
+                    ? "text-red-700 font-semibold"
+                    : r.expiry && r.expiry.getTime() < Date.now()
+                    ? "text-red-700 font-medium"
+                    : "text-slate-800 font-medium"
+                }`}
+              >
+                {!r.date
+                  ? "no certificate"
+                  : r.expiry
+                  ? `${fmt(r.date)} → ${fmt(r.expiry)}`
+                  : `${fmt(r.date)} · no expiry`}
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {state.kind === "MISSING" && !state.methodsMissing?.length && (
         <>
           <p className="text-[11.5px] text-red-700 font-semibold">
             Never taken — required by this person's authorisation scope.
@@ -780,7 +864,12 @@ function Cell({ state }: { state: CellState }) {
       </span>
     );
   if (state.kind === "PLANNED") return <span className="font-bold">PLAN</span>;
-  if (state.kind === "MISSING") return <span className="font-bold">—</span>;
+  if (state.kind === "MISSING")
+    return (
+      <span className="font-bold">
+        {state.methodsMissing?.length ? state.methodsMissing.join(" ") : "—"}
+      </span>
+    );
 
   /**
    * Hücre dar: yalnızca kalan gün sığıyor. Tarih, bitiş, sertifika numarası ve

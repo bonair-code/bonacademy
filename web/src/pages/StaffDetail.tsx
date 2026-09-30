@@ -45,6 +45,8 @@ type ExternalRow = {
   expiresAt?: Timestamp | null;
   fileUrl?: string;
   externalSerialNo?: string | null;
+  /** Metod bazlı eğitimde bu kaydın metodu (ör. NDT → PT). */
+  method?: string | null;
 };
 
 const DAY = 86400000;
@@ -486,7 +488,14 @@ export function StaffDetail() {
                     const linked = courses.find((c) => c.id === e.courseId);
                     return (
                       <tr key={e.id} className="hover:bg-slate-50/70">
-                        <td className="td font-semibold text-slate-900">{e.title}</td>
+                        <td className="td font-semibold text-slate-900">
+                          {e.title}
+                          {e.method && (
+                            <span className="ml-1.5 bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10.5px] font-medium">
+                              {e.method}
+                            </span>
+                          )}
+                        </td>
                         <td className="td">
                           {linked ? (
                             <span className="text-slate-700">{linked.title}</span>

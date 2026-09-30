@@ -874,6 +874,8 @@ type Tracked = {
   title: string;
   recurrenceEvery: number | null;
   recurrenceUnit: RecurUnit;
+  /** Eğitim metodlara bölünüyorsa (ör. NDT: PT, MT, UT) bunların listesi. */
+  methods?: string[];
 };
 type TrDialog =
   | { kind: "create" }
@@ -919,6 +921,7 @@ function TrackedTrainings({ onToast }: { onToast: (m: string) => void }) {
             title: x.title ?? "",
             recurrenceEvery: x.recurrenceEvery ?? null,
             recurrenceUnit: (x.recurrenceUnit ?? "NONE") as RecurUnit,
+            methods: (x.methods ?? []) as string[],
           };
         });
         list.sort((a, b) => a.title.localeCompare(b.title, "tr"));
@@ -966,7 +969,21 @@ function TrackedTrainings({ onToast }: { onToast: (m: string) => void }) {
           {rows.map((r, i) => (
             <tr key={r.id} className="hover:bg-slate-50/70">
               <td className="td text-slate-400 tabular-nums">{i + 1}</td>
-              <td className="td font-medium text-slate-800">{r.title}</td>
+              <td className="td font-medium text-slate-800">
+                {r.title}
+                {(r.methods ?? []).length > 0 && (
+                  <span className="flex flex-wrap gap-1 mt-1">
+                    {r.methods!.map((m) => (
+                      <span
+                        key={m}
+                        className="bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10.5px] font-medium"
+                      >
+                        {m}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </td>
               <td className="td text-slate-500">
                 {recurText(r.recurrenceEvery, r.recurrenceUnit)}
               </td>
@@ -1050,6 +1067,7 @@ function TrackedForm({
     title: string;
     recurrenceEvery: number | null;
     recurrenceUnit: RecurUnit;
+    methods: string[];
   }) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -1058,6 +1076,7 @@ function TrackedForm({
     existing?.recurrenceEvery ? String(existing.recurrenceEvery) : ""
   );
   const [unit, setUnit] = useState<RecurUnit>(existing?.recurrenceUnit ?? "NONE");
+  const [methods, setMethods] = useState((existing?.methods ?? []).join(", "));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1071,6 +1090,10 @@ function TrackedForm({
         title: title.trim(),
         recurrenceUnit: unit,
         recurrenceEvery: unit === "NONE" ? null : Number(every) || 1,
+        methods: methods
+          .split(/[,;\n]/)
+          .map((m) => m.trim())
+          .filter(Boolean),
       });
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -1116,6 +1139,20 @@ function TrackedForm({
       <p className="text-[10px] text-slate-400 mt-1">
         How long an external certificate stays valid. Training Follow-Up counts the days down
         from the completion date on the certificate.
+      </p>
+
+      {/* Metodlar: bazı eğitimler tek belge değil, birkaç ayrı yetki demek.
+          Her metodun kendi belgesi ve kendi bitiş tarihi olur. */}
+      <label className="label mt-4">Methods</label>
+      <input
+        className="input"
+        value={methods}
+        onChange={(e) => setMethods(e.target.value)}
+        placeholder="e.g. PT, MT, UT — leave empty if this training has no methods"
+      />
+      <p className="text-[10px] text-slate-400 mt-1">
+        Comma separated. When a training has methods, each person is ticked for the methods they
+        hold and every method is tracked with its own certificate and expiry.
       </p>
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">

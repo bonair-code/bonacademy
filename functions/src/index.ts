@@ -37,6 +37,8 @@ export const createUser = onCall({ region: "europe-west3" }, async (req) => {
   const birthDate = d.birthDate ? String(d.birthDate).trim() : null; // YYYY-MM-DD
   // Müşteri hangi kuruma bağlı — "X şirketinin aldığı eğitimler" raporu için.
   const company = d.company ? String(d.company).trim() : null;
+  // Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar: { courseId: ["PT","MT"] }
+  const courseMethods = sanitizeCourseMethods(d.courseMethods);
   const password = d.password ? String(d.password) : randomBytes(9).toString("base64") + "Aa1!";
 
   let userRecord;
@@ -57,6 +59,7 @@ export const createUser = onCall({ region: "europe-west3" }, async (req) => {
     birthPlace,
     birthDate,
     company,
+    courseMethods,
     // Admin geçici şifre verdi; kullanıcı ilk girişte değiştirmek zorunda.
     mustChangePassword: true,
     isActive: true,
@@ -66,6 +69,21 @@ export const createUser = onCall({ region: "europe-west3" }, async (req) => {
   });
   return { uid: userRecord.uid };
 });
+
+/**
+ * { courseId: ["PT","MT"] } biçimini temizler. Boş kalan kurslar atılır ki
+ * doküman zamanla ölü anahtarlarla şişmesin.
+ */
+function sanitizeCourseMethods(v: unknown): Record<string, string[]> {
+  if (!v || typeof v !== "object") return {};
+  const out: Record<string, string[]> = {};
+  for (const [k, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!Array.isArray(list)) continue;
+    const clean = list.map(String).map((s) => s.trim()).filter(Boolean);
+    if (clean.length) out[String(k)] = Array.from(new Set(clean));
+  }
+  return out;
+}
 
 /** Çağıranın ADMIN olduğunu doğrular, değilse hata fırlatır. */
 async function assertAdmin(uid: string | undefined) {
@@ -98,6 +116,7 @@ export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
   if (d.birthPlace !== undefined) patch.birthPlace = d.birthPlace ? String(d.birthPlace).trim() : null;
   if (d.birthDate !== undefined) patch.birthDate = d.birthDate ? String(d.birthDate).trim() : null;
   if (d.company !== undefined) patch.company = d.company ? String(d.company).trim() : null;
+  if (d.courseMethods !== undefined) patch.courseMethods = sanitizeCourseMethods(d.courseMethods);
   if (typeof d.isActive === "boolean") patch.isActive = d.isActive;
 
   await snap.ref.update(patch);

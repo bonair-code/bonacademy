@@ -21,11 +21,14 @@ type UserRow = {
   /** Sertifikadaki "PLACE & DATE of BIRTH" satırı için. */
   birthPlace?: string | null;
   birthDate?: string | null; // YYYY-MM-DD
+  /** Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar. */
+  courseMethods?: Record<string, string[]>;
   /** Müşteri hesabının bağlı olduğu kurum; personelde boş. */
   company?: string | null;
   isActive: boolean;
 };
 type Ref = { id: string; name: string };
+type MethodCourse = { id: string; title: string; methods: string[] };
 type ScopeRef = Ref & { subScopes?: SubScope[] };
 
 const ROLE_LABEL: Record<Role, string> = {
@@ -51,6 +54,8 @@ export function Users() {
   const [departments, setDepartments] = useState<Ref[]>([]);
   const [jobTitles, setJobTitles] = useState<ScopeRef[]>([]);
   const [courses, setCourses] = useState<Ref[]>([]);
+  /** Metodlara bölünmüş eğitimler — kişide hangi metodda yetkili olduğu tiklenir. */
+  const [methodCourses, setMethodCourses] = useState<MethodCourse[]>([]);
   const [dialog, setDialog] = useState<Dialog>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -78,14 +83,23 @@ export function Users() {
         }))
       )
     );
-    const u4 = onSnapshot(query(collection(db, "courses"), orderBy("title")), (snap) =>
+    const u4 = onSnapshot(query(collection(db, "courses"), orderBy("title")), (snap) => {
+      setMethodCourses(
+        snap.docs
+          .map((d) => ({
+            id: d.id,
+            title: String((d.data() as any).title ?? ""),
+            methods: ((d.data() as any).methods ?? []) as string[],
+          }))
+          .filter((c) => c.methods.length > 0)
+      );
       setCourses(
         snap.docs
           // Dışarıdan alınan eğitimler sistemde tamamlanamaz — atanmaz.
           .filter((d) => (d.data() as any).delivery !== "EXTERNAL_ONLY")
           .map((d) => ({ id: d.id, name: (d.data() as any).title }))
-      )
-    );
+      );
+    });
     return () => {
       u1();
       u2();
@@ -289,6 +303,7 @@ export function Users() {
           <UserForm
             departments={departments}
             jobTitles={jobTitles}
+            methodCourses={methodCourses}
             onDone={(m) => {
               setToast(m);
               setDialog(null);
@@ -315,6 +330,7 @@ export function Users() {
             existing={dialog.user}
             departments={departments}
             jobTitles={jobTitles}
+            methodCourses={methodCourses}
             onDone={(m) => {
               setToast(m);
               setDialog(null);
@@ -582,12 +598,14 @@ function UserForm({
   existing,
   departments,
   jobTitles,
+  methodCourses,
   onDone,
   onCancel,
 }: {
   existing?: UserRow;
   departments: Ref[];
   jobTitles: ScopeRef[];
+  methodCourses: MethodCourse[];
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
@@ -601,6 +619,9 @@ function UserForm({
   const [birthPlace, setBirthPlace] = useState(existing?.birthPlace ?? "");
   const [birthDate, setBirthDate] = useState(existing?.birthDate ?? "");
   const [company, setCompany] = useState(existing?.company ?? "");
+  const [courseMethods, setCourseMethods] = useState<Record<string, string[]>>(
+    existing?.courseMethods ?? {}
+  );
   const [password, setPassword] = useState("");
   /**
    * Müşteri personel değil: departmanı ve yetki kapsamı yok. Bu alanları
@@ -640,6 +661,7 @@ function UserForm({
           birthPlace: birthPlace.trim() || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
+          courseMethods: isCustomer ? {} : courseMethods,
         });
         onDone(`${name.trim()} updated.`);
       } else {
@@ -653,6 +675,7 @@ function UserForm({
           birthPlace: birthPlace.trim() || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
+          courseMethods: isCustomer ? {} : courseMethods,
           password,
         });
         onDone(`${name.trim()} created.`);
@@ -783,6 +806,45 @@ function UserForm({
             </div>
           )}
         </div>
+        {/* Metod bazlı eğitimler: kişi hangi metodlarda yetkili. Tikli olup
+            belgesi olmayan metod Follow-Up'ta eksik görünür. */}
+        {!isCustomer &&
+          methodCourses.map((mc) => (
+            <div key={mc.id} className="sm:col-span-2">
+              <label className="label">{mc.title} — methods</label>
+              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
+                {mc.methods.map((m) => {
+                  const on = (courseMethods[mc.id] ?? []).includes(m);
+                  return (
+                    <label
+                      key={m}
+                      className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        className="accent-brand-600 h-3.5 w-3.5"
+                        checked={on}
+                        onChange={(e) =>
+                          setCourseMethods((prev) => {
+                            const cur = prev[mc.id] ?? [];
+                            const next = e.target.checked
+                              ? [...cur, m]
+                              : cur.filter((x) => x !== m);
+                            return { ...prev, [mc.id]: next };
+                          })
+                        }
+                      />
+                      {m}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Each ticked method is tracked with its own certificate and expiry date.
+              </p>
+            </div>
+          ))}
+
         <div>
           <label className="label">Place of Birth</label>
           <input

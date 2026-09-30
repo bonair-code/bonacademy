@@ -26,6 +26,8 @@ type CourseLite = {
   title: string;
   recurrenceEvery?: number | null;
   recurrenceUnit?: string;
+  /** Metodlara bölünmüş eğitimlerde (ör. NDT) metod listesi. */
+  methods?: string[];
 };
 
 /** Düzenlenebilmesi için mevcut kaydın alanları. */
@@ -39,6 +41,8 @@ export type ExternalRecord = {
   durationHours?: number | null;
   externalSerialNo?: string | null;
   notes?: string | null;
+  /** Metod bazlı eğitimde bu kaydın hangi metoda ait olduğu. */
+  method?: string | null;
   fileName?: string;
   fileUrl?: string;
   /** Aslı kâğıtta; dijital kopya yok. Belge zorunluluğunu kaldırır. */
@@ -114,6 +118,7 @@ export function ExternalCertForm({
     return validityFromCourse(course);
   });
   const [serialNo, setSerialNo] = useState(existing?.externalSerialNo ?? "");
+  const [method, setMethod] = useState(existing?.method ?? "");
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [file, setFile] = useState<File | null>(null);
   /**
@@ -175,6 +180,7 @@ export function ExternalCertForm({
         durationHours: durationHours ? Number(durationHours) : null,
         expiresAt: expiry ? Timestamp.fromDate(expiry) : null,
         externalSerialNo: serialNo.trim() || null,
+        method: method || null,
         notes: notes.trim() || null,
         paperOnly,
         ...fileFields,
@@ -228,7 +234,10 @@ export function ExternalCertForm({
     if (f) setFile(f);
   }
 
-  const step1Ready = !!title.trim() && !!provider.trim() && !!completed;
+  /** Seçili kursun metodları; metod bazlı değilse boş. */
+  const methodChoices = picked?.methods ?? [];
+  const step1Ready =
+    !!title.trim() && !!provider.trim() && !!completed && (methodChoices.length === 0 || !!method);
 
   return (
     <form onSubmit={submit}>
@@ -286,6 +295,31 @@ export function ExternalCertForm({
               placeholder="e.g. B737 MAX Type Training"
             />
           </div>
+
+          {/* Metod bazlı eğitimde bu kaydın hangi metoda ait olduğu. Her
+              metodun kendi belgesi ve kendi bitiş tarihi var; metod
+              yazılmazsa kayıt hiçbir metodu kapatmaz. */}
+          {methodChoices.length > 0 && (
+            <div>
+              <label className="label">Method</label>
+              <div className="inline-flex flex-wrap gap-1.5">
+                {methodChoices.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethod(m)}
+                    className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg transition ${
+                      method === m
+                        ? "bg-brand-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="label">Training Provider</label>
