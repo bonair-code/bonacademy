@@ -361,24 +361,31 @@ export function CourseDetail() {
             kartın gerçek oranıyla (16:9'a yakın) basılır ki sürpriz olmasın. */}
         <div className="mb-5 flex flex-wrap items-start gap-4">
           <div
-            className="relative w-[228px] h-[116px] rounded-xl overflow-hidden shrink-0 flex items-end border border-slate-200"
-            style={
-              c.coverUrl
-                ? {
-                    backgroundImage: `url(${c.coverUrl})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                  }
-                : { background: `linear-gradient(140deg, ${coverTone(c.title).from}, ${coverTone(c.title).to})` }
-            }
+            className="w-[228px] rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-white"
           >
-            <div className="w-full px-3 pb-2.5">
+            {/* Öğrencinin gördüğü kartın birebir aynısı: başlık kapağın
+                ALTINDA, üstünde değil. */}
+            <div
+              className="h-[96px]"
+              style={
+                c.coverUrl
+                  ? {
+                      backgroundImage: `url(${c.coverUrl})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }
+                  : {
+                      background: `linear-gradient(140deg, ${coverTone(c.title).from}, ${coverTone(c.title).to})`,
+                    }
+              }
+            />
+            <div className="px-3 py-2.5">
               {c.category && (
-                <span className="block text-[9px] font-semibold uppercase tracking-[0.08em] text-white/70">
+                <span className="block text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
                   {c.category}
                 </span>
               )}
-              <div className="text-[12.5px] font-semibold text-white leading-snug line-clamp-2">
+              <div className="text-[12.5px] font-semibold text-slate-900 leading-snug line-clamp-2">
                 {c.title || "Untitled course"}
               </div>
             </div>

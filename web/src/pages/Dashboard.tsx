@@ -257,20 +257,24 @@ function CourseCard({
             style={{ filter: "brightness(0) invert(1)" }}
           />
         )}
-        <div className="relative w-full px-3.5 pb-3">
-          {course?.category && (
-            <span className="inline-block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-white/70">
-              {course.category}
-            </span>
-          )}
-          <div className="text-[13.5px] font-semibold text-white leading-snug line-clamp-2">
-            {a.courseTitle}
-          </div>
+      </div>
+
+      {/* Başlık kapağın ALTINDA. Görselin üstünde dururken, yüklenen kapak
+          zaten yazı içerdiği için iki metin üst üste biniyor ve ikisi de
+          okunmuyordu. */}
+      <div className="px-3.5 pt-3">
+        {course?.category && (
+          <span className="block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-slate-400">
+            {course.category}
+          </span>
+        )}
+        <div className="text-[13.5px] font-semibold text-slate-900 leading-snug line-clamp-2">
+          {a.courseTitle}
         </div>
       </div>
 
       {/* Durum + ilerleme */}
-      <div className="px-3.5 pt-3 flex items-center gap-2.5">
+      <div className="px-3.5 pt-2.5 flex items-center gap-2.5">
         <span
           className={`text-[10px] font-bold uppercase tracking-[0.04em] px-1.5 py-0.5 rounded ${
             a.status === "EXAM_FAILED"

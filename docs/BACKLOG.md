@@ -1269,3 +1269,10 @@ uyarısı basıyor.
 Bu, projede üçüncü kez aynı kalıptan çıkan hata (yoklama eşleştirmesi ve
 PDF ilerlemesi de sessiz hatadan bozulmuştu). Yeni dinleyicilerde hata
 işleyicisi boş bırakılmamalı.
+
+### Kart başlığı kapağın altına alındı (30.09.2026)
+Başlık kapak görselinin üstüne basılıyordu. Yüklenen kapaklar zaten eğitimin
+adını içeriyor (ör. EWIS afişi); iki metin üst üste binince ikisi de
+okunmuyordu. Başlık ve kategori kapağın altına, kart gövdesine taşındı —
+öğrenci kartı (Dashboard), Courses kartı ve kurs formundaki önizleme, üçü de
+aynı düzende.

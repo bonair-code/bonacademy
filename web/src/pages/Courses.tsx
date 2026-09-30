@@ -386,12 +386,17 @@ function CourseCard({
             : { background: `linear-gradient(140deg, ${tone.from}, ${tone.to})` }
         }
       >
+      </button>
+
+      {/* Başlık kapağın ALTINDA: yüklenen kapak zaten yazı içerdiği için
+          üstüne yazmak iki metni de okunmaz kılıyordu. */}
+      <button onClick={onOpen} className="px-3.5 pt-3 text-left">
         {course.category && (
-          <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-white/70">
+          <span className="block text-[9px] font-semibold uppercase tracking-[0.08em] text-slate-400">
             {course.category}
           </span>
         )}
-        <span className="text-[12.5px] font-semibold text-white leading-snug line-clamp-2">
+        <span className="block text-[12.5px] font-semibold text-slate-900 leading-snug line-clamp-2">
           {course.title}
         </span>
       </button>
