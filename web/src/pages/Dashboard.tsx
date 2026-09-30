@@ -431,7 +431,7 @@ function StaffDashboard() {
       <div className="card px-5 py-5 mb-3 flex items-center gap-6 flex-wrap">
         <ComplianceRing pct={pct} color={ringColor} />
 
-        <div className="flex-1 min-w-[260px]">
+        <div className="flex-1 min-w-0 sm:min-w-[260px]">
           <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-slate-900 leading-snug">
             {c.loading
               ? "Calculating…"

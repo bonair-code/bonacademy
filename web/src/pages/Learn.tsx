@@ -355,6 +355,8 @@ function ProgressRail({
   status: string;
   onSelect: (sectionId: string | null) => void;
 }) {
+  /** Telefonda bölüm listesi kapalı başlar; masaüstünde bu durum kullanılmıyor. */
+  const [open, setOpen] = useState(false);
   const passed = status === "COMPLETED" || status === "EXAM_PASSED";
   const examOpen = status === "SECTIONS_DONE" || status === "EXAM_FAILED";
   const total = sections.length + (examRequired ? 1 : 0);
@@ -393,7 +395,26 @@ function ProgressRail({
         </div>
       </div>
 
-      <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
+      {/* Telefonda raf içeriğin ÜSTÜNE yığılıyor: bütün bölüm listesini
+          geçmeden eğitime ulaşılamıyordu. Kapalı başlar, ilerleme çubuğu
+          yukarıda görünmeye devam eder. Masaüstünde her zaman açık. */}
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="lg:hidden w-full flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        <span>
+          Sections
+          <span className="ml-1.5 font-normal text-slate-400">
+            {Math.min(viewIndex + 1, total)}/{total}
+          </span>
+        </span>
+        <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+      </button>
+
+      <div className={open ? "" : "hidden lg:block"}>
+      <div className="hidden lg:block text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
         Sections
       </div>
       {sections.map((s, i) => {
@@ -403,7 +424,10 @@ function ProgressRail({
         return (
           <button
             key={s.id}
-            onClick={() => onSelect(isCurrent ? null : s.id)}
+            onClick={() => {
+              onSelect(isCurrent ? null : s.id);
+              setOpen(false);
+            }}
             title={s.title}
             className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
               isViewed
@@ -441,6 +465,7 @@ function ProgressRail({
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

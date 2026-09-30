@@ -442,12 +442,12 @@ export function TrainingMatrix() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search personnel…"
-          className="input !w-52 !py-1.5 !text-xs"
+          className="input !w-full sm:!w-52 !py-1.5 !text-xs"
         />
         <select
           value={fDept}
           onChange={(e) => setFDept(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
         >
           <option value="">All departments</option>
           {[...departments.entries()].map(([id, name]) => (
@@ -459,7 +459,7 @@ export function TrainingMatrix() {
         <select
           value={fScope}
           onChange={(e) => setFScope(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
         >
           <option value="">All authorisation scopes</option>
           {jobTitles.map((j) => (
@@ -471,7 +471,7 @@ export function TrainingMatrix() {
         <select
           value={fCourse}
           onChange={(e) => setFCourse(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
         >
           <option value="">All trainings</option>
           {courses.map((c) => (
@@ -483,7 +483,7 @@ export function TrainingMatrix() {
         <select
           value={fStatus}
           onChange={(e) => setFStatus(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
         >
           <option value="">Any status</option>
           <option value="MISSING">Has missing</option>
@@ -529,7 +529,94 @@ export function TrainingMatrix() {
         </div>
       </div>
 
-      <div className="card">
+      {/* Telefon görünümü: 200px donmuş ilk kolon + ders başına bir kolon
+          375px'e sığmıyor. Aynı `cellFor` hesabı, kişi kartı olarak. */}
+      <div className="lg:hidden space-y-2">
+        {filteredGroups.map((g) => (
+          <div key={g.deptId}>
+            <div className="text-[11px] font-bold uppercase tracking-wide text-brand-800 bg-brand-50 rounded-lg px-3 py-1.5 mb-2">
+              {g.name}
+            </div>
+            {g.list.map((u) => {
+              const cells = visibleCourses
+                .map((c) => ({ c, st: cellFor(u, c) }))
+                .filter((x) => x.st.kind !== "NA");
+              const missingCount = cells.filter((x) => x.st.kind === "MISSING").length;
+              return (
+                <div key={u.id} className="card p-3 mb-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Link
+                      to={`/team/${u.id}`}
+                      className="font-semibold text-[13px] text-slate-900 min-w-0 truncate hover:underline"
+                    >
+                      {u.name}
+                    </Link>
+                    {missingCount > 0 && (
+                      <span className="ml-auto shrink-0 text-[10px] font-bold text-white bg-brand-600 rounded px-1.5 py-0.5">
+                        {missingCount} missing
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {cells.length === 0 && (
+                      <span className="text-[11.5px] text-slate-400">
+                        No training required for this scope.
+                      </span>
+                    )}
+                    {cells.map(({ c, st }) => {
+                      const h = heat(st);
+                      const tappable =
+                        canRecordFor(u) &&
+                        (st.kind === "MISSING" || (methodsOf(c).length > 0 && st.kind !== "NA"));
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={!tappable}
+                          onClick={(e) =>
+                            setMenu({
+                              user: u,
+                              course: c,
+                              state: st,
+                              rect: e.currentTarget.getBoundingClientRect(),
+                            })
+                          }
+                          className="rounded-md px-2 py-1.5 text-[11px] font-semibold text-left max-w-full disabled:cursor-default"
+                          style={{ background: h.bg, color: h.fg }}
+                          title={c.title}
+                        >
+                          <span className="block truncate max-w-[150px]">{c.title}</span>
+                          <span className="block text-[10px] opacity-80">
+                            {st.kind === "MISSING"
+                              ? st.methodsMissing?.length
+                                ? st.methodsMissing.join(" ")
+                                : "never taken"
+                              : st.kind === "PLANNED"
+                              ? "planned"
+                              : st.kind !== "DONE"
+                              ? "—"
+                              : st.days === null
+                              ? "no expiry"
+                              : st.days < 0
+                              ? `${-st.days}d overdue`
+                              : `${st.days}d left`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        {filteredGroups.length === 0 && (
+          <p className="card p-8 text-center text-slate-400 text-sm">No staff yet.</p>
+        )}
+        {err && <p className="text-xs text-brand-700">{err}</p>}
+      </div>
+
+      <div className="card hidden lg:block">
         <div className="overflow-auto max-h-[70vh]">
           <table className="matrix-table text-[12px] border-separate border-spacing-0">
             <thead>

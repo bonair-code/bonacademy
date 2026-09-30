@@ -456,8 +456,8 @@ function CertModal({ cert, onClose }: { cert: Cert; onClose: () => void }) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 overflow-auto"
       onClick={onClose}
     >
-      <div className="w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-        <div className="rounded-xl overflow-hidden shadow-2xl">
+      <div className="w-full max-w-5xl overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="rounded-xl overflow-hidden shadow-2xl min-w-[640px] lg:min-w-0">
           <CertificateSheet cert={cert} />
         </div>
         <div className="flex justify-center gap-3 mt-4 no-print">

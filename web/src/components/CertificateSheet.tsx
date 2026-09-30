@@ -50,6 +50,12 @@ function fmtISO(d?: string | null) {
 /** Tören satırları (başlık, isim, kurs adı) serif; künye ve ince yazı Inter. */
 const SERIF = '"Source Serif 4", Georgia, "Times New Roman", serif';
 
+/**
+ * Sertifika zeminindeki soluk uçak görseli. web/public/ altında duruyor
+ * (Logo.png ile aynı kalıp). Dosya yoksa img gizlenir.
+ */
+const WATERMARK_SRC = "/cert-watermark.jpg";
+
 export function CertificateSheet({ cert }: { cert: Cert }) {
   const birth = [cert.birthPlace, fmtISO(cert.birthDate)].filter(Boolean).join(" & ");
   const start = fmtTs(cert.trainingStartedAt);
@@ -122,12 +128,41 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
         >
           <div
             className="h-full w-full flex flex-col"
-            style={{ border: "0.12cqw solid #1f3f6e" }}
+            style={{ border: "0.12cqw solid #1f3f6e", position: "relative" }}
           >
-            {/* Gövde — dikeyde ortalı */}
+            {/* Filigran. CSS background-image değil gerçek <img>: index.css'teki
+                baskı kuralı `visibility` ile çalışıyor ve ata elemanların
+                arkaplan görselini çıktıya almıyor. Boyut cqw ile, yani ekranda
+                ve A4'te aynı oranda.
+
+                Dosya yoksa gizlenir — sertifika filigransız, eskisi gibi
+                basılır; eksik bir görsel yüzünden belge bozulmaz. */}
+            <img
+              src={WATERMARK_SRC}
+              alt=""
+              aria-hidden="true"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+              style={{
+                position: "absolute",
+                left: "50%",
+                top: "52%",
+                transform: "translate(-50%, -50%)",
+                width: "62cqw",
+                maxHeight: "70%",
+                objectFit: "contain",
+                opacity: 0.06,
+                filter: "grayscale(1)",
+                pointerEvents: "none",
+                userSelect: "none",
+              }}
+            />
+
+            {/* Gövde — dikeyde ortalı. Filigranın üstünde kalmalı. */}
             <div
               className="flex-1 flex flex-col items-center justify-center text-center"
-              style={{ padding: "1.6cqw 6cqw 0.6cqw" }}
+              style={{ padding: "1.6cqw 6cqw 0.6cqw", position: "relative", zIndex: 1 }}
             >
               <img
                 src="/Logo.png"
@@ -252,7 +287,7 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
                 sayfayı taşırıyor ve numara kesiliyordu. */}
             <div
               className="flex items-end justify-between"
-              style={{ padding: "0 5cqw 1cqw", gap: "2cqw" }}
+              style={{ padding: "0 5cqw 1cqw", gap: "2cqw", position: "relative", zIndex: 1 }}
             >
               {/* Sınıf eğitiminde eğitmen imzalar → boş satır + çizgi.
                   Online eğitimde imzalayacak kimse yok; çizgi bırakmak
@@ -321,7 +356,7 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
             {/* Form künyesi */}
             <div
               className="border-t border-slate-300 flex items-center justify-between text-slate-600"
-              style={{ padding: "0.5cqw 3cqw", fontSize: "1cqw" }}
+              style={{ padding: "0.5cqw 3cqw", fontSize: "1cqw", position: "relative", zIndex: 1 }}
             >
               <span>Form No: {ORG.footer.formNo}</span>
               <span>Revision No: {ORG.footer.revisionNo}</span>

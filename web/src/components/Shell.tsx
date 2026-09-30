@@ -1,5 +1,5 @@
-import { NavLink } from "react-router-dom";
-import type { ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useState, type ReactNode } from "react";
 import { useAuth, type Role } from "../lib/auth";
 import { PageHeadProvider, usePageHead } from "./PageHead";
 import { ReportFootnote, ReportLetterhead } from "./ReportSheet";
@@ -173,15 +173,44 @@ function ShellLayout({ children }: { children: ReactNode }) {
     .join("")
     .toUpperCase();
 
+  /**
+   * Telefonda menü. Rota değişince ve Esc'te kapanır; masaüstünde bu durum
+   * hiç kullanılmıyor, kenar çubuğu her zaman görünür.
+   */
+  const [navOpen, setNavOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => setNavOpen(false), [pathname]);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
+
   return (
     <div className="min-h-screen flex bg-[#f4f6f9]">
+      {/* Telefonda menü ekranın dışında bekler. Eskiden 232px sabit ve
+          shrink-0'dı: 375px genişlikte içeriğe 111px kalıyordu, yani hiçbir
+          sayfa kullanılabilir değildi. */}
+      {navOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden no-print"
+          onClick={() => setNavOpen(false)}
+          aria-hidden
+        />
+      )}
+
       {/* Uzun listelerde menü yukarıda kalmasın — ekranda sabit durur, yalnızca
           içerik kayar. Menünün kendisi taşarsa kendi içinde kayar. */}
       {/* Nötr grafit zemin. Marka kırmızısı menünün tamamını kaplamak yerine
           yalnızca aktif maddeyi işaretliyor; böylece tablolardaki kırmızı
           uyarılarla yarışmıyor. */}
       <aside
-        className="w-[232px] shrink-0 flex flex-col sticky top-0 h-screen"
+        className={`w-[232px] shrink-0 flex flex-col h-screen z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
+          navOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
         style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,.07)" }}
       >
         {/* Antet bandı: logo koyu metinli olduğu için beyaz zemine oturmak
@@ -269,8 +298,18 @@ function ShellLayout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="flex-1 min-w-0 flex flex-col">
-        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 px-8 h-16 flex items-center justify-between gap-4">
-          <div className="min-w-0">
+        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 px-4 lg:px-8 h-16 flex items-center gap-3 lg:gap-4">
+          <button
+            type="button"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+            className="lg:hidden shrink-0 -ml-1 h-10 w-10 grid place-items-center rounded-lg text-slate-600 hover:bg-slate-100 no-print"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5">
+              <path d="M4 7h16M4 12h16M4 17h16" strokeLinecap="round" />
+            </svg>
+          </button>
+          <div className="min-w-0 flex-1">
             <h1 className="text-[15px] font-bold text-slate-900 leading-tight truncate">
               {head.title}
             </h1>
@@ -280,7 +319,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           </div>
           {/* Kimlik kenar çubuğunun dibinde; burada tekrar etmiyor. */}
         </div>
-        <div className="px-8 pb-10 pt-6">
+        <div className="px-4 lg:px-8 pb-10 pt-6">
           <ReportLetterhead
             title={head.title}
             subtitle={head.subtitle}

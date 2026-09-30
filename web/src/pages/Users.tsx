@@ -163,12 +163,12 @@ export function Users() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Search name or email…"
-            className="input !w-64 !py-1.5 !text-xs"
+            className="input !w-full sm:!w-64 !py-1.5 !text-xs"
           />
           <select
             value={roleFilter}
             onChange={(e) => setRoleFilter(e.target.value as Role | "")}
-            className="input !w-auto !py-1.5 !text-xs"
+            className="input !w-full sm:!w-auto !py-1.5 !text-xs"
           >
             <option value="">All roles</option>
             {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
@@ -227,8 +227,10 @@ export function Users() {
             <thead>
               <tr className="bg-slate-50 text-slate-500">
                 <th className="th">Person</th>
-                <th className="th">Role</th>
-                <th className="th">Authorisation Scope(s)</th>
+                {/* Telefonda rol ve kapsam gizli: satır ad + durum + eylem
+                    olarak sığıyor, detay kişinin kaydında zaten var. */}
+                <th className="th hidden md:table-cell">Role</th>
+                <th className="th hidden md:table-cell">Authorisation Scope(s)</th>
                 <th className="th">Status</th>
                 <th className="th w-12 text-right no-print">Actions</th>
               </tr>
@@ -441,8 +443,8 @@ function UserRowView({
           </span>
         </span>
       </td>
-      <td className="td text-slate-600">{ROLE_LABEL[u.role]}</td>
-      <td className="td">
+      <td className="td text-slate-600 hidden md:table-cell">{ROLE_LABEL[u.role]}</td>
+      <td className="td hidden md:table-cell">
         {titles.length === 0 ? (
           <span className="text-slate-300">—</span>
         ) : (

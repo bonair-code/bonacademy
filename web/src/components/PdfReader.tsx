@@ -257,8 +257,9 @@ export function PdfReader({
 
       <div
         ref={hostRef}
+        // Telefonda 46vh ~300px kalıyor, tek satır bile zor okunuyor.
         className={`overflow-y-auto rounded border border-slate-200 bg-slate-100 p-2 ${
-          full ? "flex-1 min-h-0" : "max-h-[46vh]"
+          full ? "flex-1 min-h-0" : "max-h-[68vh] lg:max-h-[46vh]"
         }`}
       />
     </div>

@@ -44,6 +44,8 @@ export function ScormPlayer({
   const doneRef = useRef(false);
   /** Iframe'i yeniden kurmak için — src aynı kaldığında React iframe'i tazelemiyor. */
   const [nonce, setNonce] = useState(0);
+  /** Tam ekran düğmesi bu çerçeveyi açıyor. */
+  const frameRef = useRef<HTMLIFrameElement>(null);
   const [reach, setReach] = useState<"checking" | "ok" | "error">("checking");
   const [httpCode, setHttpCode] = useState<number | null>(null);
 
@@ -206,6 +208,17 @@ export function ScormPlayer({
           >
             ⟳ Reload
           </button>
+          {/* Telefonda SCORM paketi masaüstü için tasarlanmış bir sayfayı
+              ~470px'lik kutuya sıkıştırıyor ve kullanılamaz oluyor; tam
+              ekranda en azından bütün genişlik paketin oluyor. */}
+          <button
+            type="button"
+            onClick={() => frameRef.current?.requestFullscreen?.()}
+            className="btn-secondary text-[11px] py-1 px-2"
+            title="Open full screen"
+          >
+            ⤢ Full screen
+          </button>
         </div>
       </div>
 
@@ -228,14 +241,15 @@ export function ScormPlayer({
       {/* Kayıtlı ilerleme gelmeden paket başlatılmaz; yoksa LMSInitialize
           boş değerleri okur ve eğitim baştan başlar. */}
       {!restored ? (
-        <div className="w-full h-[70vh] rounded border border-slate-200 bg-slate-50 grid place-items-center text-sm text-slate-400">
+        <div className="w-full h-[78vh] lg:h-[70vh] rounded border border-slate-200 bg-slate-50 grid place-items-center text-sm text-slate-400">
           Restoring your progress…
         </div>
       ) : (
       <iframe
+        ref={frameRef}
         key={nonce}
         src={src}
-        className="w-full h-[70vh] rounded border border-slate-200 bg-white"
+        className="w-full h-[78vh] lg:h-[70vh] rounded border border-slate-200 bg-white"
         title={fileName}
       />
       )}

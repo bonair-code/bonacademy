@@ -179,12 +179,12 @@ export function Assignments() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search person or training…"
-          className="input !w-64 !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-64 !py-1.5 !text-xs no-print"
         />
         <select
           value={fCourse}
           onChange={(e) => setFCourse(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs no-print"
         >
           <option value="">All trainings</option>
           {assignable.map((c) => (
@@ -196,7 +196,7 @@ export function Assignments() {
         <select
           value={fDept}
           onChange={(e) => setFDept(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs no-print"
         >
           <option value="">All departments</option>
           {[...departments.entries()].map(([id, name]) => (
@@ -208,7 +208,7 @@ export function Assignments() {
         <select
           value={fStatus}
           onChange={(e) => setFStatus(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs no-print"
         >
           <option value="">Any status</option>
           <option value="OPEN">Open</option>
@@ -253,10 +253,12 @@ export function Assignments() {
               <tr className="bg-slate-50 text-slate-500">
                 <th className="th">Person</th>
                 <th className="th">Training</th>
-                <th className="th">Assigned</th>
+                {/* Telefonda atama ve tamamlanma tarihi gizli; kalan dört
+                    kolon 375px'e sığıyor. Detay kişinin kaydında. */}
+                <th className="th hidden md:table-cell">Assigned</th>
                 <th className="th">Due</th>
                 <th className="th">Status</th>
-                <th className="th">Completed</th>
+                <th className="th hidden md:table-cell">Completed</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -289,7 +291,9 @@ export function Assignments() {
                       </span>
                     </td>
                     <td className="td text-slate-700">{a.courseTitle}</td>
-                    <td className="td tabular-nums text-slate-500">{fmt(a.createdAt)}</td>
+                    <td className="td tabular-nums text-slate-500 hidden md:table-cell">
+                      {fmt(a.createdAt)}
+                    </td>
                     <td className="td tabular-nums">
                       <span className={late ? "text-red-700 font-semibold" : "text-slate-500"}>
                         {fmt(a.dueDate)}
@@ -307,7 +311,7 @@ export function Assignments() {
                         {st.label}
                       </span>
                     </td>
-                    <td className="td tabular-nums text-slate-500">
+                    <td className="td tabular-nums text-slate-500 hidden md:table-cell">
                       {isDone(a.status) ? (
                         <>
                           {fmt(a.completedAt)}
@@ -557,13 +561,13 @@ function AssignForm({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder={byCourse ? "Search name…" : "Search training…"}
-              className="input !w-48 !py-1.5 !text-xs"
+              className="input !w-full sm:!w-48 !py-1.5 !text-xs"
             />
             {byCourse && (
               <select
                 value={dept}
                 onChange={(e) => setDept(e.target.value)}
-                className="input !w-auto !py-1.5 !text-xs"
+                className="input !w-full sm:!w-auto !py-1.5 !text-xs"
               >
                 <option value="">All departments</option>
                 {[...departments.entries()].map(([id, name]) => (

@@ -41,8 +41,12 @@ export function CertificateView() {
         <ImportedRecord cert={cert} />
       ) : (
         <>
-          <div className="rounded-xl overflow-hidden shadow-card max-w-5xl">
+          {/* Telefonda sertifika küçültülmez, kaydırılır: 343px'e sığdırınca
+              künye yazısı 3px'e iniyor ve belge okunmuyor. */}
+          <div className="overflow-x-auto -mx-4 px-4 lg:mx-0 lg:px-0">
+          <div className="rounded-xl overflow-hidden shadow-card max-w-5xl min-w-[640px] lg:min-w-0">
             <CertificateSheet cert={cert} />
+          </div>
           </div>
           <div className="flex gap-3 mt-4 no-print">
             <button onClick={printCertificate} className="btn-primary text-xs py-2">

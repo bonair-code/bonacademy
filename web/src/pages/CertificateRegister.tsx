@@ -213,12 +213,12 @@ export function CertificateRegister() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search number, name or training…"
-          className="input !w-64 !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-64 !py-1.5 !text-xs no-print"
         />
         <select
           value={source}
           onChange={(e) => setSource(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs no-print"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs no-print"
         >
           <option value="">All sources</option>
           <option value="ONLINE">Online training</option>

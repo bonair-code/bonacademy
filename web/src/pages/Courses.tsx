@@ -233,7 +233,7 @@ export function Courses() {
         <select
           value={fStatus}
           onChange={(e) => setFStatus(e.target.value)}
-          className="input !w-auto !py-1.5 !text-xs"
+          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
         >
           <option value="">All statuses</option>
           <option value="PUBLISHED">Published</option>

@@ -408,7 +408,7 @@ export function CourseDetail() {
             kartın gerçek oranıyla (16:9'a yakın) basılır ki sürpriz olmasın. */}
         <div className="mb-5 flex flex-wrap items-start gap-4">
           <div
-            className="w-[228px] rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-white"
+            className="w-full max-w-[228px] rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-white"
           >
             {/* Öğrencinin gördüğü kartın birebir aynısı: başlık kapağın
                 ALTINDA, üstünde değil. */}
@@ -438,7 +438,7 @@ export function CourseDetail() {
             </div>
           </div>
 
-          <div className="min-w-[220px]">
+          <div className="min-w-0 sm:min-w-[220px]">
             <div className="text-[12px] font-semibold text-slate-800">Cover image</div>
             <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed max-w-[42ch]">
               Shown on the learner's training card. Landscape works best (about 2:1). Leave it
