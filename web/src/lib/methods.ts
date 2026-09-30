@@ -28,6 +28,8 @@ export type MethodRecord = {
   method?: string | null;
   date: Date;
   expiry: Date | null;
+  /** Yüklenen belgenin bağlantısı; kâğıt kayıtta boş. */
+  url?: string | null;
 };
 
 export type MethodRow = {
@@ -35,6 +37,7 @@ export type MethodRow = {
   /** Bu metodun en son kaydı; hiç yoksa null. */
   date: Date | null;
   expiry: Date | null;
+  url?: string | null;
 };
 
 /**
@@ -49,7 +52,12 @@ export function methodBreakdown(ticked: string[], records: MethodRecord[]): Meth
       if ((r.method ?? "") !== m) continue;
       if (!best || r.date > best.date) best = r;
     }
-    return { method: m, date: best?.date ?? null, expiry: best?.expiry ?? null };
+    return {
+      method: m,
+      date: best?.date ?? null,
+      expiry: best?.expiry ?? null,
+      url: best?.url ?? null,
+    };
   });
 }
 

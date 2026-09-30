@@ -8,7 +8,14 @@ import { isStaffRole, useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
 import { PrintButton } from "../components/PrintButton";
 import { exclusionFor, requirementFor } from "../lib/requirements";
-import { heldMethods, methodBreakdown, methodsOf, worstOf, type MethodRow } from "../lib/methods";
+import {
+  heldMethods,
+  methodBreakdown,
+  methodsOf,
+  worstOf,
+  type MethodRecord,
+  type MethodRow,
+} from "../lib/methods";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 
@@ -252,7 +259,7 @@ export function TrainingMatrix() {
    * tuttuğu için burada tamamı gerekiyor.
    */
   const methodRecords = useMemo(() => {
-    const m = new Map<string, { method?: string | null; date: Date; expiry: Date | null }[]>();
+    const m = new Map<string, MethodRecord[]>();
     for (const e of externals) {
       const date = (e.completedAt as Timestamp)?.toDate?.();
       if (!date || !e.userId || !e.courseId) continue;
@@ -263,6 +270,7 @@ export function TrainingMatrix() {
           method: e.method ?? null,
           date,
           expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
+          url: e.fileUrl ?? null,
         },
       ]);
     }
@@ -781,26 +789,38 @@ function CellDetail({
           tek bir "en kötü" değer neyin eksik olduğunu söylemiyor. */}
       {state.kind !== "NA" && state.kind !== "PLANNED" && state.methodRows?.length ? (
         <div className="border-t border-slate-100 pt-1.5">
-          {state.methodRows.map((r) => (
-            <div key={r.method} className="flex gap-3 justify-between py-[3px]">
-              <span className="text-slate-500 shrink-0 font-medium">{r.method}</span>
-              <span
-                className={`text-right min-w-0 ${
-                  !r.date
-                    ? "text-red-700 font-semibold"
-                    : r.expiry && r.expiry.getTime() < Date.now()
-                    ? "text-red-700 font-medium"
-                    : "text-slate-800 font-medium"
-                }`}
-              >
-                {!r.date
-                  ? "no certificate"
-                  : r.expiry
-                  ? `${fmt(r.date)} → ${fmt(r.expiry)}`
-                  : `${fmt(r.date)} · no expiry`}
-              </span>
-            </div>
-          ))}
+          {state.methodRows.map((r) => {
+            const text = !r.date
+              ? "no certificate"
+              : r.expiry
+              ? `${fmt(r.date)} → ${fmt(r.expiry)}`
+              : `${fmt(r.date)} · no expiry`;
+            const tone = !r.date
+              ? "text-red-700 font-semibold"
+              : r.expiry && r.expiry.getTime() < Date.now()
+              ? "text-red-700 font-medium"
+              : "text-slate-800 font-medium";
+            return (
+              <div key={r.method} className="flex gap-3 justify-between py-[3px] items-baseline">
+                <span className="text-slate-500 shrink-0 font-medium">{r.method}</span>
+                {/* Her metodun belgesi kendi satırından açılır — metodlu
+                    hücre kayıt ekleme düğmesi olduğu için hücreye tıklayarak
+                    belgeye ulaşmak mümkün değil. */}
+                {r.url ? (
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={`text-right min-w-0 underline decoration-slate-300 hover:decoration-brand-500 ${tone}`}
+                  >
+                    {text} ↗
+                  </a>
+                ) : (
+                  <span className={`text-right min-w-0 ${tone}`}>{text}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : null}
 

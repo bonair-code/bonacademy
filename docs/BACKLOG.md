@@ -994,3 +994,10 @@ seçmek mümkün olmuyordu. Artık hücreden çıkışta 220 ms bekleniyor, kart
 
 Hücrelerdeki `title` öznitelikleri kaldırıldı — tarayıcının siyah ipucu detay
 kartının üstüne biniyor ve aynı bilgiyi daha kötü gösteriyordu.
+
+### Metod belgeleri karttan açılıyor (30.09.2026)
+Metod bazlı kursta hücre "kayıt ekle" düğmesine dönüştüğü için yüklenen
+sertifikayı açacak bağlantı kalmamıştı (dosyalar Storage'da duruyordu, sorun
+yalnızca arayüzdeydi). Detay kartında her metod satırı artık kendi belgesine
+bağlantı: `MethodRecord.url` → `MethodRow.url`. Kâğıt kayıtta bağlantı yok,
+düz metin kalıyor.
