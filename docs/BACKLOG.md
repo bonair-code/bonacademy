@@ -1,7 +1,7 @@
 # BonAcademy — Eksikler ve Yapılacaklar
 
 > Çalışma sırasında tespit edilen açık maddeler. Tamamlananlar listeden silinir.
-> Son güncelleme: 24.08.2026 (2. tur)
+> Son güncelleme: 30.09.2026
 
 ## 1. Veri bütünlüğünü bozan açıklar
 
@@ -24,6 +24,26 @@ diyor.
 ### `runScheduler` (zamanlanmış Function) yok
 Vade takibi, gecikme tespiti, 90/60/30 gün hatırlatmaları, periyodik yenileme —
 hiçbiri çalışmıyor. `notifications` koleksiyonu tanımlı ama boş.
+
+### E-posta gönderimi yok — atama bildirimi dahil (istendi 30.09.2026)
+Sistemde hiçbir kanaldan e-posta çıkmıyor. Talep edilen ilk kalem:
+**eğitim atandığında kişiye e-posta gitmesi** ("atama yapılınca kişiye mail
+gidecek, ilerde yapacağız"). Bugün atama sessiz: kişi giriş yapıp Dashboard'a
+bakmadıkça atandığını bilmiyor.
+
+Aynı altyapının eksikliğine bağlı diğer kalemler — hepsi tek seferde
+çözülmeli, ayrı ayrı değil:
+
+- atama bildirimi (yukarıdaki talep),
+- yaklaşan bitiş uyarıları (90/60/30 gün) — `runScheduler` ile birlikte,
+- geciken atama uyarısı (kişiye + departman müdürüne),
+- yeni hesap açılışında davet/şifre belirleme maili — şu an 63 kullanıcının
+  ilk şifresi bilinmiyor, herkes "Forgot password?" ile girmek zorunda.
+
+**Karar verilecek:** gönderim yolu (Firebase "Trigger Email" eklentisi mi,
+kendi SMTP'mizle bir Function mı), gönderen adresi ve şablon dili (TR/EN).
+Gönderim kaydı `notifications` koleksiyonuna yazılmalı; aynı bildirimin iki
+kez gitmemesi için idempotans anahtarı gerekiyor.
 
 ### `plans` arayüzü yok
 Koleksiyon ve güvenlik kuralı var, ekran yok. `/plans` hâlâ Placeholder.
