@@ -355,27 +355,39 @@ type ExamInfo = { required: boolean; score?: number | null; passingScore?: numbe
  * ise oturumda elle girilen ön ek + başlangıç numarası. Aynı sicilde iki farklı
  * numaralandırma denetimde savunulamaz — artık ikisi de buradan alıyor.
  *
- * Biçim `counters/certificates` dokümanından gelir:
- *   { prefix: "25", next: 144, pad: 3 }  →  "25-144"
- * Ön ek boşsa yalnızca sayı üretilir. Numara transaction ile artar, aynı anda
- * iki sertifika üretilse bile çakışmaz.
+ * Biçim `counters/certificates` dokümanında tutulur:
+ *   { year: "26", prefix: "26", next: 44, pad: 3 }  →  "26-044"
+ * Numara transaction ile artar, aynı anda iki sertifika üretilse bile çakışmaz.
+ */
+/** İçinde bulunulan yılın iki haneli kodu — sicil ön eki. */
+function serialYear(): string {
+  return String(new Date().getFullYear()).slice(-2);
+}
+
+/**
+ * Sıradaki sertifika numaraları. Ön ek YILDIR ve sayaç her yıl başında
+ * kendiliğinden birden başlar: 26-001 … 26-042, sonra 2027'de 27-001.
+ *
+ * Ön ek elle girilmiyor — yılı yanlış yazmak sicili sessizce bozardı ve
+ * numara bir kez verildikten sonra geri alınamaz.
  */
 async function nextSerialNo(count = 1): Promise<string[]> {
   const db = getFirestore();
   const ref = db.doc("counters/certificates");
+  const year = serialYear();
   return db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const d = (snap.data() as any) || {};
-    // Eski sayaç yalnızca `value` tutuyordu; ilk geçişte ondan devam et.
-    const start = Number(d.next ?? (d.value ?? 0) + 1) || 1;
-    const prefix = d.prefix === undefined ? "BA" : String(d.prefix ?? "");
     const pad = Number(d.pad) || 3;
+    // Yıl değiştiyse seri sıfırlanır; aynı yıl içinde kaldığı yerden sürer.
+    // Eski sayaç yalnızca `value` tutuyordu; ilk geçişte ondan devam et.
+    const sameYear = String(d.year ?? "") === year;
+    const start = sameYear ? Number(d.next ?? (d.value ?? 0) + 1) || 1 : 1;
     const out: string[] = [];
     for (let i = 0; i < count; i++) {
-      const n = start + i;
-      out.push(prefix ? `${prefix}-${String(n).padStart(pad, "0")}` : String(n));
+      out.push(`${year}-${String(start + i).padStart(pad, "0")}`);
     }
-    tx.set(ref, { prefix, pad, next: start + count }, { merge: true });
+    tx.set(ref, { year, prefix: year, pad, next: start + count }, { merge: true });
     return out;
   });
 }
@@ -1023,8 +1035,13 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
         },
         { merge: true }
       );
-      const n = Number(serialNo.match(/(\d+)\s*$/)?.[1] ?? 0);
-      if (n > maxNo) maxNo = n;
+      // Sayaç YALNIZCA içinde bulunulan yılın serisini takip eder. Geçmiş
+      // yıllardan (25-…) kayıt aktarmak bu yılın numarasını ileri atmamalı.
+      const m = serialNo.match(/^(\d{2})\s*-\s*(\d+)\s*$/);
+      if (m && m[1] === serialYear()) {
+        const n = Number(m[2]);
+        if (n > maxNo) maxNo = n;
+      }
       results.push({ serialNo, ok: true, user: !!user, course: !!course });
     } catch (e) {
       results.push({
@@ -1047,7 +1064,7 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
       const cur = Number(d?.next ?? 0);
       const want = maxNo + 1;
       if (want > cur) {
-        tx.set(ref, { next: want }, { merge: true });
+        tx.set(ref, { year: serialYear(), prefix: serialYear(), next: want }, { merge: true });
         return want;
       }
       return cur;

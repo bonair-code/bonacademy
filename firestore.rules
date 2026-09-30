@@ -171,14 +171,13 @@ service cloud.firestore {
     // Sertifika numarası sayacı. Numarayı FUNCTION artırır (transaction);
     // admin yalnızca BİÇİMİ ayarlayabilir — kâğıt sicilden devam edebilmek
     // için sıradaki numarayı elle vermek gerekiyor.
+    // Sertifika numarası sayacı. Numarayı YALNIZCA Function verir (transaction);
+    // ön ek yıldır ve seri her yıl başında kendiliğinden sıfırlanır. Elle
+    // düzenleme kaldırıldı: yanlış bir ön ek ya da geri alınan bir numara
+    // sicili sessizce bozar ve verilmiş bir numara geri alınamaz.
     match /counters/{id} {
       allow read: if isAdmin() || isInstructor();
-      allow create: if isAdmin() && id == 'certificates';
-      allow update: if isAdmin()
-                    && id == 'certificates'
-                    && request.resource.data.diff(resource.data)
-                         .affectedKeys().hasOnly(['prefix', 'next', 'pad']);
-      allow delete: if false;
+      allow write: if false;
     }
 
     match /{document=**} { allow read, write: if false; }

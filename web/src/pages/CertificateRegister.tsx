@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, doc, onSnapshot, setDoc } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
@@ -39,8 +39,84 @@ const dmy = (s?: string | null) => (s ? s.split("-").reverse().join(".") : "—"
 
 /** "25-131" gibi numaraları sayısal olarak sıralar. */
 function serialKey(s: string): number {
-  const m = s.match(/(\d+)\s*$/);
-  return m ? Number(m[1]) : 0;
+  // Önce YIL, sonra sıra numarası. Eskiden yalnızca sondaki rakamlar
+  // alınıyordu; 25-131 ile 26-001 karşılaştırılınca 131 > 1 çıkıyor ve yeni
+  // yılın ilk sertifikası listenin en altına düşüyordu.
+  const m = String(s).match(/^\s*(\d{2})\s*-\s*(\d+)/);
+  if (m) return Number(m[1]) * 1_000_000 + Number(m[2]);
+  const only = String(s).match(/(\d+)\s*$/);
+  return only ? Number(only[1]) : 0;
+}
+
+/** Sıralanabilir kolonlar. */
+type SortBy = "serial" | "name" | "birthPlace" | "birthDate" | "course" | "instructor" | "duration" | "date";
+type Sort = { by: SortBy; dir: "asc" | "desc" };
+
+const txt = (s?: string | null) => (s ?? "").toLocaleLowerCase("tr");
+const ms = (t?: Timestamp | null) => t?.toMillis?.() ?? 0;
+
+/** İki kaydı seçilen kolona göre karşılaştırır. */
+function cmp(a: Cert, b: Cert, by: SortBy): number {
+  switch (by) {
+    case "serial":
+      return serialKey(a.serialNo) - serialKey(b.serialNo);
+    case "name":
+      return txt(a.userName).localeCompare(txt(b.userName), "tr");
+    case "birthPlace":
+      return txt(a.birthPlace).localeCompare(txt(b.birthPlace), "tr");
+    case "birthDate":
+      return (a.birthDate ?? "").localeCompare(b.birthDate ?? "");
+    case "course":
+      return txt(a.courseTitle).localeCompare(txt(b.courseTitle), "tr");
+    case "instructor":
+      return txt(a.instructorName).localeCompare(txt(b.instructorName), "tr");
+    case "duration":
+      return (a.durationHours ?? -1) - (b.durationHours ?? -1);
+    case "date":
+      return ms(a.issuedAt) - ms(b.issuedAt);
+  }
+}
+
+/**
+ * Sıralanabilir başlık. Aynı kolona tekrar tıklamak yönü çevirir; yeni bir
+ * kolona geçince metin kolonları A→Z, sayı ve tarih kolonları büyükten
+ * küçüğe başlar — her birinde beklenen ilk sonuç bu.
+ */
+function SortTh({
+  by,
+  sort,
+  onSort,
+  children,
+}: {
+  by: SortBy;
+  sort: Sort;
+  onSort: (s: Sort) => void;
+  children: React.ReactNode;
+}) {
+  const on = sort.by === by;
+  const numeric = by === "serial" || by === "duration" || by === "date" || by === "birthDate";
+  return (
+    <th className="th">
+      <button
+        type="button"
+        onClick={() =>
+          onSort(
+            on
+              ? { by, dir: sort.dir === "asc" ? "desc" : "asc" }
+              : { by, dir: numeric ? "desc" : "asc" }
+          )
+        }
+        className={`inline-flex items-center gap-1 hover:text-slate-800 ${
+          on ? "text-slate-800 font-semibold" : ""
+        }`}
+      >
+        {children}
+        <span className={`text-[9px] leading-none ${on ? "opacity-90" : "opacity-25"}`}>
+          {on ? (sort.dir === "asc" ? "▲" : "▼") : "▼"}
+        </span>
+      </button>
+    </th>
+  );
 }
 
 export function CertificateRegister() {
@@ -49,10 +125,11 @@ export function CertificateRegister() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [source, setSource] = useState("");
+  // Varsayılan: en yeni numara üstte.
+  const [sort, setSort] = useState<Sort>({ by: "serial", dir: "desc" });
   const [numbering, setNumbering] = useState<{ prefix: string; next: number; pad: number } | null>(
     null
   );
-  const [editNo, setEditNo] = useState(false);
   const [importing, setImporting] = useState(false);
   const [courseTitles, setCourseTitles] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
@@ -71,9 +148,13 @@ export function CertificateRegister() {
     );
     const u2 = onSnapshot(doc(db, "counters", "certificates"), (d) => {
       const x = (d.data() as any) || {};
+      // Ön ek yıldır ve sayaç yıl başında sıfırlanır; kayıtlı yıl geçmişse
+      // sıradaki numara yine 1.
+      const yy = String(new Date().getFullYear()).slice(-2);
+      const sameYear = String(x.year ?? "") === yy;
       setNumbering({
-        prefix: x.prefix === undefined ? "BA" : String(x.prefix ?? ""),
-        next: Number(x.next ?? (x.value ?? 0) + 1) || 1,
+        prefix: yy,
+        next: sameYear ? Number(x.next ?? 1) || 1 : 1,
         pad: Number(x.pad) || 3,
       });
     });
@@ -107,16 +188,17 @@ export function CertificateRegister() {
           ? `${c.serialNo} ${c.userName} ${c.courseTitle}`.toLocaleLowerCase("tr").includes(needle)
           : true
       )
-      .sort((a, b) => serialKey(b.serialNo) - serialKey(a.serialNo));
-  }, [rows, q, source]);
+      .sort((a, b) => {
+        const dir = sort.dir === "asc" ? 1 : -1;
+        return cmp(a, b, sort.by) * dir;
+      });
+  }, [rows, q, source, sort]);
 
   if (role !== "ADMIN" && role !== "INSTRUCTOR")
     return <p className="text-sm text-slate-400 py-10">Not available for your role.</p>;
 
   const preview = numbering
-    ? numbering.prefix
-      ? `${numbering.prefix}-${String(numbering.next).padStart(numbering.pad, "0")}`
-      : String(numbering.next)
+    ? `${numbering.prefix}-${String(numbering.next).padStart(numbering.pad, "0")}`
     : "—";
 
   return (
@@ -162,8 +244,14 @@ export function CertificateRegister() {
         </span>
 
         <div className="ml-auto flex items-center gap-2">
-          <span className="text-[11px] text-slate-500">
-            Next number: <b className="text-slate-800 tabular-nums">{preview}</b>
+          {/* Numara elle verilmiyor: ön ek yıldır ve seri her yıl başında
+              kendiliğinden birden başlar. */}
+          <span
+            className="text-[11px] text-slate-500"
+            title="The prefix is the year; the series restarts at 001 each January."
+          >
+            Next number: <b className="text-slate-800 tabular-nums">{preview}</b>{" "}
+            <span className="text-slate-400">· automatic</span>
           </span>
           {role === "ADMIN" && (
             <>
@@ -172,9 +260,6 @@ export function CertificateRegister() {
                 className="btn-secondary text-xs py-1.5 no-print"
               >
                 ↑ Import past certificates
-              </button>
-              <button onClick={() => setEditNo(true)} className="btn-secondary text-xs py-1.5 no-print">
-                Numbering
               </button>
             </>
           )}
@@ -187,14 +272,30 @@ export function CertificateRegister() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="bg-slate-50 text-slate-500">
-                <th className="th">Certificate No</th>
-                <th className="th">Name &amp; Surname</th>
-                <th className="th">Birth Place</th>
-                <th className="th">Birth Date</th>
-                <th className="th">Training</th>
-                <th className="th">Instructor</th>
-                <th className="th">Duration</th>
-                <th className="th">Certificate Date</th>
+                <SortTh by="serial" sort={sort} onSort={setSort}>
+                  Certificate No
+                </SortTh>
+                <SortTh by="name" sort={sort} onSort={setSort}>
+                  Name &amp; Surname
+                </SortTh>
+                <SortTh by="birthPlace" sort={sort} onSort={setSort}>
+                  Birth Place
+                </SortTh>
+                <SortTh by="birthDate" sort={sort} onSort={setSort}>
+                  Birth Date
+                </SortTh>
+                <SortTh by="course" sort={sort} onSort={setSort}>
+                  Training
+                </SortTh>
+                <SortTh by="instructor" sort={sort} onSort={setSort}>
+                  Instructor
+                </SortTh>
+                <SortTh by="duration" sort={sort} onSort={setSort}>
+                  Duration
+                </SortTh>
+                <SortTh by="date" sort={sort} onSort={setSort}>
+                  Certificate Date
+                </SortTh>
                 <th className="th">Source</th>
                 <th className="th w-16 text-right no-print">Actions</th>
               </tr>
@@ -269,19 +370,6 @@ export function CertificateRegister() {
         </Modal>
       )}
 
-      {editNo && numbering && (
-        <Modal title="Certificate Numbering" onClose={() => setEditNo(false)} width="max-w-md">
-          <NumberingForm
-            value={numbering}
-            onDone={(m) => {
-              setToast(m);
-              setEditNo(false);
-            }}
-            onCancel={() => setEditNo(false)}
-          />
-        </Modal>
-      )}
-
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl">
           {toast}
@@ -291,101 +379,3 @@ export function CertificateRegister() {
   );
 }
 
-/**
- * Numaralandırma ayarı. Kâğıt sicilden devam edebilmek için sıradaki numara
- * elle verilebilir — sistem oradan devam eder.
- */
-function NumberingForm({
-  value,
-  onDone,
-  onCancel,
-}: {
-  value: { prefix: string; next: number; pad: number };
-  onDone: (msg: string) => void;
-  onCancel: () => void;
-}) {
-  const [prefix, setPrefix] = useState(value.prefix);
-  const [next, setNext] = useState(String(value.next));
-  const [pad, setPad] = useState(String(value.pad));
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-
-  const n = Number(next) || 1;
-  const p = Number(pad) || 3;
-  const preview = prefix ? `${prefix}-${String(n).padStart(p, "0")}` : String(n);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setErr(null);
-    try {
-      await setDoc(
-        doc(db, "counters", "certificates"),
-        { prefix: prefix.trim(), next: n, pad: p },
-        { merge: true }
-      );
-      onDone(`Next certificate number set to ${preview}.`);
-    } catch (e2) {
-      setErr((e2 as Error).message);
-      setBusy(false);
-    }
-  }
-
-  return (
-    <form onSubmit={submit}>
-      <p className="text-[12px] text-slate-600 mb-3">
-        Online completions and face-to-face classes both take their number from here, so the
-        register stays in one unbroken series.
-      </p>
-      <div className="grid grid-cols-3 gap-3">
-        <div>
-          <label className="label">Prefix</label>
-          <input
-            className="input"
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value)}
-            placeholder="25"
-          />
-        </div>
-        <div>
-          <label className="label">Next number</label>
-          <input
-            className="input tabular-nums"
-            type="number"
-            min={1}
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-          />
-        </div>
-        <div>
-          <label className="label">Digits</label>
-          <input
-            className="input tabular-nums"
-            type="number"
-            min={1}
-            max={8}
-            value={pad}
-            onChange={(e) => setPad(e.target.value)}
-          />
-        </div>
-      </div>
-      <p className="text-[12px] text-slate-700 mt-3 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2">
-        Next certificate will be <b className="tabular-nums">{preview}</b>. Leave the prefix blank
-        for plain numbers.
-      </p>
-      <p className="text-[10px] text-amber-700 mt-2">
-        Numbers already issued are not changed. Setting this backwards can produce duplicates.
-      </p>
-
-      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-        <button type="submit" disabled={busy} className="btn-primary text-xs py-2">
-          {busy ? "Saving…" : "Save"}
-        </button>
-        <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
-          Cancel
-        </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
-      </div>
-    </form>
-  );
-}

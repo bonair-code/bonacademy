@@ -1046,3 +1046,35 @@ tıklandığında yetki hatası verirdi.
   (`max-h-[520px]`) kalıp kendi içinde kayıyor. Eskiden ilk 8 gösterilip
   gerisi "see the full matrix" bağlantısına havale ediliyordu — açığın
   tamamını görmek için sayfa değiştirmek gerekiyordu. O satır kaldırıldı.
+
+## Sertifika numaralandırma — yıl bazlı ve otomatik (30.09.2026)
+
+- Ön ek artık **yıl**: `26-001 … 26-137`, 2027'de kendiliğinden `27-001`.
+  `nextSerialNo` sayaçta `year` tutuyor; yıl değişince seri 1'den başlıyor.
+- **Elle numaralandırma kaldırıldı.** Register'daki "Numbering" penceresi ve
+  `NumberingForm` silindi; `counters/{id}` artık client'a tamamen kapalı
+  (`allow write: if false`). Yanlış bir ön ek ya da geri alınan bir numara
+  sicili sessizce bozar, verilmiş numara geri alınamaz.
+- `importCertificates` sayacı YALNIZCA içinde bulunulan yılın serisinden
+  ilerletiyor. Eskiden serideki son rakamlara bakıyordu; 25-237 içe
+  aktarılınca 26 serisinin sayacı 238'e atlamıştı (elle 138'e çekildi).
+
+### Sıralama hatası düzeltildi
+`serialKey` yalnızca sondaki rakamları alıyordu: 25-131 → 131, 26-001 → 1.
+Yeni yılın ilk sertifikası listenin en altına düşüyordu. Artık önce yıl,
+sonra sıra numarası.
+
+Register'da **bütün kolonlar sıralanabilir** (numara, ad, doğum yeri/tarihi,
+eğitim, eğitmen, süre, tarih). Aynı kolona tekrar tıklamak yönü çevirir;
+metin kolonları A→Z, sayı/tarih kolonları büyükten küçüğe başlar.
+
+### AÇIK SORUN — çakışan iki numara
+Kâğıt sicil içe aktarıldıktan sonra iki numara iki kez kullanılıyor:
+- **26-052** — Talha Duygu / Safety Training (IMPORT) **ve** Enes Şavk / MOE
+  (sınıf oturumundan üretilmiş, `26-52` biçiminde)
+- **26-131** — Hüseyin Kılcıoğlu / MOE (IMPORT) **ve** Enes Şavk / SHT-145
+  (sınıf oturumundan üretilmiş)
+
+Sistemden üretilen iki belge, numaralandırma birleştirilmeden önce oturumda
+elle girilen numarayı kullanmıştı. Kararı kullanıcı verecek: sistemden
+üretilen ikisini yeni numaraya (26-138, 26-139) taşımak ya da silmek.
