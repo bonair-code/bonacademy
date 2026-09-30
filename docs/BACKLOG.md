@@ -1088,8 +1088,14 @@ silindi: `BA-00001`, `BA-00002` (online tamamlama denemeleri) ve `26-52`,
 Kalan sertifika 244, hepsi tekil, 26 serisinin en büyüğü 137, sayaç 138'de —
 bir sonraki belge `26-138` olacak.
 
-**Geride kalan iki tutarsızlık (kullanıcı kararı bekliyor):**
-- İki sınıf oturumu hâlâ CLOSED ve `issuedCount: 1`, `certLastNo: 52/131`
-  yazıyor; ürettikleri belge artık yok. Classes listesinde "1 certificate"
-  görünür.
-- Talha Duygu'nun iki ataması COMPLETED kaldı (sertifikası silindi).
+Artıklar  ile temizlendi: iki deneme sınıf
+oturumu katılımcılarıyla birlikte silindi, sertifikası kalmayan iki atama
+PENDING'e döndürüldü (atama silinmez — kişi eğitimi yeniden alabilsin diye
+sıfırlanır).
+
+**Silme sırasında çıkan yan hasar ve düzeltmesi:**  numarası hem
+sınıf denemesinde hem içe aktarılan gerçek belgede kullanılıyordu.
+ dokümanı numaraya göre anahtarlandığı için ikisine tek belge
+hizmet ediyordu; deneme kaydı silinince **kâğıt sertifikanın doğrulaması da
+gitti**. Elle geri kondu. Kontrol: 244 sertifika, 244 doğrulama kaydı,
+sahipsiz kayıt yok.
