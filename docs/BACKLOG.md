@@ -1104,3 +1104,13 @@ sahipsiz kayıt yok.
 sertifikada kullanılırsa doğrulama kaydı paylaşılır ve birini silmek
 diğerini de bozar. Numara artık tek kaynaktan ve otomatik verildiği için
 çakışma oluşmamalı, ama silme işlemlerinde kontrol edilmeli.
+
+### Sidebar antet bandı (30.09.2026)
+Logo 212px'lik menüde 24px yüksekliğinde, dar bir beyaz kutuya sıkışmıştı.
+Menü **232px**'ye genişledi; beyaz alan kart olmaktan çıkıp menünün tepesine
+tam genişlikte oturan bir **antet bandına** dönüştü, logo **38px**. Altında
+iki yanı çizgili "BONACADEMY" ve onun altında "TRAINING MANAGEMENT SYSTEM"
+etiketi — basılı evraktaki antet mantığı.
+
+Logo koyu metinli olduğu için beyaz zemine oturmak zorunda; grafit menüde
+doğrudan kullanılamıyor.

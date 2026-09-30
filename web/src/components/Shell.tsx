@@ -168,22 +168,32 @@ function ShellLayout({ children }: { children: ReactNode }) {
           yalnızca aktif maddeyi işaretliyor; böylece tablolardaki kırmızı
           uyarılarla yarışmıyor. */}
       <aside
-        className="w-[212px] shrink-0 flex flex-col sticky top-0 h-screen"
+        className="w-[232px] shrink-0 flex flex-col sticky top-0 h-screen"
         style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,.07)" }}
       >
-        <div className="px-3 pt-4 pb-2">
-          {/* Logo koyu metinli, o yüzden beyaz zemine oturuyor — ama artık
-              koca bir kart değil, ince bir künye. */}
-          <div className="bg-white rounded-[10px] px-3 py-2 flex items-center justify-center">
-            <img src="/Logo.png" alt="Bon Air" className="h-6 w-auto" />
-          </div>
-          <p
-            className="mt-2 text-center text-[9.5px] uppercase leading-tight"
-            style={{ color: "#98989d", letterSpacing: "0.12em" }}
-          >
-            Training Management System
-          </p>
+        {/* Antet bandı: logo koyu metinli olduğu için beyaz zemine oturmak
+            zorunda. Kart yerine tam genişlikte bir bant — basılı evraktaki
+            antet mantığı, logo da en büyük burada duruyor. */}
+        <div className="bg-white px-3.5 py-4 flex items-center justify-center">
+          <img src="/Logo.png" alt="Bon Air" className="h-[38px] w-auto" />
         </div>
+
+        <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+          <span
+            className="text-[8.5px] font-bold whitespace-nowrap"
+            style={{ color: "#98989d", letterSpacing: "0.15em" }}
+          >
+            BONACADEMY
+          </span>
+          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+        </div>
+        <p
+          className="text-center text-[8.5px] font-bold uppercase px-3 pb-1"
+          style={{ color: "#98989d", letterSpacing: "0.15em", lineHeight: 1.6 }}
+        >
+          Training Management System
+        </p>
 
         <nav className="flex-1 pb-3 overflow-y-auto">
           {GROUP_ORDER.map((g) => {
