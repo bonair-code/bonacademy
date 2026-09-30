@@ -157,7 +157,10 @@ service cloud.firestore {
                   || (isManager() && resource.data.userDepartmentId == myDept());
       allow write: if false; // yalnızca issueCertificate Function
     }
-    match /certVerify/{serialNo} {
+    // Doğrulama kaydı tahmin edilemez bir anahtarla adreslenir; anahtar
+    // yalnızca belgedeki QR kodunda. Numarayla adreslenseydi (26-001,
+    // 26-002…) sırayla girilip bütün personelin adı dökülebilirdi.
+    match /certVerify/{verifyToken} {
       allow read: if true;   // QR public doğrulama
       allow write: if false;
     }

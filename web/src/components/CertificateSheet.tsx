@@ -27,6 +27,8 @@ export type Cert = {
   examPassingScore?: number | null;
   /** IMPORT: kâğıt sicilden aktarılan kayıt — sınav satırı basılmaz. */
   issuedVia?: string | null;
+  /** QR doğrulama anahtarı. Numara DEĞİL — numaralar sıralı ve tahmin edilir. */
+  verifyToken?: string | null;
 };
 
 export function fmtTs(ts?: Timestamp | null) {
@@ -78,10 +80,20 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
    */
   const isSigned = !!cert.instructorName?.trim();
 
-  // Sertifikanın üstündeki QR, herkese açık doğrulama sayfasına gider.
-  const verifyUrl = `${window.location.origin}/verify/${encodeURIComponent(cert.serialNo)}`;
+  /**
+   * QR herkese açık doğrulama sayfasına gider ve tahmin edilemez bir anahtar
+   * taşır. Adres numaraya dayansaydı (26-001, 26-002…) sayfadan sırayla
+   * girilip bütün personelin adı ve eğitimi dökülebilirdi.
+   */
+  const verifyUrl = cert.verifyToken
+    ? `${window.location.origin}/verify/${encodeURIComponent(cert.verifyToken)}`
+    : "";
   const [qr, setQr] = useState("");
   useEffect(() => {
+    if (!verifyUrl) {
+      setQr("");
+      return;
+    }
     QRCode.toDataURL(verifyUrl, { width: 240, margin: 0 })
       .then(setQr)
       .catch(() => setQr(""));

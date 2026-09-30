@@ -1201,3 +1201,37 @@ yapınca renk şoku olmuyor. Kırmızı yalnızca birincil düğmede ve hatada.
 Koyu zemine uygun form yardımcıları da orada: `pubLabel`, `pubInput`,
 `pubButton`, `PublicError`. Üç sayfa da bunları kullanıyor; beyaz kart
 sınıfları (`input`, `label`, `btn-primary`) koyu zeminde okunmuyordu.
+
+## Sertifika doğrulama — numara yerine anahtar (30.09.2026)
+
+### Kapatılan açık
+`certVerify` dokümanları **seri numarasıyla** anahtarlanıyordu ve herkese
+açık okunuyordu. Numaralar sıralı olduğu için (26-001, 26-002…) doğrulama
+sayfasından — hatta yalnızca adres satırından — sırayla girip **bütün
+personelin adını ve aldığı eğitimi** dökmek mümkündü.
+
+Artık her sertifikada rastgele bir `verifyToken` var (16 bayt, base64url).
+QR onu taşıyor, doğrulama sayfası onunla arıyor. Numarayla adreslenen kayıt
+kalmadı: `/verify/26-001` artık "Not a valid certificate" diyor.
+
+- `newVerifyToken()` — `issueCertificateFor`, `finishClassSession` ve
+  `importCertificates` üçü de kullanıyor. İçe aktarmada mevcut anahtar
+  korunuyor, aynı dosya iki kez yüklenince değişmiyor.
+- `undoCertificateImport` doğrulama kaydını artık anahtardan siliyor.
+- `CertificateSheet` QR'ı `verifyToken`'dan üretiyor; anahtar yoksa QR
+  basılmıyor (yanlış adrese götüren bir kare basmaktansa hiç basmamak doğru).
+- Göç: `scripts/migrate-verify-tokens.js` — 246 sertifikaya anahtar üretti,
+  yeni kayıtları yazdı, sonra numaraya dayalı 246 kaydı sildi (önce yaz sonra
+  sil: arada doğrulama boşta kalmasın). Fiziksel hiçbir belge etkilenmedi;
+  sistemden üretilmiş QR'lı sertifikaların hepsi daha önce silinmişti,
+  kalanlar sistem öncesi kâğıt kayıtlar ve üzerlerinde QR yok.
+
+### Arama kutusu ve tarih adımı kaldırıldı
+Sayfada serbest numara araması yok — sırayla deneme yolu bu. Sayfa yalnızca
+QR'dan gelen anahtarla çalışıyor; anahtarsız açılırsa "belgedeki QR'ı okutun"
+diyor.
+
+"Belgedeki tarihi gir" adımı da kalktı: QR zaten kaydı getiriyordu, fazladan
+adım hiçbir şey eklemiyor ve sayfa açılır açılmaz kırmızı "tarih eşleşmiyor"
+uyarısı veriyordu. Numara ve tarih artık kartta yan yana yazıyor; denetçi
+elindeki belgeyle gözüyle karşılaştırıyor.

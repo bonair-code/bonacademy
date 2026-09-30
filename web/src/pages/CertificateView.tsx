@@ -48,7 +48,7 @@ export function CertificateView() {
             <button onClick={printCertificate} className="btn-primary text-xs py-2">
               Print / PDF (landscape)
             </button>
-            <Link to={`/verify/${encodeURIComponent(cert.serialNo)}`} className="btn-secondary text-xs py-2">
+            <Link to={`/verify/${encodeURIComponent(cert.verifyToken ?? "")}`} className="btn-secondary text-xs py-2">
               Open verification page
             </Link>
           </div>
@@ -93,7 +93,7 @@ function ImportedRecord({ cert }: { cert: Cert }) {
       </div>
       <div className="flex gap-3 mt-4 no-print">
         <Link
-          to={`/verify/${encodeURIComponent(cert.serialNo)}`}
+          to={`/verify/${encodeURIComponent(cert.verifyToken ?? "")}`}
           className="btn-secondary text-xs py-2"
         >
           Open verification page

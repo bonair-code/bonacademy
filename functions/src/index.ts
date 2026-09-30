@@ -359,6 +359,18 @@ type ExamInfo = { required: boolean; score?: number | null; passingScore?: numbe
  *   { year: "26", prefix: "26", next: 44, pad: 3 }  →  "26-044"
  * Numara transaction ile artar, aynı anda iki sertifika üretilse bile çakışmaz.
  */
+/**
+ * Doğrulama anahtarı. QR bunu taşır, sertifika numarasını DEĞİL.
+ *
+ * Numaralar sıralı (26-001, 26-002…); QR adresi numaraya dayanırsa herkese
+ * açık doğrulama sayfasından sırayla girilip bütün personelin adı ve aldığı
+ * eğitim dökülebilir. Tahmin edilemez anahtar bunu kapatır: yalnızca elinde
+ * belge olan doğrulayabilir.
+ */
+function newVerifyToken(): string {
+  return randomBytes(16).toString("base64url");
+}
+
 /** İçinde bulunulan yılın iki haneli kodu — sicil ön eki. */
 function serialYear(): string {
   return String(new Date().getFullYear()).slice(-2);
@@ -411,6 +423,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
   }
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
   const [serialNo] = await nextSerialNo();
+  const verifyToken = newVerifyToken();
   const now = FieldValue.serverTimestamp();
   await certRef.set({
     assignmentId,
@@ -442,8 +455,9 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     heldIn: org.trainingLocation ?? "ONLINE",
     organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
     approvalNo: org.approvalNo ?? "TR.145.118",
+    verifyToken,
   });
-  await db.doc(`certVerify/${serialNo}`).set({
+  await db.doc(`certVerify/${verifyToken}`).set({
     serialNo,
     name: userName,
     courseTitle: a.courseTitle,
@@ -662,6 +676,7 @@ export const finishClassSession = onCall({ region: "europe-west3" }, async (req)
     // Sertifika id'si oturum+katılımcıya bağlı → aynı oturum iki kez kapatılsa
     // bile sertifika çiftlenmez.
     const certId = `session_${sessionId}_${d.id}`;
+    const verifyToken = newVerifyToken();
     await db.doc(`certificates/${certId}`).set({
       sessionId,
       attendeeId: d.id,
@@ -686,9 +701,10 @@ export const finishClassSession = onCall({ region: "europe-west3" }, async (req)
       examScore: null,
       examPassingScore: null,
       deliveryMode: "CLASSROOM",
+      verifyToken,
     });
 
-    await db.doc(`certVerify/${serialNo}`).set({
+    await db.doc(`certVerify/${verifyToken}`).set({
       serialNo,
       name: a.fullName ?? "",
       courseTitle: ses.courseTitle ?? "",
@@ -998,6 +1014,9 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
 
     // Numara belge kimliği: aynı dosya iki kez yüklenirse kayıt çiftlenmez.
     const certId = `imported_${serialNo.replace(/[^\w-]+/g, "_")}`;
+    // Aynı dosya iki kez yüklenirse doğrulama anahtarı değişmesin.
+    const existingToken = (await db.doc(`certificates/${certId}`).get()).data()?.verifyToken;
+    const verifyToken = String(existingToken || newVerifyToken());
     try {
       await db.doc(`certificates/${certId}`).set(
         {
@@ -1021,11 +1040,12 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
           examRequired: false,
           examScore: null,
           heldIn: r.location ? String(r.location).trim() : null,
+          verifyToken,
         },
         { merge: true }
       );
       // QR doğrulama geçmiş sertifikalarda da çalışsın.
-      await db.doc(`certVerify/${serialNo}`).set(
+      await db.doc(`certVerify/${verifyToken}`).set(
         {
           serialNo,
           name: user?.name ?? String(r.name ?? "").trim(),
@@ -1104,8 +1124,8 @@ export const undoCertificateImport = onCall({ region: "europe-west3" }, async (r
     const batch = db.batch();
     for (const d of snap.docs.slice(i, i + 200)) {
       batch.delete(d.ref);
-      const s = String((d.data() as any).serialNo ?? "");
-      if (s) batch.delete(db.doc(`certVerify/${s}`));
+      const t = String((d.data() as any).verifyToken ?? "");
+      if (t) batch.delete(db.doc(`certVerify/${t}`));
       deleted++;
     }
     await batch.commit();
