@@ -1078,3 +1078,18 @@ Kâğıt sicil içe aktarıldıktan sonra iki numara iki kez kullanılıyor:
 Sistemden üretilen iki belge, numaralandırma birleştirilmeden önce oturumda
 elle girilen numarayı kullanmıştı. Kararı kullanıcı verecek: sistemden
 üretilen ikisini yeni numaraya (26-138, 26-139) taşımak ya da silmek.
+
+### Deneme sertifikaları silindi (30.09.2026)
+`scripts/delete-test-certificates.js` ile 4 kayıt ve doğrulama belgeleri
+silindi: `BA-00001`, `BA-00002` (online tamamlama denemeleri) ve `26-52`,
+`26-131` (sınıf oturumu denemeleri). Son ikisi kâğıt sicilden gelen gerçek
+26-052 / 26-131 ile çakışıyordu; çakışma kalmadı.
+
+Kalan sertifika 244, hepsi tekil, 26 serisinin en büyüğü 137, sayaç 138'de —
+bir sonraki belge `26-138` olacak.
+
+**Geride kalan iki tutarsızlık (kullanıcı kararı bekliyor):**
+- İki sınıf oturumu hâlâ CLOSED ve `issuedCount: 1`, `certLastNo: 52/131`
+  yazıyor; ürettikleri belge artık yok. Classes listesinde "1 certificate"
+  görünür.
+- Talha Duygu'nun iki ataması COMPLETED kaldı (sertifikası silindi).
