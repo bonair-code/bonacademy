@@ -24,6 +24,17 @@ export function printCertificate() {
   withPageStyle("@page { size: A4 landscape; margin: 0; }", () => window.print(), "");
 }
 
+/**
+ * Yoklama QR'ı: dikey A4, tek sayfa.
+ *
+ * Eskiden sertifikanın `cert-print` sınıfını kullanıyordu; o sınıf sayfayı
+ * tamamen kaplayacak biçimde yazıldığı için QR görseli devleşip ikinci
+ * sayfaya taşıyordu.
+ */
+export function printQr() {
+  withPageStyle("@page { size: A4 portrait; margin: 16mm; }", () => window.print(), "printing-qr");
+}
+
 /** Sayfa raporu. Geniş tablolar için yatay. */
 export function printReport(opts: { landscape?: boolean } = {}) {
   const size = opts.landscape ? "A4 landscape" : "A4 portrait";

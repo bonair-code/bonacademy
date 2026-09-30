@@ -18,6 +18,7 @@ import QRCode from "qrcode";
 import { db, functions } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
+import { printQr } from "../lib/print";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 
@@ -641,20 +642,29 @@ export function ClassSessionDetail() {
             </span>
           </div>
 
-          <div ref={printRef} className="cert-print bg-white rounded-lg border border-slate-200 p-4 text-center">
-            <div className="text-[12px] font-bold text-slate-900">{session.courseTitle}</div>
-            <div className="text-[11px] text-slate-500 mb-3">
-              {dmy(session.startDate)} · {session.location}
+          {/* Yazdırmada kendi kipini kullanır (dikey A4, tek sayfa);
+              sertifikanın sayfayı kaplayan kipinde QR taşıyordu. */}
+          <div
+            ref={printRef}
+            className="qr-print bg-white rounded-lg border border-slate-200 p-4 text-center"
+          >
+            <div className="qr-title text-[12px] font-bold text-slate-900">
+              {session.courseTitle}
+            </div>
+            <div className="qr-meta text-[11px] text-slate-500 mb-3">
+              {dmy(session.startDate)}
+              {session.location ? ` · ${session.location}` : ""}
+              {session.instructorName ? ` · ${session.instructorName}` : ""}
             </div>
             {qr ? (
               <img src={qr} alt="Attendance QR code" className="w-full h-auto" />
             ) : (
               <div className="py-10 text-xs text-slate-400">QR unavailable</div>
             )}
-            <div className="text-[11px] text-slate-600 mt-3 font-semibold">
+            <div className="qr-cta text-[11px] text-slate-600 mt-3 font-semibold">
               Scan to sign the attendance list
             </div>
-            <div className="text-[9px] text-slate-400 break-all mt-1">{joinUrl}</div>
+            <div className="qr-url text-[9px] text-slate-400 break-all mt-1">{joinUrl}</div>
           </div>
 
           <div className="flex flex-wrap gap-2 mt-3 no-print">
@@ -666,7 +676,7 @@ export function ClassSessionDetail() {
                 {isOpen ? "Pause attendance" : "Open attendance"}
               </button>
             )}
-            <button onClick={() => window.print()} className="btn-secondary text-xs py-1.5">
+            <button onClick={printQr} className="btn-secondary text-xs py-1.5">
               Print QR
             </button>
             <button

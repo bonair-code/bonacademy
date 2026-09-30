@@ -1235,3 +1235,14 @@ diyor.
 adım hiçbir şey eklemiyor ve sayfa açılır açılmaz kırmızı "tarih eşleşmiyor"
 uyarısı veriyordu. Numara ve tarih artık kartta yan yana yazıyor; denetçi
 elindeki belgeyle gözüyle karşılaştırıyor.
+
+### Yoklama QR yazdırması (30.09.2026)
+"Print QR" sertifikanın `cert-print` sınıfını kullanıyordu; o sınıf sayfayı
+tamamen kaplayacak biçimde yazılmış (yatay A4 sertifika için), dolayısıyla QR
+görseli devleşip ikinci sayfaya taşıyordu.
+
+Üçüncü bir yazdırma kipi eklendi: `body.printing-qr` + `.qr-print`. Dikey A4,
+16mm kenar, blok sayfanın üstünde ortalı, kare **100×100mm** sabit, başlık
+14pt / künye 10.5pt / çağrı 12pt / adres 8pt. `lib/print.ts` içinde
+`printQr()`. Künyeye eğitmen adı da eklendi — duvara asılan kâğıtta hangi
+oturum olduğu belli olsun.

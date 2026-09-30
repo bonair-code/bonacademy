@@ -95,23 +95,24 @@
   }
 }
 
-/* İki ayrı yazdırma kipi:
+/* Üç yazdırma kipi:
    - Varsayılan: yalnızca .cert-print görünür (yatay A4 sertifika)
-   - body.printing-report: sayfa raporu — kenar çubuğu ve butonlar gizli */
+   - body.printing-report: sayfa raporu — kenar çubuğu ve butonlar gizli
+   - body.printing-qr: yoklama QR'ı — dikey A4, tek sayfa */
 
 @media print {
   @page {
     margin: 12mm;
   }
 
-  body:not(.printing-report) * {
+  body:not(.printing-report):not(.printing-qr) * {
     visibility: hidden;
   }
-  body:not(.printing-report) .cert-print,
-  body:not(.printing-report) .cert-print * {
+  body:not(.printing-report):not(.printing-qr) .cert-print,
+  body:not(.printing-report):not(.printing-qr) .cert-print * {
     visibility: visible;
   }
-  body:not(.printing-report) .cert-print {
+  body:not(.printing-report):not(.printing-qr) .cert-print {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -121,6 +122,51 @@
     box-shadow: none;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
+  }
+
+  /* ── Yoklama QR kipi ─────────────────────────────────────
+     Sertifika kipi sayfayı tamamen kaplıyor; QR orada devleşip ikinci
+     sayfaya taşıyordu. Burada blok sayfanın üstünde, kendi ölçüsünde. */
+  body.printing-qr * {
+    visibility: hidden;
+  }
+  body.printing-qr .qr-print,
+  body.printing-qr .qr-print * {
+    visibility: visible;
+  }
+  body.printing-qr .qr-print {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120mm;
+    border: 0;
+    padding: 0;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* Karenin boyu sabit: tam genişlik verilirse sayfayı taşırıyor. */
+  body.printing-qr .qr-print img {
+    width: 100mm;
+    height: 100mm;
+    margin: 6mm auto;
+    display: block;
+  }
+  body.printing-qr .qr-print .qr-title {
+    font-size: 14pt;
+    font-weight: 700;
+  }
+  body.printing-qr .qr-print .qr-meta {
+    font-size: 10.5pt;
+  }
+  body.printing-qr .qr-print .qr-cta {
+    font-size: 12pt;
+    font-weight: 600;
+  }
+  body.printing-qr .qr-print .qr-url {
+    font-size: 8pt;
   }
 
   /* ── Rapor kipi ──────────────────────────────────────────
