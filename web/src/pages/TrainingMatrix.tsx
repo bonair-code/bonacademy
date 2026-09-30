@@ -7,7 +7,7 @@ import { db } from "../lib/firebase";
 import { isStaffRole, useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
 import { PrintButton } from "../components/PrintButton";
-import { requirementFor } from "../lib/requirements";
+import { exclusionFor, requirementFor } from "../lib/requirements";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 
@@ -41,7 +41,8 @@ type JobTitle = {
 };
 
 type CellState =
-  | { kind: "NA" }
+  /** Gerekmiyor. `exemptBy` doluysa bir alt yetki bunu düşürmüş demektir. */
+  | { kind: "NA"; exemptBy?: string | null }
   | { kind: "PLANNED" }
   | { kind: "MISSING" }
   | {
@@ -281,7 +282,11 @@ export function TrainingMatrix() {
       };
     }
     if (assignedSet.has(`${u.id}|${c.id}`)) return { kind: "PLANNED" };
-    return isRequired(u, c) ? { kind: "MISSING" } : { kind: "NA" };
+    if (isRequired(u, c)) return { kind: "MISSING" };
+    return {
+      kind: "NA",
+      exemptBy: exclusionFor(c, u.jobTitleIds ?? [], jobTitles, u.subScopeIds ?? []),
+    };
   }
 
   // Departmana göre grupla — Excel'deki bölüm başlıkları gibi.
@@ -614,8 +619,8 @@ function useCellHover() {
 
   const enter = (el: HTMLElement, user: UserRow, course: CourseRow, state: CellState) => {
     clear();
-    // Gerekli olmayan hücrede gösterilecek bir şey yok.
-    if (state.kind === "NA") return;
+    // Gerekli olmayan hücrede yalnızca muafiyet varsa gösterilecek bir şey var.
+    if (state.kind === "NA" && !state.exemptBy) return;
     const rect = el.getBoundingClientRect();
     timer.current = window.setTimeout(
       () => setAt({ user, course, state, rect }),
@@ -673,6 +678,13 @@ function CellDetail({ at }: { at: HoverState }) {
     >
       <div className="text-[12.5px] font-semibold text-slate-900 leading-snug">{user.name}</div>
       <div className="text-[11px] text-slate-500 leading-snug mb-2">{course.title}</div>
+
+      {state.kind === "NA" && state.exemptBy && (
+        <p className="text-[11.5px] text-slate-600">
+          Not required — <b className="text-slate-800">{state.exemptBy}</b> drops this training
+          from the scope.
+        </p>
+      )}
 
       {state.kind === "MISSING" && (
         <>
@@ -761,7 +773,12 @@ function Swatch({ color, label }: { color: string; label: string }) {
 function Cell({ state }: { state: CellState }) {
   // "N/A" açıkça yazılır: nokta, hücrenin boş kaldığı mı yoksa gerekli
   // olmadığı mı belirsiz bırakıyordu.
-  if (state.kind === "NA") return <span className="text-[10px] opacity-55">N/A</span>;
+  if (state.kind === "NA")
+    return (
+      <span className={`text-[10px] ${state.exemptBy ? "opacity-80 underline decoration-dotted" : "opacity-55"}`}>
+        N/A
+      </span>
+    );
   if (state.kind === "PLANNED") return <span className="font-bold">PLAN</span>;
   if (state.kind === "MISSING") return <span className="font-bold">—</span>;
 

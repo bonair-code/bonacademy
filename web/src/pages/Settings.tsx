@@ -24,7 +24,13 @@ type Ref = { id: string; name: string };
  * seçilir; her alt yetkinin kendi gerekli eğitimi olur. NDT tikli değilse
  * NDT Familiarization o kişide zorunlu görünmez.
  */
-type SubScope = { id: string; name: string; requiredCourseIds?: string[] };
+type SubScope = {
+  id: string;
+  name: string;
+  requiredCourseIds?: string[];
+  /** Bu alt yetki taşındığında kapsamın gerekliliğinden DÜŞEN eğitimler. */
+  excludedCourseIds?: string[];
+};
 type JobTitle = Ref & { requiredCourseIds?: string[]; subScopes?: SubScope[] };
 type CourseLite = { id: string; title: string };
 
@@ -312,6 +318,7 @@ type JtDialog =
   | { kind: "createSub"; row: JobTitle }
   | { kind: "editSub"; row: JobTitle; sub: SubScope }
   | { kind: "addSubTraining"; row: JobTitle; sub: SubScope }
+  | { kind: "excludeSubTraining"; row: JobTitle; sub: SubScope }
   | { kind: "deleteSub"; row: JobTitle; sub: SubScope }
   | null;
 
@@ -388,6 +395,34 @@ function JobTitles({ onToast }: { onToast: (m: string) => void }) {
       )
     );
     onToast("Training removed.");
+  }
+
+  /**
+   * Muafiyet: alt yetki, kapsamın zorunlu tuttuğu bir eğitimi düşürür.
+   * Örn. NDT Staff release yetkisi kullanmadığı için İngilizce sınavı ondan
+   * istenmez. Alt yetki yalnızca ekleyebildiği sürece bu modellenemiyordu.
+   */
+  async function addSubExclusions(jt: JobTitle, sub: SubScope, ids: string[]) {
+    await writeSubs(
+      jt,
+      subsOf(jt).map((s) =>
+        s.id === sub.id
+          ? { ...s, excludedCourseIds: Array.from(new Set([...(s.excludedCourseIds ?? []), ...ids])) }
+          : s
+      )
+    );
+    onToast(`${ids.length} training no longer required.`);
+  }
+  async function removeSubExclusion(jt: JobTitle, sub: SubScope, courseId: string) {
+    await writeSubs(
+      jt,
+      subsOf(jt).map((s) =>
+        s.id === sub.id
+          ? { ...s, excludedCourseIds: (s.excludedCourseIds ?? []).filter((c) => c !== courseId) }
+          : s
+      )
+    );
+    onToast("Exemption removed.");
   }
 
   return (
@@ -569,6 +604,15 @@ function JobTitles({ onToast }: { onToast: (m: string) => void }) {
                                       + Training
                                     </button>
                                     <button
+                                      onClick={() =>
+                                        setDialog({ kind: "excludeSubTraining", row: r, sub: s })
+                                      }
+                                      className="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                                      title="Drop a training the scope requires"
+                                    >
+                                      − Not required
+                                    </button>
+                                    <button
                                       onClick={() => setDialog({ kind: "editSub", row: r, sub: s })}
                                       className="text-[11px] font-semibold text-slate-500 hover:text-slate-800"
                                     >
@@ -608,6 +652,39 @@ function JobTitles({ onToast }: { onToast: (m: string) => void }) {
                                             onClick={() => removeSubCourse(r, s, cid)}
                                             aria-label={`Remove ${c?.title ?? cid}`}
                                             className="text-slate-400 hover:text-brand-700 leading-none"
+                                          >
+                                            ×
+                                          </button>
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* Muafiyetler ayrı ve görünür: sessizce düşen
+                                    bir zorunluluk, uygunsuzluğu gizlemekle
+                                    aynı şey olurdu. */}
+                                {(s.excludedCourseIds ?? []).length > 0 && (
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                    <span className="text-[10px] font-semibold uppercase tracking-[0.05em] text-slate-400">
+                                      Not required
+                                    </span>
+                                    {(s.excludedCourseIds ?? []).map((cid) => {
+                                      const c = courses.find((x) => x.id === cid);
+                                      return (
+                                        <span
+                                          key={cid}
+                                          className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 ring-1 ring-amber-200 rounded px-1.5 py-0.5 text-[11px]"
+                                        >
+                                          {c ? (
+                                            c.title
+                                          ) : (
+                                            <span className="italic opacity-70">Deleted course</span>
+                                          )}
+                                          <button
+                                            onClick={() => removeSubExclusion(r, s, cid)}
+                                            aria-label={`Require ${c?.title ?? cid} again`}
+                                            className="opacity-60 hover:opacity-100 leading-none"
                                           >
                                             ×
                                           </button>
@@ -731,6 +808,39 @@ function JobTitles({ onToast }: { onToast: (m: string) => void }) {
             onAdd={async (ids) => {
               const live = rows.find((r) => r.id === dialog.row.id) ?? dialog.row;
               await addSubCourses(live, dialog.sub, ids);
+              setDialog(null);
+            }}
+            onCancel={() => setDialog(null)}
+          />
+        </Modal>
+      )}
+
+      {/* Muafiyet yalnızca kapsamın ZORUNLU tuttukları arasından seçilir —
+          zaten gerekmeyen bir eğitimi "gerekmiyor" diye işaretlemek anlamsız
+          ve listeyi kirletir. */}
+      {dialog?.kind === "excludeSubTraining" && (
+        <Modal
+          title="Training Not Required"
+          subtitle={`${dialog.row.name} · ${dialog.sub.name}`}
+          onClose={() => setDialog(null)}
+        >
+          <p className="text-[12px] text-slate-600 mb-3">
+            Pick what <b className="text-slate-800">{dialog.row.name}</b> requires but{" "}
+            <b className="text-slate-800">{dialog.sub.name}</b> does not. Staff holding this
+            sub-authorisation will show N/A for it instead of MISSING.
+          </p>
+          <AddTrainingPicker
+            courses={courses.filter((c) =>
+              (rows.find((r) => r.id === dialog.row.id)?.requiredCourseIds ?? []).includes(c.id)
+            )}
+            alreadyRequired={
+              rows
+                .find((r) => r.id === dialog.row.id)
+                ?.subScopes?.find((s) => s.id === dialog.sub.id)?.excludedCourseIds ?? []
+            }
+            onAdd={async (ids) => {
+              const live = rows.find((r) => r.id === dialog.row.id) ?? dialog.row;
+              await addSubExclusions(live, dialog.sub, ids);
               setDialog(null);
             }}
             onCancel={() => setDialog(null)}

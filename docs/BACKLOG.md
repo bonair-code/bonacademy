@@ -914,3 +914,36 @@ idare ediliyordu). Tek bir segment kontrolüne indirildi: No expiry / 1 year /
 2 years / 5 years / Pick date. Kurs seçilince kursun kendi periyodundan
 öneriliyor; alınma tarihi değişince bitiş yeniden hesaplanıyor.
 Ölü `every` / `unit` state'i ve `UNIT_LABEL` sabiti kaldırıldı.
+
+## Yetki kapsamı — muafiyet ve NDT Staff (30.09.2026)
+
+**Sorun:** Certifying Staff'ın zorunlu listesinde English Exam var; NDT Staff
+onun alt yetkisi olarak modellenmişti ve alt yetki yalnızca EKLEYEBİLİYORDU.
+Yani NDT personeli release yetkisi kullanmadığı hâlde İngilizce sınavı onlarda
+da zorunlu görünüyordu. Model bu durumu ifade edemiyordu.
+
+İki iş birden yapıldı (kullanıcı kararı).
+
+### 1. Alt yetki artık eğitim düşürebiliyor
+`SubScope.excludedCourseIds` eklendi. `requirementFor` önce muafiyete bakıyor —
+muafiyet kapsamın zorunluluğunu eziyor. Yeni `exclusionFor()` hangi alt
+yetkinin düşürdüğünü döndürüyor.
+
+Settings → alt yetki satırında **"− Not required"** düğmesi; seçim yalnızca
+kapsamın zorunlu tuttukları arasından yapılıyor. Muafiyetler satırda ayrı ve
+kehribar renkli listeleniyor — sessizce düşen bir zorunluluk, uygunsuzluğu
+gizlemekle aynı şey olurdu.
+
+Follow-Up'ta muaf hücre N/A ama **noktalı altı çizili**; detay kartında
+"Not required — <alt yetki> drops this training from the scope" yazıyor.
+
+### 2. NDT Staff ayrı kapsam oldu
+`scripts/create-ndt-scope.js` ile oluşturuldu (id `jPl1ZdeFu10YRlP40K6m`).
+Başlangıç listesi **öneri**: Certifying Staff'ın 11 eğitimi eksi English Exam,
+artı NDT training. NDT release yetkisi kullanmıyorsa SHT-66/SHT-145 gibi
+kalemlerin gerekip gerekmediğini bilemem — Settings'ten gözden geçirilmeli.
+
+**Kapsam henüz kimseye atanmadı**, dolayısıyla hiçbir uygunluk sonucu
+değişmedi. Şu an Certifying Staff → NDT Staff alt yetkisi tikli olanlar:
+**Cem GÜNGÖRMEZ** ve **Vehbi Kıvanç TÜRKER**. Bu ikisi yeni kapsama taşınırsa
+eski alt yetki silinebilir.
