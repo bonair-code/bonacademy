@@ -4,6 +4,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  getDocs,
   doc,
   onSnapshot,
   orderBy,
@@ -75,7 +76,15 @@ const MONTH_TR = [
  * solda tarih bloğu, ortada eğitim ve künyesi, sağda durum. Tabloda tarih
  * sütunun ortasında kaybolup gidiyordu.
  */
-function SessionCard({ s }: { s: Session }) {
+function SessionCard({
+  s,
+  onEdit,
+  onDelete,
+}: {
+  s: Session;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
   const d = s.startDate ? new Date(`${s.startDate}T00:00:00`) : null;
   const multi = !!s.endDate && s.endDate !== s.startDate;
 
@@ -131,6 +140,33 @@ function SessionCard({ s }: { s: Session }) {
       >
         {s.status}
       </span>
+
+      {/* Taslak oturum henüz belge üretmedi; düzeltilebilir ve silinebilir.
+          Açılmış ya da kapanmış oturumda bu düğmeler yok — kapanmış oturumu
+          silmek verilmiş sertifikaları sahipsiz bırakırdı. */}
+      {s.status === "DRAFT" && (onEdit || onDelete) && (
+        <span
+          className="shrink-0 flex items-center gap-1.5 no-print"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          {onEdit && (
+            <button onClick={onEdit} className="btn-secondary text-[11px] py-1 px-2.5">
+              Edit
+            </button>
+          )}
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              className="btn-secondary text-[11px] py-1 px-2.5 hover:text-brand-700"
+            >
+              Delete
+            </button>
+          )}
+        </span>
+      )}
     </Link>
   );
 }
@@ -142,7 +178,12 @@ export function ClassSessions() {
   const [rows, setRows] = useState<Session[]>([]);
   const [courses, setCourses] = useState<{ id: string; title: string; durationHours?: number | null }[]>([]);
   const [open, setOpen] = useState(false);
+  const [dialog, setDialog] = useState<
+    { kind: "edit"; row: Session } | { kind: "delete"; row: Session } | null
+  >(null);
   const [err, setErr] = useState<string | null>(null);
+  // Eğitmen kendi oturumunu da yönetebilir; ikisi de sınıf açıyor.
+  const canManage = role === "ADMIN" || role === "INSTRUCTOR";
 
   useEffect(() => {
     const u1 = onSnapshot(
@@ -180,7 +221,12 @@ export function ClassSessions() {
       ) : (
         <div className="space-y-2.5">
           {rows.map((s) => (
-            <SessionCard key={s.id} s={s} />
+            <SessionCard
+              key={s.id}
+              s={s}
+              onEdit={canManage ? () => setDialog({ kind: "edit", row: s }) : undefined}
+              onDelete={canManage ? () => setDialog({ kind: "delete", row: s }) : undefined}
+            />
           ))}
         </div>
       )}
@@ -192,29 +238,109 @@ export function ClassSessions() {
           <SessionForm courses={courses} onClose={() => setOpen(false)} />
         </Modal>
       )}
+
+      {dialog?.kind === "edit" && (
+        <Modal
+          title="Edit Session"
+          subtitle={dialog.row.courseTitle}
+          onClose={() => setDialog(null)}
+        >
+          <SessionForm
+            courses={courses}
+            existing={dialog.row}
+            onClose={() => setDialog(null)}
+          />
+        </Modal>
+      )}
+
+      {dialog?.kind === "delete" && (
+        <Modal title="Delete Session" onClose={() => setDialog(null)} width="max-w-md">
+          <DeleteSession row={dialog.row} onClose={() => setDialog(null)} />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Taslak oturumu siler. Katılımcı kayıtları da gider — oturum olmadan
+ * anlamları kalmaz. Yalnızca DRAFT'ta çağrılır; açık ya da kapanmış oturumda
+ * silme düğmesi hiç görünmez.
+ */
+function DeleteSession({ row, onClose }: { row: Session; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function remove() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const at = await getDocs(collection(db, "classSessions", row.id, "attendees"));
+      await Promise.all(at.docs.map((d) => deleteDoc(d.ref)));
+      await deleteDoc(doc(db, "classSessions", row.id));
+      onClose();
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <p className="text-[13px] text-slate-700">
+        Delete <b>{row.courseTitle}</b> ({dmy(row.startDate)})?
+      </p>
+      <p className="text-[11.5px] text-slate-500 mt-1.5">
+        This session is still a draft — no certificate has been issued. Any attendance records
+        collected so far are deleted with it.
+      </p>
+      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={remove} disabled={busy} className="btn-primary text-xs py-2">
+          {busy ? "Deleting…" : "Delete Session"}
+        </button>
+        <button onClick={onClose} className="btn-secondary text-xs py-2">
+          Cancel
+        </button>
+        {err && <span className="text-xs text-brand-700">{err}</span>}
+      </div>
     </div>
   );
 }
 
 function SessionForm({
   courses,
+  existing,
   onClose,
 }: {
   courses: { id: string; title: string; durationHours?: number | null }[];
+  /** Verilirse düzenleme kipi — yalnızca DRAFT oturumlarda açılır. */
+  existing?: Session | null;
   onClose: () => void;
 }) {
   const { profile } = useAuth();
-  const [courseId, setCourseId] = useState("");
-  const [instructorName, setInstructorName] = useState(profile?.name ?? "");
-  const [location, setLocation] = useState("İSTANBUL");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [durationHours, setDurationHours] = useState("");
+  // "OTHER": sistemde kursu olmayan bir eğitim; adı elle yazılır.
+  const [courseId, setCourseId] = useState(
+    existing ? (existing.courseId ?? "OTHER") : ""
+  );
+  const [otherTitle, setOtherTitle] = useState(
+    existing && !existing.courseId ? existing.courseTitle : ""
+  );
+  const [instructorName, setInstructorName] = useState(
+    existing?.instructorName ?? profile?.name ?? ""
+  );
+  const [location, setLocation] = useState(existing?.location ?? "İSTANBUL");
+  const [startDate, setStartDate] = useState(existing?.startDate ?? "");
+  const [endDate, setEndDate] = useState(existing?.endDate ?? "");
+  const [durationHours, setDurationHours] = useState(
+    existing?.durationHours != null ? String(existing.durationHours) : ""
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const course = courses.find((c) => c.id === courseId);
-  const canSubmit = !!courseId && !!startDate;
+  const other = courseId === "OTHER";
+  const course = other ? undefined : courses.find((c) => c.id === courseId);
+  const title = other ? otherTitle.trim() : course?.title ?? "";
+  const canSubmit = !!courseId && !!startDate && (!other || !!otherTitle.trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -222,18 +348,31 @@ function SessionForm({
     setBusy(true);
     setErr(null);
     try {
-      await addDoc(collection(db, "classSessions"), {
-        courseId,
-        courseTitle: course?.title ?? "",
+      const payload = {
+        // Sistemde kursu olmayan eğitimde courseId boş kalır: sertifika yine
+        // üretilir ama hiçbir kursun atamasını kapatmaz — kapatacak bir kurs
+        // yok, uydurmak yanlış olurdu.
+        courseId: other ? null : courseId,
+        courseTitle: title,
         instructorName: instructorName.trim() || null,
         location: location.trim() || null,
         startDate,
         endDate: endDate || startDate,
         durationHours: durationHours ? Number(durationHours) : course?.durationHours ?? null,
-        status: "DRAFT",
-        createdById: profile?.uid ?? null,
-        createdAt: serverTimestamp(),
-      });
+      };
+      if (existing) {
+        await updateDoc(doc(db, "classSessions", existing.id), {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await addDoc(collection(db, "classSessions"), {
+          ...payload,
+          status: "DRAFT",
+          createdById: profile?.uid ?? null,
+          createdAt: serverTimestamp(),
+        });
+      }
       onClose();
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -262,7 +401,23 @@ function SessionForm({
                 {c.title}
               </option>
             ))}
+            <option value="OTHER">Other — type the training name</option>
           </select>
+          {other && (
+            <>
+              <input
+                className="input mt-2"
+                value={otherTitle}
+                onChange={(e) => setOtherTitle(e.target.value)}
+                placeholder="e.g. CL-604/605 PRE&POST FLIGHT TRAINING"
+                autoFocus
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                Not linked to a course — certificates are still issued, but no training
+                assignment is closed.
+              </p>
+            </>
+          )}
         </div>
         <div>
           <label className="label">Instructor</label>
@@ -323,7 +478,7 @@ function SessionForm({
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
         <button type="submit" disabled={busy || !canSubmit} className="btn-primary text-xs py-2">
-          {busy ? "Creating…" : "Create Session"}
+          {busy ? "Saving…" : existing ? "Save Changes" : "Create Session"}
         </button>
         <button type="button" onClick={onClose} className="btn-secondary text-xs py-2">
           Cancel
