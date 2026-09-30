@@ -98,7 +98,7 @@ export function ScormPlayer({
     };
 
     /**
-     * Yazma her LMSSetValue'da değil, kısa bir gecikmeyle yapılır: paketler
+     * Yazma her LMSSetValue-da değil, 250 ms gecikmeyle yapılır: paketler
      * sayfa geçişinde arka arkaya onlarca değer yazıyor.
      */
     let saveTimer: number | null = null;
@@ -112,7 +112,7 @@ export function ScormPlayer({
           { userId: profile.uid, cmi, updatedAt: serverTimestamp() },
           { merge: true }
         ).catch(() => {});
-      }, 800);
+      }, 250);
     };
 
     function markIfDone(value: string) {

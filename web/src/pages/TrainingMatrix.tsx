@@ -18,6 +18,7 @@ import {
 } from "../lib/methods";
 import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
+import { FilePreview } from "../components/FilePreview";
 
 /**
  * Training Follow-Up Form — personel × eğitim matrisi.
@@ -148,6 +149,7 @@ export function TrainingMatrix() {
   const [record, setRecord] = useState<{ user: UserRow; course: CourseRow } | null>(null);
   /** Düzenlenecek dış kaydın id.si — detay kartındaki "Edit record" açar. */
   const [editId, setEditId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -615,7 +617,11 @@ export function TrainingMatrix() {
                                 <span className="hidden group-hover:inline">+ add</span>
                               </button>
                             ) : (
-                              <Cell state={st} />
+                              <Cell
+                                state={st}
+                                title={`${u.name} · ${c.title}`}
+                                onPreview={(url, t) => setPreview({ url, title: t })}
+                              />
                             )}
                           </td>
                         );
@@ -642,6 +648,10 @@ export function TrainingMatrix() {
           at={hover.at}
           onEnter={hover.holdOpen}
           onLeave={hover.closeNow}
+          onPreviewFile={(url, title) => {
+            hover.closeNow();
+            setPreview({ url, title });
+          }}
           onEditRecord={
             canRecordFor(hover.at.user)
               ? (id) => {
@@ -698,6 +708,14 @@ export function TrainingMatrix() {
             onCancel={() => setEditId(null)}
           />
         </Modal>
+      )}
+
+      {preview && (
+        <FilePreview
+          url={preview.url}
+          title={preview.title}
+          onClose={() => setPreview(null)}
+        />
       )}
 
       {toast && (
@@ -797,11 +815,13 @@ function CellDetail({
   onEnter,
   onLeave,
   onEditRecord,
+  onPreviewFile,
 }: {
   at: HoverState;
   onEnter: () => void;
   onLeave: () => void;
   onEditRecord?: (externalId: string) => void;
+  onPreviewFile?: (url: string, title: string) => void;
 }) {
   const { user, course, state, rect } = at;
   const W = 260;
@@ -862,14 +882,12 @@ function CellDetail({
                     hücre kayıt ekleme düğmesi olduğu için hücreye tıklayarak
                     belgeye ulaşmak mümkün değil. */}
                 {r.url ? (
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    onClick={() => onPreviewFile?.(r.url!, `${course.title} · ${r.method}`)}
                     className={`text-right min-w-0 underline decoration-slate-300 hover:decoration-brand-500 ${tone}`}
                   >
                     {text} ↗
-                  </a>
+                  </button>
                 ) : (
                   <span className={`text-right min-w-0 ${tone}`}>{text}</span>
                 )}
@@ -976,7 +994,15 @@ function Swatch({ color, label }: { color: string; label: string }) {
  * Tamamlanmış hücre belgesine bağlıdır — iç sertifika sistemdeki sertifika
  * sayfasına, dış sertifika yüklenen dosyaya gider.
  */
-function Cell({ state }: { state: CellState }) {
+function Cell({
+  state,
+  title,
+  onPreview,
+}: {
+  state: CellState;
+  title?: string;
+  onPreview?: (url: string, title: string) => void;
+}) {
   // "N/A" açıkça yazılır: nokta, hücrenin boş kaldığı mı yoksa gerekli
   // olmadığı mı belirsiz bırakıyordu.
   if (state.kind === "NA")
@@ -1013,16 +1039,15 @@ function Cell({ state }: { state: CellState }) {
       </Link>
     );
   }
-  if (state.externalUrl) {
+  // Belge yeni sekmede değil, uygulamanın içinde açılır.
+  if (state.externalUrl && onPreview) {
     return (
-      <a
-        href={state.externalUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="block tabular-nums hover:underline"
+      <button
+        onClick={() => onPreview(state.externalUrl!, title ?? "")}
+        className="block w-full tabular-nums hover:underline"
       >
         {body}
-      </a>
+      </button>
     );
   }
   return (

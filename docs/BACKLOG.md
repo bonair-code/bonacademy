@@ -1138,7 +1138,7 @@ eğitime baştan başlıyordu. Artık `assignments/{id}/scorm/{contentId}` altı
 saklanıyor (`userId` + `cmi`), kural zaten bu yolu kişinin kendisine açıyordu.
 
 - Yazma `LMSSetValue`, `LMSCommit`, `LMSFinish`/`Terminate` üzerinden, 800 ms
-  gecikmeli — paketler sayfa geçişinde arka arkaya onlarca değer yazıyor.
+  gecikmeli (250 ms) — paketler sayfa geçişinde arka arkaya onlarca değer yazıyor.
   Bileşen sökülürken bekleyen yazma hemen gönderiliyor.
 - Okuma iframe basılmadan ÖNCE: paket `LMSInitialize` sırasında
   `lesson_location` / `suspend_data` okuyor, sonradan yüklemek işe yaramaz.

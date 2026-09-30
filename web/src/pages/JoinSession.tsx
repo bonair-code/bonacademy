@@ -27,7 +27,19 @@ export function JoinSession() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<Session | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "missing">("loading");
-  const [fullName, setFullName] = useState("");
+  /**
+   * Ad ve soyad AYRI alınır: tek kutuda "talha duygu" ile "Duygu Talha"
+   * ayırt edilemiyor, personel eşleştirmesi de bu yüzden şaşıyordu.
+   * Her ikisi de Türkçe kurallarıyla BÜYÜK harfe çevrilip saklanır
+   * (i→İ); sertifikada da böyle basılıyor.
+   */
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const fullName = [firstName, lastName]
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .join(" ")
+    .toLocaleUpperCase("tr");
   const [birthPlace, setBirthPlace] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [busy, setBusy] = useState(false);
@@ -48,13 +60,15 @@ export function JoinSession() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!sessionId || !fullName.trim()) return;
+    if (!sessionId || !firstName.trim() || !lastName.trim()) return;
     setBusy(true);
     setErr(null);
     try {
       await addDoc(collection(db, "classSessions", sessionId, "attendees"), {
-        fullName: fullName.trim(),
-        birthPlace: birthPlace.trim() || null,
+        fullName,
+        firstName: firstName.trim().toLocaleUpperCase("tr"),
+        lastName: lastName.trim().toLocaleUpperCase("tr"),
+        birthPlace: birthPlace.trim().toLocaleUpperCase("tr") || null,
         birthDate: birthDate || null,
         // Personel eşleşmesi SUNUCUDA, sınıf kapatılırken ada göre yapılır.
         // Bu form girişsiz açıldığı için buradan `users` okunamıyor; eskiden
@@ -138,20 +152,33 @@ export function JoinSession() {
                 </p>
 
                 <form onSubmit={submit}>
-                  <label className="label">Full Name *</label>
-                  <input
-                    className="input mb-3"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Ad Soyad"
-                    autoFocus
-                  />
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <label className="label">First Name *</label>
+                      <input
+                        className="input uppercase"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="TALHA"
+                        autoFocus
+                      />
+                    </div>
+                    <div>
+                      <label className="label">Surname *</label>
+                      <input
+                        className="input uppercase"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="DUYGU"
+                      />
+                    </div>
+                  </div>
                   <label className="label">Place of Birth</label>
                   <input
-                    className="input mb-3"
+                    className="input mb-3 uppercase"
                     value={birthPlace}
                     onChange={(e) => setBirthPlace(e.target.value)}
-                    placeholder="İstanbul"
+                    placeholder="İSTANBUL"
                   />
                   <label className="label">Date of Birth</label>
                   <input
@@ -171,7 +198,7 @@ export function JoinSession() {
                   )}
                   <button
                     type="submit"
-                    disabled={busy || !fullName.trim()}
+                    disabled={busy || !firstName.trim() || !lastName.trim()}
                     className="btn-primary w-full"
                   >
                     {busy ? "Signing in…" : "Sign In to Attendance"}

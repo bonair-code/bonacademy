@@ -44,6 +44,8 @@ type Attendee = {
   birthDate?: string | null;
   email?: string | null;
   userId?: string | null;
+  /** Otomatik eşleştirme bir kez denendi mi — elle seçimi ezmemek için. */
+  matchChecked?: boolean;
   certificateNo?: string | null;
   signedAt?: Timestamp | null;
 };
@@ -501,6 +503,8 @@ export function ClassSessionDetail() {
   const [toast, setToast] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [confirmFinish, setConfirmFinish] = useState(false);
+  /** Personel listesi — katılımcıyı sistemdeki kişiyle eşleştirmek için. */
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
   const printRef = useRef<HTMLDivElement>(null);
 
   const joinUrl = useMemo(
@@ -520,11 +524,54 @@ export function ClassSessionDetail() {
       (s) => setAttendees(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))),
       (e) => setErr(e.message)
     );
+    // QR formu girişsiz açıldığı için orada `users` okunamıyor; eşleştirme
+    // ancak burada, eğitmen/admin oturumunda yapılabiliyor.
+    const u3 = onSnapshot(collection(db, "users"), (s) =>
+      setStaff(
+        s.docs
+          .map((d) => ({ id: d.id, name: String((d.data() as any).name ?? "") }))
+          .filter((u) => u.name)
+      )
+    );
     return () => {
       u1();
       u2();
+      u3();
     };
   }, [sessionId]);
+
+  /**
+   * Ada göre otomatik eşleştirme. Yalnızca TEK aday varsa yazılır — iki
+   * "Mehmet Yılmaz" varsa sistem seçim yapmaz, eğitmen listeden seçer.
+   * Yazıldığı anda sertifika o kişiye bağlanır ve Follow-Up hücresi dolar.
+   */
+  useEffect(() => {
+    if (!sessionId || staff.length === 0) return;
+    const key = (x: string) =>
+      x.toLocaleLowerCase("tr").replace(/s+/g, " ").trim();
+    const byName = new Map<string, string[]>();
+    for (const u of staff) {
+      const k = key(u.name);
+      byName.set(k, [...(byName.get(k) ?? []), u.id]);
+      // "Soyad Ad" yazılmış olabilir; tersi de denenir.
+      const parts = key(u.name).split(" ");
+      if (parts.length === 2) {
+        const rev = parts[1] + " " + parts[0];
+        byName.set(rev, [...(byName.get(rev) ?? []), u.id]);
+      }
+    }
+    for (const a of attendees) {
+      if (a.userId || a.matchChecked) continue;
+      const hit = byName.get(key(a.fullName ?? ""));
+      const id = hit && hit.length === 1 ? hit[0] : null;
+      void updateDoc(doc(db, "classSessions", sessionId, "attendees", a.id), {
+        userId: id,
+        // Bir kez denendiğini işaretle: eğitmen "Not staff" seçtiyse
+        // otomatik eşleştirme onu tekrar ezmesin.
+        matchChecked: true,
+      }).catch(() => {});
+    }
+  }, [attendees, staff, sessionId]);
 
   useEffect(() => {
     if (!joinUrl) return;
@@ -683,13 +730,37 @@ export function ClassSessionDetail() {
                     <td className="td font-semibold text-slate-900">{a.fullName}</td>
                     <td className="td text-slate-500">{a.birthPlace || "—"}</td>
                     <td className="td tabular-nums text-slate-500">{dmy(a.birthDate)}</td>
+                    {/* Eşleşme görünür ve düzeltilebilir: yanlış kişiye
+                        sertifika bağlamak, eksik bırakmaktan kötü. */}
                     <td className="td">
-                      {a.userId ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 bg-emerald-50 text-emerald-700 ring-emerald-200">
-                          Matched
-                        </span>
+                      {isClosed ? (
+                        a.userId ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 bg-emerald-50 text-emerald-700 ring-emerald-200">
+                            {staff.find((u) => u.id === a.userId)?.name ?? "Matched"}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-400">External</span>
+                        )
                       ) : (
-                        <span className="text-[11px] text-slate-400">External</span>
+                        <select
+                          className={`input !py-1 !text-[11.5px] !w-44 ${
+                            a.userId ? "" : "text-slate-400"
+                          }`}
+                          value={a.userId ?? ""}
+                          onChange={(e) =>
+                            void updateDoc(
+                              doc(db, "classSessions", sessionId!, "attendees", a.id),
+                              { userId: e.target.value || null, matchChecked: true }
+                            )
+                          }
+                        >
+                          <option value="">Not staff — external</option>
+                          {staff.map((u) => (
+                            <option key={u.id} value={u.id}>
+                              {u.name}
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </td>
                     <td className="td tabular-nums font-semibold text-brand-700">
