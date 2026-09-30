@@ -894,10 +894,18 @@ iSpring paketi 200 dönüyor.
 kalıntıydı). Beyaz başlık, ince ayraç, yuvarlak kapatma düğmesi. Bu değişiklik
 sistemdeki BÜTÜN formlara yansıyor.
 
-`ExternalCertForm` A düzenine geçti: alanlar Training · Dates · Document
-gruplarına ayrıldı, aralarında saç teli çizgi; düğmeler pencerenin dibindeki
-şeritte (negatif kenar boşluklarıyla tam genişlik), birincil sağda. Şeridin
-solunda neyin eksik olduğu yazıyor.
+`ExternalCertForm` iki adıma bölündü (kullanıcı kararı; tek sayfa düzeni
+karışık bulundu):
+
+1. **Bilgiler** — alanlar tek sütunda alt alta: eğitim adı, veren kurum,
+   alınma tarihi, süre, geçerlilik. Kurs önceden seçilmemişse en üstte
+   "Counts As" kutusu.
+2. **Belge** — sürükle-bırak ya da tıklayıp seç; kâğıt kaydı için onay
+   kutusu; sertifika no ve not.
+
+Alan altlarındaki açıklama notları kaldırıldı — ekranı kalabalıklaştırıyordu.
+Yalnızca gerçek uyarı kaldı (kursa bağlanmayan kayıt eksiği kapatmaz).
+Düğmeler pencerenin dibindeki şeritte, birincil sağda.
 
 ### Düzeltilen belirsizlik
 "Valid Until" ile "Or fill it from a period" **aynı değeri iki ayrı yerden**

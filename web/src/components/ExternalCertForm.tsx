@@ -122,6 +122,8 @@ export function ExternalCertForm({
    * açıyordu; işaretlenirse belge istenmez, kayıt kâğıt olarak etiketlenir.
    */
   const [paperOnly, setPaperOnly] = useState(!!existing?.paperOnly);
+  const [step, setStep] = useState<1 | 2>(1);
+  const [dragging, setDragging] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -217,179 +219,193 @@ export function ExternalCertForm({
     }
   }
 
+  /** Belge adımında sürükle-bırak. */
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    if (paperOnly) return;
+    const f = e.dataTransfer.files?.[0];
+    if (f) setFile(f);
+  }
+
+  const step1Ready = !!title.trim() && !!provider.trim() && !!completed;
+
   return (
     <form onSubmit={submit}>
-      {course ? (
-        <p className="text-[11px] text-slate-500 mb-3 rounded-md bg-slate-50 border border-slate-200 px-2.5 py-2">
-          This record counts as <b className="text-slate-700">{course.title}</b> — once saved,{" "}
-          {user.name} is no longer shown as missing it.
-        </p>
+      {/* Adım göstergesi */}
+      <div className="flex gap-1.5 mb-4">
+        {[1, 2].map((n) => (
+          <span
+            key={n}
+            className={`h-[3px] flex-1 rounded-full ${step >= n ? "bg-brand-600" : "bg-slate-200"}`}
+          />
+        ))}
+      </div>
+
+      {step === 1 ? (
+        <div className="space-y-3.5">
+          {/* Kurs önceden seçilmediyse neyin yerine geçeceği sorulmalı —
+              bağlanmayan kayıt hiçbir eksiği kapatmaz. */}
+          {!course && (
+            <div>
+              <label className="label">Counts As</label>
+              <select
+                className="input"
+                value={courseId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setCourseId(id);
+                  const c = courses.find((x) => x.id === id);
+                  if (c) {
+                    if (!title.trim()) setTitle(c.title);
+                    applyValidity(validityFromCourse(c));
+                  }
+                }}
+              >
+                <option value="">— None, track separately —</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+              {!courseId && (
+                <p className="text-[10.5px] text-amber-700 font-medium mt-1">
+                  Not linked to a course — it will not close any training gap.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label className="label">Training Name</label>
+            <input
+              className="input"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. B737 MAX Type Training"
+            />
+          </div>
+
+          <div>
+            <label className="label">Training Provider</label>
+            <input
+              className="input"
+              value={provider}
+              onChange={(e) => setProvider(e.target.value)}
+              placeholder="e.g. Turkish Technic, Boeing"
+            />
+          </div>
+
+          <div>
+            <label className="label">Completion Date</label>
+            <input
+              className="input"
+              type="date"
+              value={completed}
+              onChange={(e) => {
+                setCompleted(e.target.value);
+                applyValidity(validity, e.target.value);
+              }}
+            />
+          </div>
+
+          <div>
+            <label className="label">Duration (hours)</label>
+            <input
+              className="input"
+              type="number"
+              min={0}
+              step={0.5}
+              value={durationHours}
+              onChange={(e) => setDurationHours(e.target.value)}
+              placeholder="optional"
+            />
+          </div>
+
+          <div>
+            <label className="label">Validity</label>
+            <div className="inline-flex w-full bg-slate-100 rounded-[9px] p-0.5">
+              {VALIDITY_CHOICES.map((v) => (
+                <button
+                  key={v.key}
+                  type="button"
+                  onClick={() => applyValidity(v.key)}
+                  className={`flex-1 text-[11.5px] font-semibold px-2 py-1.5 rounded-[7px] transition ${
+                    validity === v.key
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+            {validity === "CUSTOM" && (
+              <input
+                className="input mt-2"
+                type="date"
+                value={validUntil}
+                onChange={(e) => setValidUntil(e.target.value)}
+              />
+            )}
+          </div>
+        </div>
       ) : (
-        <div className="mb-3">
-          <label className="label">Counts As (internal course)</label>
-          <select
-            className="input"
-            value={courseId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setCourseId(id);
-              const c = courses.find((x) => x.id === id);
-              if (c) {
-                if (!title.trim()) setTitle(c.title);
-                // Geçerliliği kursun kendi periyodundan öner.
-                applyValidity(validityFromCourse(c));
-              }
+        <div className="space-y-3.5">
+          {/* Belge: sürükle-bırak ya da seç. */}
+          <div
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!paperOnly) setDragging(true);
             }}
-          >
-            <option value="">— None, track separately —</option>
-            {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-              </option>
-            ))}
-          </select>
-          <p
-            className={`text-[10px] mt-1 ${
-              courseId ? "text-emerald-700" : "text-amber-700 font-medium"
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            onClick={() => !paperOnly && fileRef.current?.click()}
+            className={`rounded-xl border-[1.5px] border-dashed px-4 py-7 text-center transition ${
+              paperOnly
+                ? "border-slate-200 bg-slate-50 cursor-not-allowed"
+                : dragging
+                ? "border-brand-500 bg-brand-50/60 cursor-pointer"
+                : "border-slate-300 hover:border-slate-400 cursor-pointer"
             }`}
           >
-            {courseId
-              ? `Counts as this course — ${user.name} will no longer be shown as missing it.`
-              : "Not linked to a course — it will be stored but will not close any training gap."}
-          </p>
-        </div>
-      )}
-
-      <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 mb-2">
-        Training
-      </p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <label className="label">Training Name</label>
-          <input
-            className="input"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="e.g. B737 MAX Type Training"
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label">Training Provider</label>
-          <input
-            className="input"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            placeholder="e.g. Turkish Technic, Boeing"
-          />
-        </div>
-
-        <div className="sm:col-span-2 border-t border-slate-100 pt-3 -mb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400">
-            Dates
-          </p>
-        </div>
-
-        <div>
-          <label className="label">Completion Date</label>
-          <input
-            className="input"
-            type="date"
-            value={completed}
-            onChange={(e) => {
-              setCompleted(e.target.value);
-              applyValidity(validity, e.target.value);
-            }}
-          />
-        </div>
-        <div>
-          <label className="label">Duration (hours)</label>
-          <input
-            className="input"
-            type="number"
-            min={0}
-            step={0.5}
-            value={durationHours}
-            onChange={(e) => setDurationHours(e.target.value)}
-            placeholder="optional"
-          />
-        </div>
-
-        {/* Geçerlilik TEK kontrol. Eskiden "Valid Until" ile "Or fill it from
-            a period" aynı değeri iki ayrı yerden dolduruyordu ve hangisinin
-            kazandığı belli değildi. */}
-        <div className="sm:col-span-2">
-          <label className="label">Validity</label>
-          <div className="inline-flex w-full bg-slate-100 rounded-[9px] p-0.5">
-            {VALIDITY_CHOICES.map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                onClick={() => applyValidity(v.key)}
-                className={`flex-1 text-[11.5px] font-semibold px-2 py-1.5 rounded-[7px] transition ${
-                  validity === v.key
-                    ? "bg-white text-slate-900 shadow-sm"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {v.label}
-              </button>
-            ))}
+            {paperOnly ? (
+              <p className="text-[12.5px] text-slate-400">
+                No digital copy — the original stays in the personnel file.
+              </p>
+            ) : file ? (
+              <>
+                <p className="text-[13px] font-semibold text-slate-900">{file.name}</p>
+                <p className="text-[11.5px] text-slate-500 mt-0.5">
+                  {(file.size / 1024 / 1024).toFixed(1)} MB · click to replace
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] font-semibold text-slate-900">
+                  Drop the certificate here
+                </p>
+                <p className="text-[11.5px] text-slate-500 mt-0.5">
+                  or click to choose a PDF or image
+                </p>
+                {editing && (
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Leave empty to keep the current file.
+                  </p>
+                )}
+              </>
+            )}
           </div>
-          {validity === "CUSTOM" ? (
-            <input
-              className="input mt-2"
-              type="date"
-              value={validUntil}
-              onChange={(e) => setValidUntil(e.target.value)}
-            />
-          ) : (
-            <p className="text-[10px] text-slate-400 mt-1">
-              {validity === "NONE"
-                ? "No expiry tracked for this record."
-                : validUntil
-                ? `Expires ${validUntil.split("-").reverse().join(".")} — counted from the completion date.`
-                : "Enter the completion date and the expiry is worked out from it."}
-            </p>
-          )}
-        </div>
-
-        <div className="sm:col-span-2 border-t border-slate-100 pt-3 -mb-1">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400">
-            Document
-          </p>
-        </div>
-
-        <div>
-          <label className="label">Their Certificate No</label>
-          <input
-            className="input"
-            value={serialNo}
-            onChange={(e) => setSerialNo(e.target.value)}
-            placeholder="optional"
-          />
-        </div>
-        <div>
-          <label className="label">
-            Certificate Document{editing || paperOnly ? "" : " *"}
-          </label>
           <input
             ref={fileRef}
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
-            disabled={paperOnly}
+            className="hidden"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-semibold hover:file:bg-slate-200 disabled:opacity-40"
           />
-          <p className="text-[10px] text-slate-400 mt-1">
-            {paperOnly
-              ? "No digital copy — the original stays in the personnel file."
-              : file
-              ? file.name
-              : editing
-              ? "Keeping the current file — pick one to replace it."
-              : "PDF or image — required."}
-          </p>
-          <label className="flex items-center gap-2 mt-2 text-[11px] text-slate-600 cursor-pointer">
+
+          <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
             <input
               type="checkbox"
               checked={paperOnly}
@@ -404,44 +420,62 @@ export function ExternalCertForm({
             />
             Original held on paper — no digital copy
           </label>
-        </div>
 
-        <div className="sm:col-span-2">
-          <label className="label">Notes</label>
-          <input
-            className="input"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="optional"
-          />
-        </div>
-      </div>
+          <div>
+            <label className="label">Their Certificate No</label>
+            <input
+              className="input"
+              value={serialNo}
+              onChange={(e) => setSerialNo(e.target.value)}
+              placeholder="optional"
+            />
+          </div>
 
-      {/* Alt şerit pencerenin dibine yapışır: form ne kadar uzarsa uzasın
-          Kaydet hep aynı yerde. Negatif kenar boşlukları Modal'ın iç
-          dolgusunu aşıp şeridi tam genişliğe yayar. */}
+          <div>
+            <label className="label">Notes</label>
+            <input
+              className="input"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="optional"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Alt şerit pencerenin dibinde; birincil düğme hep sağda. */}
       <div className="-mx-[18px] -mb-[18px] mt-5 px-[18px] py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
-        {err ? (
-          <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>
+        {err && <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>}
+        {!err && <span className="text-[11.5px] text-slate-400 mr-auto">Step {step} of 2</span>}
+
+        {step === 1 ? (
+          <>
+            <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              disabled={!step1Ready}
+              className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          </>
         ) : (
-          <span className="text-[11.5px] text-slate-400 mr-auto">
-            {canSubmit
-              ? "Ready to save."
-              : editing
-              ? "Fill in the training name, provider and date."
-              : "Training name, provider, date and a document are required."}
-          </span>
+          <>
+            <button type="button" onClick={() => setStep(1)} className="btn-secondary text-xs py-2">
+              ← Back
+            </button>
+            <button
+              type="submit"
+              disabled={busy || !canSubmit}
+              className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {busy ? "Saving…" : "Save Record"}
+            </button>
+          </>
         )}
-        <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
-          Cancel
-        </button>
-        <button
-          type="submit"
-          disabled={busy || !canSubmit}
-          className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          {busy ? "Saving…" : "Save Record"}
-        </button>
       </div>
     </form>
   );
