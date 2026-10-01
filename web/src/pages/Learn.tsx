@@ -187,6 +187,8 @@ export function Learn() {
   const [langBusy, setLangBusy] = useState(false);
   /** Onay bekleyen dil değişikliği. */
   const [langAsk, setLangAsk] = useState<Lang | null>(null);
+  /** Hangi bayrağa basıldı — yükleme göstergesi yalnızca onun üstünde. */
+  const [langPicked, setLangPicked] = useState<Lang | null>(null);
 
   async function switchLang(next: Lang) {
     // Aynı dili seçmek de bir SEÇİMDİR: kapı "hangi dilde alacaksın" diye
@@ -290,16 +292,29 @@ export function Learn() {
                 key={l}
                 type="button"
                 disabled={langBusy}
-                onClick={() => void switchLang(l)}
-                className="flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 px-6 py-4 hover:border-brand-500 hover:bg-brand-50/30 transition disabled:opacity-40"
+                onClick={() => {
+                  setLangPicked(l);
+                  void switchLang(l);
+                }}
+                className="relative flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 px-6 py-4 hover:border-brand-500 hover:bg-brand-50/30 transition disabled:opacity-60"
               >
                 <Flag lang={l} size={44} />
                 <span className="text-[13px] font-semibold text-slate-700">{LANG_LABEL[l]}</span>
+                {/* Seçim sunucuya gidip atamayı güncelliyor ve bölümler
+                    yeniden okunuyor; o bir saniyede ekran donmuş gibi
+                    görünüyordu. */}
+                {langBusy && langPicked === l && (
+                  <span className="absolute inset-0 grid place-items-center rounded-xl bg-white/70">
+                    <Spinner />
+                  </span>
+                )}
               </button>
             ))}
           </div>
           <p className="text-[11px] text-slate-400 mt-4">
-            You can change it later; progress is kept separately for each language.
+            {langBusy
+              ? "Preparing your training…"
+              : "You can change it later; progress is kept separately for each language."}
           </p>
         </div>
       ) : (
@@ -354,7 +369,14 @@ export function Learn() {
               disabled={langBusy}
               className="btn-primary text-xs py-2 disabled:opacity-40"
             >
-              {langBusy ? "Switching…" : `Switch to ${LANG_LABEL[langAsk]}`}
+              {langBusy ? (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner />
+                  Switching…
+                </span>
+              ) : (
+                `Switch to ${LANG_LABEL[langAsk]}`
+              )}
             </button>
             <button onClick={() => setLangAsk(null)} className="btn-secondary text-xs py-2">
               Cancel
@@ -637,6 +659,22 @@ export function Learn() {
  * ileriyi okumak serbest. Tamamlama sırası sunucuda korunuyor — okuma sırasını
  * da zorlamanın faydası yoktu, geri dönüp bakmayı imkânsız kılıyordu.
  */
+/** Küçük dönen gösterge — işlem sürerken ekranın donmadığını söyler. */
+function Spinner() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 animate-spin text-brand-600" aria-hidden>
+      <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="3" opacity="0.2" />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function ProgressRail({
   sections,
   done,

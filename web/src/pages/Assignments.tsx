@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { isStaffRole, useAuth } from "../lib/auth";
 import { assignCourses, skipNote } from "../lib/assign";
+import { asLang } from "../lib/lang";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "../lib/firebase";
+import { RowMenu } from "../components/RowMenu";
 import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { PrintButton } from "../components/PrintButton";
@@ -30,6 +34,9 @@ type Assignment = {
   completedAt?: Timestamp | null;
   completedVia?: string | null;
   triggeredBy?: string | null;
+  sectionsDone?: string[];
+  cycleNumber?: number;
+  contentLanguage?: string;
 };
 type UserRow = {
   id: string;
@@ -52,6 +59,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   EXAM_FAILED: { label: "Exam failed", cls: "bg-red-50 text-red-700" },
   COMPLETED: { label: "Completed", cls: "bg-emerald-50 text-emerald-700" },
   EXAM_PASSED: { label: "Completed", cls: "bg-emerald-50 text-emerald-700" },
+  CANCELLED: { label: "Withdrawn", cls: "bg-slate-100 text-slate-500" },
 };
 const isDone = (s: string) => s === "COMPLETED" || s === "EXAM_PASSED";
 
@@ -63,6 +71,8 @@ export function Assignments() {
   const [departments, setDepartments] = useState<Map<string, string>>(new Map());
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** Sıfırlama / geri alma penceresi. */
+  const [act, setAct] = useState<{ kind: "reset" | "cancel"; row: Assignment } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -104,6 +114,41 @@ export function Assignments() {
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
   }, [toast]);
+
+
+  /**
+   * Kurs × dil başına bölüm sayısı — "kaçıncı bölümde" sorusu bunsuz
+   * cevaplanamıyor. Diller ayrı sürüm olduğu için sayım dile göre.
+   */
+  const [secCount, setSecCount] = useState<Record<string, number>>({});
+  const courseIdList = useMemo(
+    () => [...new Set(rows.map((r) => r.courseId))].sort().join(","),
+    [rows]
+  );
+  useEffect(() => {
+    const ids = courseIdList ? courseIdList.split(",") : [];
+    if (ids.length === 0) return;
+    let alive = true;
+    (async () => {
+      const out: Record<string, number> = {};
+      await Promise.all(
+        ids.map(async (cid) => {
+          const snap = await getDocs(collection(db, "courses", cid, "sections"));
+          for (const d of snap.docs) {
+            const k = `${cid}|${asLang((d.data() as { lang?: unknown }).lang)}`;
+            out[k] = (out[k] ?? 0) + 1;
+          }
+        })
+      );
+      if (alive) setSecCount(out);
+    })().catch((e) => {
+      // Sessiz kalınırsa ilerleme sütunu hep "—" görünür ve sebebi anlaşılmaz.
+      if (alive) setErr(`Section counts could not be read: ${(e as Error).message}`);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [courseIdList]);
 
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
 
@@ -258,13 +303,15 @@ export function Assignments() {
                 <th className="th hidden md:table-cell">Assigned</th>
                 <th className="th">Due</th>
                 <th className="th">Status</th>
+                <th className="th">Progress</th>
+                <th className="th w-12 text-right no-print"></th>
                 <th className="th hidden md:table-cell">Completed</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {shown.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-400">
+                  <td colSpan={8} className="p-8 text-center text-slate-400">
                     {rows.length === 0
                       ? "No training has been assigned yet."
                       : "No assignment matches these filters."}
@@ -311,6 +358,58 @@ export function Assignments() {
                         {st.label}
                       </span>
                     </td>
+                    {/* Kişi kaçıncı bölümde — "takılmış mı, ilerliyor mu"
+                        sorusunun cevabı. Durum rozeti bunu söylemiyor. */}
+                    <td className="td">
+                      {(() => {
+                        const total = secCount[`${a.courseId}|${asLang(a.contentLanguage)}`] ?? 0;
+                        const done = a.sectionsDone?.length ?? 0;
+                        if (isDone(a.status))
+                          return <span className="text-[11.5px] text-emerald-700">Finished</span>;
+                        if (a.status === "CANCELLED")
+                          return <span className="text-slate-300">—</span>;
+                        if (total === 0)
+                          return <span className="text-[11.5px] text-slate-400">—</span>;
+                        const pct = Math.round((done / total) * 100);
+                        return (
+                          <span className="inline-flex items-center gap-2 min-w-[108px]">
+                            <span className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                              <span
+                                className="block h-full rounded-full bg-sky-500"
+                                style={{ width: `${pct}%` }}
+                              />
+                            </span>
+                            <span className="text-[11px] tabular-nums text-slate-600 shrink-0">
+                              {done}/{total}
+                            </span>
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="td text-right no-print">
+                      <RowMenu
+                        label={`Actions for ${a.courseTitle}`}
+                        items={[
+                          { label: "Open person", icon: "→", to: `/team/${a.userId}` },
+                          {
+                            label: "Reset training",
+                            icon: "⟲",
+                            onClick: () => setAct({ kind: "reset", row: a }),
+                          },
+                          // Tamamlanmış eğitim geri alınmaz: sertifika verildi.
+                          ...(isDone(a.status) || a.status === "CANCELLED"
+                            ? []
+                            : [
+                                {
+                                  label: "Withdraw assignment",
+                                  icon: "⦸",
+                                  danger: true,
+                                  onClick: () => setAct({ kind: "cancel", row: a }),
+                                },
+                              ]),
+                        ]}
+                      />
+                    </td>
                     <td className="td tabular-nums text-slate-500 hidden md:table-cell">
                       {isDone(a.status) ? (
                         <>
@@ -354,6 +453,28 @@ export function Assignments() {
         </Modal>
       )}
 
+
+      {/* Sıfırla / geri al. İkisi de gerekçe soruyor: eğitim kaydına
+          dokunan her işlemin sebebi yazılı olmalı. */}
+      {act && (
+        <Modal
+          title={act.kind === "reset" ? "Reset training" : "Withdraw assignment"}
+          subtitle={`${userById.get(act.row.userId)?.name ?? ""} · ${act.row.courseTitle}`}
+          onClose={() => setAct(null)}
+          width="max-w-md"
+        >
+          <AssignmentAction
+            row={act.row}
+            kind={act.kind}
+            onDone={(m) => {
+              setToast(m);
+              setAct(null);
+            }}
+            onCancel={() => setAct(null)}
+          />
+        </Modal>
+      )}
+
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl no-print">
           {toast}
@@ -373,6 +494,84 @@ function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
         {n}
       </div>
       <div className="text-[11.5px] text-slate-500 mt-1">{label}</div>
+    </div>
+  );
+}
+
+
+/**
+ * Atamayı sıfırlar ya da geri alır.
+ *
+ * Sıfırlama atamayı SİLMEZ, yeni bir döngüye alır — daha önce verilmiş
+ * sertifika yerinde kalır, yeni tamamlama ayrı belge üretir. Geri alma, hiç
+ * başlanmamışsa kaydı siler; başlanmışsa iptal işaretler, çünkü kişi o
+ * eğitimde zaman geçirmiş.
+ */
+function AssignmentAction({
+  row,
+  kind,
+  onDone,
+  onCancel,
+}: {
+  row: Assignment;
+  kind: "reset" | "cancel";
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const started = (row.sectionsDone?.length ?? 0) > 0 || row.status !== "PENDING";
+
+  async function go() {
+    setBusy(true);
+    setErr(null);
+    try {
+      const fn = kind === "reset" ? "resetAssignment" : "cancelAssignment";
+      await httpsCallable(functions, fn)({ assignmentId: row.id, reason });
+      onDone(
+        kind === "reset"
+          ? `${row.courseTitle} reset — the learner starts again.`
+          : `${row.courseTitle} withdrawn.`
+      );
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      {kind === "reset" ? (
+        <p className="text-sm text-slate-700">
+          Progress is cleared and the person takes this training from the beginning. Any
+          certificate already issued stays on the record — finishing again produces a new one.
+        </p>
+      ) : (
+        <p className="text-sm text-slate-700">
+          {started
+            ? "The assignment is marked withdrawn and stops counting as outstanding. It stays on the record because the person already spent time on it."
+            : "Nothing has been started, so the assignment is removed completely."}
+        </p>
+      )}
+
+      <label className="label mt-4">Reason (optional)</label>
+      <input
+        className="input"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="e.g. assigned by mistake"
+      />
+
+      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={go} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
+          {busy ? "Working…" : kind === "reset" ? "Reset training" : "Withdraw"}
+        </button>
+        <button onClick={onCancel} className="btn-secondary text-xs py-2">
+          Cancel
+        </button>
+        {err && <span className="text-[11.5px] text-brand-700">{err}</span>}
+      </div>
     </div>
   );
 }

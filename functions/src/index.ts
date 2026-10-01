@@ -104,7 +104,8 @@ export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
 
   const uid = String(req.data?.uid || "");
   if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
-  const snap = await getFirestore().doc(`users/${uid}`).get();
+  const db = getFirestore();
+  const snap = await db.doc(`users/${uid}`).get();
   if (!snap.exists) throw new HttpsError("not-found", "User not found.");
 
   const d = req.data || {};
@@ -120,7 +121,30 @@ export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
   if (d.courseMethods !== undefined) patch.courseMethods = sanitizeCourseMethods(d.courseMethods);
   if (typeof d.isActive === "boolean") patch.isActive = d.isActive;
 
+  const oldDept = snap.data()?.departmentId ?? null;
   await snap.ref.update(patch);
+
+  /**
+   * Departman değişince KAYITLAR da güncellenmeli.
+   *
+   * `userDepartmentId` sertifika ve dış eğitim kayıtlarında denormalize
+   * tutuluyor, çünkü müdürün sorgusu bu alana göre daraltılıyor (kapsamsız
+   * sorgu güvenlik kuralınca reddediliyor). Alan eskide kalırsa kişi yeni
+   * departmanında görünür ama eğitim kayıtları görünmez — matris o kişiyi
+   * "hiç eğitim almamış" gösterir. Bu tam olarak bir kez yaşandı.
+   */
+  if (patch.departmentId !== undefined && patch.departmentId !== oldDept) {
+    const want = (patch.departmentId as string | null) ?? null;
+    for (const col of ["certificates", "externalTrainings", "assignments"]) {
+      const rows = await db.collection(col).where("userId", "==", uid).get();
+      for (let i = 0; i < rows.docs.length; i += 400) {
+        const batch = db.batch();
+        for (const r of rows.docs.slice(i, i + 400))
+          batch.update(r.ref, { userDepartmentId: want });
+        await batch.commit();
+      }
+    }
+  }
 
   const role = (patch.role as string) ?? snap.data()?.role ?? "USER";
   const departmentId =
@@ -381,8 +405,19 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
 
     const id = `${userId}_${courseId}`;
     const ref = db.doc(`assignments/${id}`);
-    if ((await ref.get()).exists) {
-      skipped.push({ courseId, reason: "Already assigned." });
+    const existing = await ref.get();
+    if (existing.exists) {
+      // Tamamlanmış bir eğitimi tekrar atamak meşru bir istek (yenileme).
+      // Arayüz bunu ayırt edip "sıfırla ve yeniden ata" diye sorabilsin diye
+      // sebep ayrı veriliyor; sessizce "zaten atanmış" demek yanlıştı.
+      const st = (existing.data() as any)?.status;
+      skipped.push({
+        courseId,
+        reason:
+          st === "COMPLETED" || st === "EXAM_PASSED"
+            ? "Already completed — reset it to assign again."
+            : "Already assigned.",
+      });
       continue; // idempotent
     }
     await ref.set({
@@ -409,6 +444,102 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
   // `skipped` geri dönüyor: arayüz "20 kişiye atadım" deyip 12'sini sessizce
   // atlamasın, sebebini gösterebilsin.
   return { created, skipped };
+});
+
+
+/** Atama işlemleri admin ve eğitmenin: eğitimi veren yönetir. */
+async function assertCanManageAssignments(uid?: string) {
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
+  const r = (await getFirestore().doc(`users/${uid}`).get()).data()?.role;
+  if (r !== "ADMIN" && r !== "INSTRUCTOR")
+    throw new HttpsError("permission-denied", "This action is for admins and instructors.");
+  return r as string;
+}
+
+/**
+ * Atamayı sıfırlar: kişi eğitimi baştan alır.
+ *
+ * Atama dokümanı silinmiyor, YENİ BİR DÖNGÜYE alınıyor (`cycleNumber` artar).
+ * Böylece daha önce verilmiş sertifika yerinde kalıyor — yeni tamamlama ayrı
+ * kimlikli ayrı bir belge üretiyor (bkz. certIdFor). Havacılık kaydında
+ * geçmiş belge silinmez.
+ *
+ * Tamamlanmış bir eğitimi tekrar atamak da buradan geçiyor: "zaten atanmış"
+ * diye engellemek yerine, istenirse yeni döngü açılıyor.
+ */
+export const resetAssignment = onCall({ region: "europe-west3" }, async (req) => {
+  await assertCanManageAssignments(req.auth?.uid);
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  const reason = String(req.data?.reason ?? "").trim();
+
+  const db = getFirestore();
+  const ref = db.doc(`assignments/${assignmentId}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
+  const a = snap.data() as any;
+
+  const rawDue = Number(req.data?.dueDays);
+  const dueDays = Number.isFinite(rawDue) ? Math.min(Math.max(Math.round(rawDue), 1), 365) : 30;
+  const cycle = (Number(a.cycleNumber) || 1) + 1;
+
+  await ref.update({
+    status: "PENDING",
+    cycleNumber: cycle,
+    sectionsDone: [],
+    examAttemptCount: 0,
+    dueDate: Timestamp.fromMillis(Date.now() + dueDays * 24 * 3600 * 1000),
+    startedAt: FieldValue.delete(),
+    completedAt: FieldValue.delete(),
+    completedVia: FieldValue.delete(),
+    resetAt: FieldValue.serverTimestamp(),
+    resetById: req.auth!.uid,
+    resetReason: reason || null,
+  });
+  return { ok: true, cycleNumber: cycle };
+});
+
+/**
+ * Atamayı geri alır.
+ *
+ * Hiç başlanmamışsa doküman siliniyor: ortada korunacak bir öğrenme kaydı yok,
+ * yanlış atanmış bir eğitimin matriste "PLAN" olarak durması yanlış bilgi.
+ * Başlanmışsa siliNMİyor, CANCELLED işaretleniyor — kişi o eğitimde zaman
+ * geçirdi, kayıt kalmalı.
+ *
+ * Tamamlanmış eğitim geri alınamaz: sertifika verildi.
+ */
+export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) => {
+  await assertCanManageAssignments(req.auth?.uid);
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  const reason = String(req.data?.reason ?? "").trim();
+
+  const db = getFirestore();
+  const ref = db.doc(`assignments/${assignmentId}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
+  const a = snap.data() as any;
+
+  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+    throw new HttpsError(
+      "failed-precondition",
+      "A completed training cannot be withdrawn — a certificate was issued. Reset it instead if it must be taken again."
+    );
+
+  const started = (Array.isArray(a.sectionsDone) ? a.sectionsDone.length : 0) > 0 || !!a.startedAt;
+  if (!started) {
+    await ref.delete();
+    return { ok: true, deleted: true };
+  }
+
+  await ref.update({
+    status: "CANCELLED",
+    cancelledAt: FieldValue.serverTimestamp(),
+    cancelledById: req.auth!.uid,
+    cancelReason: reason || null,
+  });
+  return { ok: true, deleted: false };
 });
 
 /**
@@ -551,9 +682,23 @@ async function nextSerialNo(count = 1): Promise<string[]> {
   });
 }
 
+/**
+ * Bir atamanın BU DÖNGÜSÜNÜN sertifika kimliği.
+ *
+ * Atama dokümanı tekrar kullanılıyor (id `{userId}_{courseId}`), dolayısıyla
+ * eğitim yenilenince sertifika da aynı kimliğe yazılsaydı önceki belge
+ * ÜZERİNE yazılırdı. Havacılık kaydında eski sertifika kaybolamaz.
+ *
+ * İlk döngü eski kimliği koruyor ki var olan 247 sertifika yerinde kalsın.
+ */
+function certIdFor(assignmentId: string, cycle: number) {
+  return cycle > 1 ? `${assignmentId}_c${cycle}` : assignmentId;
+}
+
 async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo) {
   const db = getFirestore();
-  const certRef = db.doc(`certificates/${assignmentId}`);
+  const cycle = Number(a.cycleNumber) || 1;
+  const certRef = db.doc(`certificates/${certIdFor(assignmentId, cycle)}`);
   if ((await certRef.get()).exists) return;
   const userSnap = await db.doc(`users/${a.userId}`).get();
   const user = userSnap.data() || {};
@@ -574,6 +719,8 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
   const now = FieldValue.serverTimestamp();
   await certRef.set({
     assignmentId,
+    /** Kaçıncı kez alındığı — aynı eğitimin önceki belgeleri duruyor. */
+    cycleNumber: cycle,
     userId: a.userId,
     userName,
     // Müdürün kendi departmanının sertifikalarını okuyabilmesi için gerekli —
@@ -619,6 +766,8 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
   const { assignmentId, sectionId } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   if (a.status === "COMPLETED") return { status: "COMPLETED" };
+  if (a.status === "CANCELLED")
+    throw new HttpsError("failed-precondition", "This assignment has been withdrawn.");
 
   // Bölümler kişinin aldığı DİLE ait olanlar. Diller ayrı sürüm olduğu için
   // başka dilin bölümünü tamamlamak ilerlemeyi bozardı.
@@ -665,6 +814,8 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId } = req.data || {};
   const { a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  if (a.status === "CANCELLED")
+    throw new HttpsError("failed-precondition", "This assignment has been withdrawn.");
   if (a.status !== "SECTIONS_DONE" && a.status !== "EXAM_FAILED")
     throw new HttpsError("failed-precondition", "Complete every section first.");
 

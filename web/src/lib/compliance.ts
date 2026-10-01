@@ -7,7 +7,7 @@ import { heldMethods, methodBreakdown, methodsOf, worstOf } from "./methods";
 import { isStaffRole, type Role } from "./auth";
 import {
   addValidity,
-  isAssignmentDone,
+  isAssignmentOpen,
   keyOf,
   methodRecordIndex,
   openAssignmentSet,
@@ -137,7 +137,7 @@ export function useCompliance(
     /** (userId, courseId) → o kursun bütün dış kayıtları; metod dökümü için. */
     const methodRecs = methodRecordIndex(externals);
 
-    const openAssignments = assignments.filter((a) => !isAssignmentDone(a.status));
+    const openAssignments = assignments.filter((a) => isAssignmentOpen(a.status));
     const assignedSet = openAssignmentSet(assignments);
     const openByKey = new Map(openAssignments.map((a) => [keyOf(a.userId, a.courseId), a]));
 

@@ -63,6 +63,16 @@ export function expiryOf(
 export const isAssignmentDone = (status?: string | null) =>
   status === "COMPLETED" || status === "EXAM_PASSED";
 
+/** Geri alınmış atama: ne bekliyor ne tamamlandı, hiç olmamış gibi davranılır. */
+export const isAssignmentCancelled = (status?: string | null) => status === "CANCELLED";
+
+/**
+ * Hâlâ kişiden bir şey bekleyen atama. Geri alınan atama matriste "PLAN"
+ * görünmeye devam ederse yanlış bilgi olur.
+ */
+export const isAssignmentOpen = (status?: string | null) =>
+  !isAssignmentDone(status) && !isAssignmentCancelled(status);
+
 /**
  * Açık (tamamlanmamış) atamaların `userId|courseId` kümesi — matriste "PLAN"
  * hücresi, kişi kaydında "Planned" durumu buradan geliyor.
@@ -72,7 +82,7 @@ export function openAssignmentSet(
 ): Set<string> {
   const s = new Set<string>();
   for (const a of assignments) {
-    if (isAssignmentDone(a.status)) continue;
+    if (!isAssignmentOpen(a.status)) continue;
     if (a.userId && a.courseId) s.add(keyOf(a.userId, a.courseId));
   }
   return s;

@@ -19,7 +19,7 @@ import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { FilePreview } from "../components/FilePreview";
 import {
-  isAssignmentDone,
+  isAssignmentOpen,
   daysLeft,
   expiryOf,
   fmt,
@@ -293,7 +293,7 @@ export function TrainingMatrix() {
   const openAssignments = useMemo(() => {
     const m = new Map<string, AssignmentRow>();
     for (const a of assignments) {
-      if (isAssignmentDone(a.status)) continue;
+      if (!isAssignmentOpen(a.status)) continue;
       if (a.userId && a.courseId) m.set(keyOf(a.userId, a.courseId), a);
     }
     return m;

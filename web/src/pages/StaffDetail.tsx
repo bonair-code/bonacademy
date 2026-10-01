@@ -18,7 +18,7 @@ import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { requirementFor } from "../lib/requirements";
-import { DAY, daysLeft, expiryOf, fmt, isAssignmentDone, pickLatest } from "../lib/records";
+import { DAY, daysLeft, expiryOf, fmt, isAssignmentOpen, pickLatest } from "../lib/records";
 import {
   AssignPanel,
   DeleteConfirm,
@@ -154,7 +154,7 @@ export function StaffDetail() {
   // Kişinin ilgili olduğu her kurs: zorunlu olanlar + atanmışlar + tamamlananlar.
   const lines: Line[] = useMemo(() => {
     const assignedIds = new Set(
-      assignments.filter((a) => !isAssignmentDone(a.status)).map((a) => a.courseId)
+      assignments.filter((a) => isAssignmentOpen(a.status)).map((a) => a.courseId)
     );
     // Kazanan kayıt kuralı lib/records.ts'de: aynı kurs için birden fazla
     // kayıt varsa EN SON tamamlanan kazanır.
