@@ -1,6 +1,7 @@
 import { PageHead } from "../components/PageHead";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asLang, LANG_LABEL, publishedLangsOf, type Lang } from "../lib/lang";
+import { certIdForCycle } from "../lib/records";
 import { Flag } from "../components/Flag";
 import { Modal } from "../components/Modal";
 import { CertificateSheet, type Cert } from "../components/CertificateSheet";
@@ -40,6 +41,8 @@ type Assignment = {
   contentLanguage?: Lang;
   /** Kişi dili bizzat seçti mi? Atama açılırken yazılan varsayılandan ayırır. */
   languageChosen?: boolean;
+  /** Kaçıncı kez alınıyor — sertifika kimliği buna bağlı. */
+  cycleNumber?: number;
 };
 
 /** Bölümün ham içerik listesi (eski tek-içerik alanı dahil). */
@@ -159,8 +162,10 @@ export function Learn() {
 
 
   /**
-   * Bu atamanın sertifikası. Sertifika id'si atama id'siyle aynı
-   * (issueCertificateFor böyle yazıyor), o yüzden tek doküman okuması.
+   * Bu atamanın BU DÖNGÜDEKİ sertifikası.
+   *
+   * Yenilemede atama aynı dokümanda kalıyor ama sertifika her döngüde ayrı
+   * kimlikle yazılıyor; atama kimliğiyle okumak hep İLK belgeyi getiriyordu.
    */
   const [certOpen, setCertOpen] = useState(false);
   const [myCert, setMyCert] = useState<Cert | null>(null);
@@ -168,14 +173,14 @@ export function Learn() {
   useEffect(() => {
     if (!certOpen || !id || myCert) return;
     return onSnapshot(
-      doc(db, "certificates", id),
+      doc(db, "certificates", certIdForCycle(id, a?.cycleNumber)),
       (d) => {
         if (d.exists()) setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
         else setCertErr("No certificate has been issued for this training.");
       },
       (e) => setCertErr(e.message)
     );
-  }, [certOpen, id, myCert]);
+  }, [certOpen, id, myCert, a?.cycleNumber]);
 
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;

@@ -1282,8 +1282,10 @@ export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async 
     score: null,
     passingScore: course.exam?.passingScore ?? null,
   });
-  // Sertifikada da izi bırak — denetçi belgeden geriye gidebilsin.
-  await db.doc(`certificates/${assignmentId}`).set(
+  // Sertifikada da izi bırak — denetçi belgeden geriye gidebilsin. Kimlik
+  // DÖNGÜYE göre seçiliyor: düz atama kimliği, yenilenmiş bir eğitimde
+  // ÖNCEKİ döngünün belgesini damgalardı.
+  await db.doc(`certificates/${certIdFor(assignmentId, Number(fresh.cycleNumber) || 1)}`).set(
     { issuedVia: "ADMIN_OVERRIDE", overrideReason: override.overrideReason },
     { merge: true }
   );

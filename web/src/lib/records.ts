@@ -59,6 +59,22 @@ export function expiryOf(
   return addValidity(done.date, course.recurrenceEvery, course.recurrenceUnit);
 }
 
+/**
+ * Bir atamanın BU DÖNGÜSÜNÜN sertifika kimliği.
+ *
+ * Atama dokümanı yenilemede tekrar kullanılıyor (id `{userId}_{courseId}`),
+ * sertifika ise her döngüde ayrı: ilk döngü atama kimliğini kullanıyor,
+ * sonrakiler `_c2`, `_c3` ekliyor. Böylece eski belge üzerine yazılmıyor.
+ *
+ * functions/src/index.ts içindeki `certIdFor` ile AYNI kural — ikisi
+ * ayrışırsa kişiye yanlış sertifika gösterilir. Tam olarak bu oldu: ekran
+ * hep ilk döngünün belgesini okuyordu.
+ */
+export function certIdForCycle(assignmentId: string, cycle?: number | null) {
+  const c = Number(cycle) || 1;
+  return c > 1 ? `${assignmentId}_c${c}` : assignmentId;
+}
+
 /** Tamamlanmış sayılan atama durumları. */
 export const isAssignmentDone = (status?: string | null) =>
   status === "COMPLETED" || status === "EXAM_PASSED";
