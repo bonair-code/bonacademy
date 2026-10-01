@@ -6,13 +6,24 @@ export type OptionLetter = (typeof OPTION_LETTERS)[number];
 
 // Puan sütunu yok: her soru eşit ağırlıkta ve değeri Exam Settings'teki soru
 // sayısından türetiliyor.
-const HEADERS = ["Question", ...OPTION_LETTERS.map((l) => `Option ${l}`), "Correct"];
+//
+// İngilizce sütunlar İSTEĞE BAĞLI ve en sonda: eski şablonla doldurulmuş bir
+// dosya aynen içe aktarılmaya devam eder, sütun yoksa çeviri boş kalır ve
+// sınav asıl metinle sorulur.
+const HEADERS = [
+  "Question",
+  ...OPTION_LETTERS.map((l) => `Option ${l}`),
+  "Correct",
+  "Question (EN)",
+  ...OPTION_LETTERS.map((l) => `Option ${l} (EN)`),
+];
 
 /** İçe aktarılan soru satırı — Firestore'a yazılmadan önceki ara biçim. */
 export type ParsedQuestion = {
   text: string;
+  textEn: string | null;
   points: number;
-  options: { text: string; isCorrect: boolean }[];
+  options: { text: string; textEn: string | null; isCorrect: boolean }[];
 };
 
 export type RowError = { row: number; message: string };
@@ -36,26 +47,38 @@ export function downloadTemplate(courseTitle: string) {
   const wb = XLSX.utils.book_new();
 
   const questions = XLSX.utils.aoa_to_sheet([HEADERS]);
-  questions["!cols"] = [{ wch: 60 }, ...OPTION_LETTERS.map(() => ({ wch: 28 })), { wch: 10 }];
+  questions["!cols"] = [
+    { wch: 60 },
+    ...OPTION_LETTERS.map(() => ({ wch: 28 })),
+    { wch: 10 },
+    { wch: 60 },
+    ...OPTION_LETTERS.map(() => ({ wch: 28 })),
+  ];
   questions["!freeze"] = { xSplit: 0, ySplit: 1 };
   XLSX.utils.book_append_sheet(wb, questions, SHEET_QUESTIONS);
 
   const example = XLSX.utils.aoa_to_sheet([
     HEADERS,
     [
-      "Which document certifies that a part is airworthy?",
+      "Bir parçanın uçuşa elverişli olduğunu hangi belge gösterir?",
       "EASA Form 1",
       "EASA Form 4",
       "Form 19",
       "Form 145",
       "",
       "A",
+      "Which document certifies that a part is airworthy?",
+      "EASA Form 1",
+      "EASA Form 4",
+      "Form 19",
+      "Form 145",
+      "",
     ],
     [
-      "What is the minimum crew rest period after a duty day?",
-      "8 hours",
-      "10 hours",
-      "12 hours",
+      "Görev gününden sonra asgari dinlenme süresi nedir?",
+      "8 saat",
+      "10 saat",
+      "12 saat",
       "",
       "",
       "C",
@@ -74,6 +97,11 @@ export function downloadTemplate(courseTitle: string) {
     ["5. The letter in Correct must point to an option you actually filled."],
     [`6. Do not rename the "${SHEET_QUESTIONS}" sheet or its header row.`],
     [`7. The "${SHEET_EXAMPLE}" sheet is ignored on import — it is only a reference.`],
+    [""],
+    ["English columns are optional. Fill them only if the exam will also be taken"],
+    ["in English. A question with no English text is asked in the original language,"],
+    ["so a half-translated bank still works. Correct is shared — the answer is the"],
+    ["same option in both languages, so there is no second Correct column."],
     [""],
     ["There is no Points column. The exam is scored out of 100 and every question"],
     ["carries equal weight, so each question's value comes from the question count"],
@@ -122,6 +150,7 @@ export async function parseWorkbook(file: File, pointsPer: number): Promise<Pars
     const filled = OPTION_LETTERS.map((l) => ({
       letter: l,
       text: String(raw[`Option ${l}`] ?? "").trim(),
+      textEn: String(raw[`Option ${l} (EN)`] ?? "").trim() || null,
     })).filter((o) => o.text);
 
     if (filled.length < 2) {
@@ -143,8 +172,13 @@ export async function parseWorkbook(file: File, pointsPer: number): Promise<Pars
 
     questions.push({
       text,
+      textEn: String(raw["Question (EN)"] ?? "").trim() || null,
       points: pointsPer,
-      options: filled.map((o) => ({ text: o.text, isCorrect: o.letter === correctRaw })),
+      options: filled.map((o) => ({
+        text: o.text,
+        textEn: o.textEn,
+        isCorrect: o.letter === correctRaw,
+      })),
     });
   });
 

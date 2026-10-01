@@ -871,7 +871,16 @@ export function StaffDetail() {
                     const overdue = !finished && dueMs !== null && dueMs < Date.now();
                     return (
                       <tr key={`${a.courseId}_${a.cycleNumber ?? 1}`} className="hover:bg-slate-50/70">
-                        <td className="td font-semibold text-slate-900">{a.courseTitle || "—"}</td>
+                        <td className="td font-semibold text-slate-900">
+                          {a.courseTitle || "—"}
+                          {/* Eğitimin hangi dilde alındığı kaydın parçası —
+                              denetimde sorulabilen bir şey. */}
+                          {a.contentLanguage && (
+                            <span className="ml-1.5 bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 text-[10px] font-bold">
+                              {a.contentLanguage}
+                            </span>
+                          )}
+                        </td>
                         <td className="td">
                           <span
                             className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${

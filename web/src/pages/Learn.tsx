@@ -1,5 +1,6 @@
 import { PageHead } from "../components/PageHead";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { langsOf, LANGS, LANG_LABEL, pickForLang, type Lang } from "../lib/lang";
 import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -12,10 +13,11 @@ import { ExamRunner, type ExamQ } from "../components/ExamRunner";
 // LMS API'sini window.parent üzerinde arıyor, çapraz origin'de erişemez.
 const SCORM_SERVE_BASE = "/scorm-content";
 
-type Content =
+type Content = { lang?: Lang | null } & (
   | { id: string; type: "VIDEO"; url: string; fileName: string }
   | { id: string; type: "PDF"; url: string; fileName: string }
-  | { id: string; type: "SCORM"; entryPoint: string; basePath: string; fileName: string };
+  | { id: string; type: "SCORM"; entryPoint: string; basePath: string; fileName: string }
+);
 
 type Section = { id: string; order: number; title: string; contents?: Content[]; content?: any };
 type Assignment = {
@@ -23,8 +25,11 @@ type Assignment = {
   courseTitle: string;
   status: string;
   sectionsDone?: string[];
+  /** Öğrencinin eğitimi aldığı dil. Kayıtta tutuluyor, görüntüleme tercihi değil. */
+  contentLanguage?: Lang;
 };
 
+/** Bölümün ham içerik listesi (eski tek-içerik alanı dahil). */
 function contentsOf(s: Section): Content[] {
   if (s.contents?.length) return s.contents;
   if (s.content) return [{ ...(s.content as any), id: s.content.id ?? "legacy" }];
@@ -90,10 +95,40 @@ export function Learn() {
   const isViewingCurrent = viewIndex === currentIndex;
   const viewDone = viewIndex >= 0 ? done.has(sections[viewIndex].id) : false;
 
-  const viewContents = viewIndex >= 0 ? contentsOf(sections[viewIndex]) : [];
-  const currentContents = currentIndex >= 0 ? contentsOf(sections[currentIndex]) : [];
+  /**
+   * Seçili dil. Kaynak atama dokümanı — kişi hangi dilde çalıştıysa kaydın
+   * parçası. Henüz yazılmamışsa Türkçe.
+   */
+  const lang: Lang = a?.contentLanguage === "EN" ? "EN" : "TR";
+
+  /** Kursun gerçekten sunduğu diller; tek dil varsa seçici gösterilmez. */
+  const courseLangs = useMemo(
+    () => langsOf(sections.flatMap((s) => contentsOf(s))),
+    [sections]
+  );
+
+  /**
+   * Dile göre süzülmüş içerik. O dilde hiç kalem yoksa hepsi dönüyor —
+   * tamamlama kapısı (`canComplete`) bu listeye baktığı için boş liste
+   * öğrenciyi eğitimde kilitler.
+   */
+  const viewPick = viewIndex >= 0 ? pickForLang(contentsOf(sections[viewIndex]), lang) : null;
+  const viewContents = viewPick?.items ?? [];
+  const currentContents =
+    currentIndex >= 0 ? pickForLang(contentsOf(sections[currentIndex]), lang).items : [];
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;
+
+  /** Dili değiştir. Atamaya istemci yazamıyor, Function üzerinden geçiyor. */
+  async function switchLang(next: Lang) {
+    if (!id || next === lang) return;
+    setErr(null);
+    try {
+      await httpsCallable(functions, "setAssignmentLanguage")({ assignmentId: id, language: next });
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }
 
   async function completeCurrent() {
     if (!id || currentIndex < 0) return;
@@ -159,6 +194,29 @@ export function Learn() {
       />
       <div className="mb-4" />
       {err && <p className="text-xs text-brand-700 mb-3">{err}</p>}
+
+      {/* Dil seçici — yalnızca eğitimin birden fazla dili varsa. Tek dilli
+          kursta seçenek göstermek, olmayan bir şeyi vaat etmek olurdu. */}
+      {courseLangs.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[11.5px] text-slate-500">Language</span>
+          <div className="inline-flex bg-slate-100 rounded-[9px] p-0.5">
+            {LANGS.filter((l) => courseLangs.includes(l)).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => void switchLang(l)}
+                className={`text-[12px] font-semibold px-3 py-1.5 rounded-[7px] transition ${
+                  lang === l ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {LANG_LABEL[l]}
+              </button>
+            ))}
+          </div>
+          <span className="text-[11px] text-slate-400">Your progress is kept either way.</span>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[230px_1fr] gap-3 items-start">
         <ProgressRail
@@ -262,6 +320,15 @@ export function Learn() {
                   ))}
                   {viewContents.length === 0 && (
                     <p className="text-sm text-slate-400">No content in this section.</p>
+                  )}
+                  {/* Seçilen dilde bu bölüm yoksa eldeki dil gösteriliyor.
+                      Boş ekran vermek öğrenciyi bölümü tamamlayamaz hâle
+                      getirirdi; durumu söylemek daha dürüst. */}
+                  {viewPick?.fellBack && courseLangs.length > 1 && (
+                    <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                      This section is not available in {LANG_LABEL[lang]} yet — showing the version
+                      that exists.
+                    </p>
                   )}
                 </div>
 

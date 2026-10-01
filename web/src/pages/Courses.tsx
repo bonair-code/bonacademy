@@ -20,6 +20,7 @@ import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { coverTone } from "../lib/coverTone";
+import { LANG_LABEL, langsOf, type Lang } from "../lib/lang";
 
 type Course = {
   id: string;
@@ -40,7 +41,7 @@ type Course = {
 
 /** Kurs başına bölüm ve soru sayısı — kartta "içeriği var mı" bunu söyler. */
 /** `filled` = içinde gerçekten materyal olan bölüm sayısı. */
-type Counts = { sections: number; filled: number; questions: number };
+type Counts = { sections: number; filled: number; questions: number; langs: Lang[] };
 
 type Dialog =
   | { kind: "delete"; course: Course }
@@ -163,7 +164,13 @@ export function Courses() {
             const x = d.data() as { contents?: unknown[]; content?: unknown };
             return Array.isArray(x.contents) ? x.contents.length > 0 : x.content != null;
           }).length;
-          out[id] = { sections: s.size, filled, questions: q.size };
+          // Eğitimin hangi dillerde sunulduğu içerik kalemlerinden çıkıyor;
+          // kursta ayrı bir "diller" alanı tutmak ikinci bir doğruluk kaynağı
+          // olurdu ve içerik silinince yanlışa düşerdi.
+          const langs = langsOf(
+            s.docs.flatMap((d) => ((d.data() as { contents?: { lang?: Lang | null }[] }).contents ?? []))
+          );
+          out[id] = { sections: s.size, filled, questions: q.size, langs };
         })
       );
       if (alive) setCounts(out);
@@ -433,6 +440,15 @@ function CourseCard({
           )}
           {row("Duration", course.durationHours != null ? `${course.durationHours} hours` : "—")}
           {row("Recurrence", recurrenceText(course))}
+          {/* Dil satırı yalnızca içerik dil etiketi taşıyorsa. Etiketsiz
+              kurslarda "—" basmak, dil ayrımı yapılmamışı eksikmiş gibi
+              gösterirdi. */}
+          {counts?.langs?.length
+            ? row(
+                "Language",
+                counts.langs.map((l) => LANG_LABEL[l]).join(" · ")
+              )
+            : null}
           {row(
             "Revision",
             course.revisionNo

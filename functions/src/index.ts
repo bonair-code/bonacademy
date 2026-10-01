@@ -440,6 +440,19 @@ async function loadOwnedAssignment(uid: string, assignmentId: string) {
   return { ref: snap.ref, a };
 }
 
+/**
+ * Eğitim içeriğinin dili. Atamada tutuluyor: aynı eğitimin iki dili tek kurs,
+ * kişi hangisinde çalıştıysa kaydı o söylüyor.
+ */
+type Lang = "TR" | "EN";
+const asLang = (v: unknown): Lang => (String(v).toUpperCase() === "EN" ? "EN" : "TR");
+
+/** Çeviri varsa onu, yoksa aslını ver. */
+const pickText = (base: unknown, english: unknown, lang: Lang): string => {
+  const en = String(english ?? "").trim();
+  return lang === "EN" && en ? en : String(base ?? "");
+};
+
 async function courseQuestions(courseId: string) {
   const snap = await getFirestore().collection(`courses/${courseId}/questions`).get();
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
@@ -645,6 +658,27 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
       options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text })),
     })),
   };
+});
+
+/**
+ * Öğrencinin eğitimi hangi dilde aldığını kaydeder.
+ *
+ * Atama dokümanına istemci yazamıyor (güvenlik kuralı `allow write: if false`)
+ * — durum geçişleri yalnızca Function'dan geçsin diye. Dil seçimi de buradan
+ * geçiyor; tek yazdığı alan bu, ilerlemeye ya da duruma dokunmuyor.
+ *
+ * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
+ * eğitimi hangi dilde aldı" sorusunun cevabı.
+ */
+export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId gerekli.");
+  const lang = asLang(req.data?.language);
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, assignmentId);
+  if (asLang(a.contentLanguage) === lang) return { language: lang };
+  await ref.update({ contentLanguage: lang, updatedAt: FieldValue.serverTimestamp() });
+  return { language: lang };
 });
 
 /** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */

@@ -19,6 +19,7 @@ import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "../lib/firebase";
 import { coverTone } from "../lib/coverTone";
+import { LANGS, LANG_LABEL, langsOf, type Lang } from "../lib/lang";
 import { downloadTemplate, parseWorkbook, type ParseResult } from "../lib/questionExcel";
 
 type RecurUnit = "NONE" | "DAY" | "MONTH" | "YEAR";
@@ -59,8 +60,15 @@ type Course = {
   exam: ExamCfg;
 };
 
-type Option = { id: string; text: string; isCorrect: boolean };
-type Question = { id: string; text: string; points: number; options: Option[] };
+/** `textEn` isteğe bağlı: yoksa sınav İngilizce alınsa bile asıl metin gelir. */
+type Option = { id: string; text: string; textEn?: string | null; isCorrect: boolean };
+type Question = {
+  id: string;
+  text: string;
+  textEn?: string | null;
+  points: number;
+  options: Option[];
+};
 
 const UNIT_LABEL: Record<RecurUnit, string> = {
   NONE: "No recurrence",
@@ -906,10 +914,16 @@ function Field({
   );
 }
 
-type SectionContent =
+/**
+ * `lang` boşsa kalem dilden bağımsız sayılır (şema, konuşmasız uygulama
+ * videosu) ve iki dilde de gösterilir. Etiketsiz eski kayıtlar da bu kovaya
+ * düşüyor, yani dil eklemek var olan kursları bozmuyor.
+ */
+type SectionContent = { lang?: Lang | null } & (
   | { id: string; type: "VIDEO"; url: string; fileName: string; storagePath: string }
   | { id: string; type: "PDF"; url: string; fileName: string; storagePath: string }
-  | { id: string; type: "SCORM"; entryPoint: string; version: string; basePath: string; fileName: string };
+  | { id: string; type: "SCORM"; entryPoint: string; version: string; basePath: string; fileName: string }
+);
 
 type SectionT = {
   id: string;
@@ -1037,7 +1051,7 @@ function Sections({ courseId }: { courseId: string }) {
               </svg>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-semibold text-slate-900 truncate">{s.title}</div>
-                <div className="text-[11px]">
+                <div className="text-[11px] flex flex-wrap items-center gap-x-2">
                   {cs.length ? (
                     <span className="text-emerald-600">
                       ● {cs.length} item(s): {cs.map((c) => CONTENT_LABEL[c.type]).join(", ")}
@@ -1045,6 +1059,16 @@ function Sections({ courseId }: { courseId: string }) {
                   ) : (
                     <span className="text-amber-600">● No content</span>
                   )}
+                  {/* Hangi dillerde içerik var — iki dilli kursta bir bölümün
+                      yalnızca Türkçe kaldığı buradan görülsün. */}
+                  {langsOf(cs).map((l) => (
+                    <span
+                      key={l}
+                      className="px-1 py-px rounded bg-slate-200 text-slate-700 text-[9.5px] font-bold"
+                    >
+                      {l}
+                    </span>
+                  ))}
                 </div>
               </div>
               <div
@@ -1105,6 +1129,8 @@ function uploadError(e: unknown) {
 function SectionContentEditor({ courseId, section }: { courseId: string; section: SectionT }) {
   // Önce "ne yükleyeceğim" sorulur; tip seçilmeden yükleme alanı açılmaz.
   const [type, setType] = useState<SectionContent["type"] | null>(null);
+  /** Yüklenecek kalemin dili. null = dilden bağımsız, iki dilde de gösterilir. */
+  const [lang, setLang] = useState<Lang | null>("TR");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1136,7 +1162,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
       const r = ref(storage, path);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
-      await addContent({ id: cid, type: kind, url, fileName: file.name, storagePath: path });
+      await addContent({ id: cid, type: kind, url, fileName: file.name, storagePath: path, lang });
       setMsg(`${kind === "VIDEO" ? "Video" : "PDF"} added.`);
       setType(null);
     } catch (e) {
@@ -1200,7 +1226,15 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
         }
       };
       await Promise.all(Array.from({ length: 6 }, () => worker()));
-      await addContent({ id: cid, type: "SCORM", entryPoint, version, basePath, fileName: file.name });
+      await addContent({
+        id: cid,
+        type: "SCORM",
+        entryPoint,
+        version,
+        basePath,
+        fileName: file.name,
+        lang,
+      });
       setMsg(
         `SCORM processed — entry: ${entryPoint} (${version === "SCORM_2004" ? "2004" : "1.2"})`
       );
@@ -1265,6 +1299,42 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
             </button>
           </div>
 
+          {/* Dil dosya seçilmeden ÖNCE belirleniyor: yükleme bitince kalem
+              listeye giriyor ve sonradan değiştirecek bir yer yok. */}
+          <div className="mb-3">
+            <label className="label">Language of this file</label>
+            <div className="flex flex-wrap gap-1.5">
+              {LANGS.map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setLang(l)}
+                  className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition disabled:opacity-40 ${
+                    lang === l
+                      ? "bg-slate-900 text-white border-slate-900"
+                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                  }`}
+                >
+                  {LANG_LABEL[l]}
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setLang(null)}
+                title="Shown to learners in both languages — diagrams, hands-on video, anything without speech or text"
+                className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition disabled:opacity-40 ${
+                  lang === null
+                    ? "bg-slate-900 text-white border-slate-900"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+                }`}
+              >
+                Both
+              </button>
+            </div>
+          </div>
+
       {type === "VIDEO" && (
         <div>
           <label className="label">Upload Video (mp4)</label>
@@ -1327,6 +1397,18 @@ function ContentItem({ item, onRemove }: { item: SectionContent; onRemove: () =>
         <div className="text-[12px] min-w-0 flex items-center gap-2">
           <span className="inline-block px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-bold">
             {CONTENT_LABEL[item.type]}
+          </span>
+          {/* Dil rozeti: hangi kalemin hangi dilde olduğu listede görünmeli,
+              yoksa iki dil yüklenince dosya adından ayırt etmek gerekiyor. */}
+          <span
+            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+              item.lang
+                ? "bg-slate-200 text-slate-700"
+                : "bg-emerald-50 text-emerald-700"
+            }`}
+            title={item.lang ? LANG_LABEL[item.lang] : "Shown in both languages"}
+          >
+            {item.lang ?? "TR+EN"}
           </span>
           <span className="text-slate-700 truncate">{item.fileName}</span>
         </div>
@@ -1459,10 +1541,12 @@ function BulkImport({
         for (const q of parsed.questions.slice(i, i + 400)) {
           batch.set(doc(col), {
             text: q.text,
+            textEn: q.textEn,
             points: q.points,
             options: q.options.map((o) => ({
               id: crypto.randomUUID(),
               text: o.text,
+              textEn: o.textEn,
               isCorrect: o.isCorrect,
             })),
           });
@@ -1582,6 +1666,14 @@ function QuestionBank({
   const [opts, setOpts] = useState(["", "", "", ""]);
   const [correct, setCorrect] = useState(0);
   const [busy, setBusy] = useState(false);
+  /**
+   * İngilizce karşılıklar isteğe bağlı. Girilmezse sınav İngilizce alınsa bile
+   * soru Türkçe hâliyle gelir — yarım çeviri yüzünden soruyu boş göstermek
+   * yerine eldeki metni göstermek doğru.
+   */
+  const [showEn, setShowEn] = useState(false);
+  const [textEn, setTextEn] = useState("");
+  const [optsEn, setOptsEn] = useState(["", "", "", ""]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -1590,15 +1682,23 @@ function QuestionBank({
     setBusy(true);
     try {
       const options: Option[] = filled
-        .map((t, i) => ({ id: crypto.randomUUID(), text: t, isCorrect: i === correct }))
+        .map((t, i) => ({
+          id: crypto.randomUUID(),
+          text: t,
+          textEn: optsEn[i]?.trim() || null,
+          isCorrect: i === correct,
+        }))
         .filter((o) => o.text);
       await addDoc(collection(db, "courses", courseId, "questions"), {
         text: text.trim(),
+        textEn: textEn.trim() || null,
         points: pointsPer,
         options,
       });
       setText("");
       setOpts(["", "", "", ""]);
+      setTextEn("");
+      setOptsEn(["", "", "", ""]);
       setCorrect(0);
     } finally {
       setBusy(false);
@@ -1614,13 +1714,30 @@ function QuestionBank({
       <BulkImport courseId={courseId} courseTitle={courseTitle} pointsPer={pointsPer} />
 
       <form onSubmit={add} className="rounded-lg border border-slate-200 p-4 mb-4 bg-slate-50/50">
-        <label className="label">Question Text</label>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <label className="label !mb-0">Question Text</label>
+          <button
+            type="button"
+            onClick={() => setShowEn((v) => !v)}
+            className="text-[11px] font-semibold text-brand-700 hover:underline"
+          >
+            {showEn ? "Hide English" : "+ English version"}
+          </button>
+        </div>
         <input
-          className="input mb-3"
+          className="input mb-2"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type the question…"
         />
+        {showEn && (
+          <input
+            className="input mb-3 !bg-slate-50"
+            value={textEn}
+            onChange={(e) => setTextEn(e.target.value)}
+            placeholder="Same question in English (optional)"
+          />
+        )}
         <label className="label">Options (select the correct one)</label>
         <div className="space-y-2 mb-3">
           {opts.map((o, i) => (
@@ -1632,12 +1749,24 @@ function QuestionBank({
                 onChange={() => setCorrect(i)}
                 className="accent-brand-600"
               />
-              <input
-                className="input"
-                value={o}
-                onChange={(e) => setOpts((p) => p.map((x, j) => (j === i ? e.target.value : x)))}
-                placeholder={`Option ${i + 1}`}
-              />
+              <div className="flex-1 min-w-0 space-y-1">
+                <input
+                  className="input"
+                  value={o}
+                  onChange={(e) => setOpts((p) => p.map((x, j) => (j === i ? e.target.value : x)))}
+                  placeholder={`Option ${i + 1}`}
+                />
+                {showEn && (
+                  <input
+                    className="input !bg-slate-50"
+                    value={optsEn[i]}
+                    onChange={(e) =>
+                      setOptsEn((p) => p.map((x, j) => (j === i ? e.target.value : x)))
+                    }
+                    placeholder={`Option ${i + 1} in English (optional)`}
+                  />
+                )}
+              </div>
             </div>
           ))}
         </div>
