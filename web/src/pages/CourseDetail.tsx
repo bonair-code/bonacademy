@@ -350,22 +350,6 @@ export function CourseDetail() {
       ];
   if (!c.revisionNo.trim()) blockers.unshift("Revision No boş.");
 
-  /**
-   * Seçili DİL SÜRÜMÜNÜ yayına al / yayından çıkar. publishedLangs'i yalnızca
-   * bu Function yazabiliyor; güvenlik kuralı istemcinin dokunmasını engelliyor.
-   */
-  async function setPublished(active: boolean) {
-    if (!id) return;
-    setErr(null);
-    setPublishBusy(true);
-    try {
-      await httpsCallable(functions, "publishCourse")({ courseId: id, lang, active });
-    } catch (e) {
-      setErr((e as Error).message);
-    } finally {
-      setPublishBusy(false);
-    }
-  }
   const applicable = stepNos.filter((n) => readiness[n] !== null);
   const doneCount = applicable.filter((n) => readiness[n]).length;
 
@@ -476,9 +460,13 @@ export function CourseDetail() {
           {!langPublished ? "Draft" : !externalOnly && filledCount === 0 ? "Empty" : "Published"}
         </span>
         {saved && <span className="text-[11px] font-semibold text-emerald-600">✓ Saved</span>}
-        <button onClick={() => void save()} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
-          Save
-        </button>
+        {/* Özet adımında gizli: orada "Save (draft)" ve "Save & Publish" var,
+            üçüncü bir Save düğmesi hangisinin ne yaptığını bulanıklaştırıyor. */}
+        {step !== 5 && (
+          <button onClick={() => void save()} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
+            Save
+          </button>
+        )}
       </div>
 
       <div className="grid lg:grid-cols-[214px_1fr] gap-3 items-start">
@@ -776,25 +764,24 @@ export function CourseDetail() {
           {c.exam.required && (
             <SummaryRow label="Passing Score" value={`${c.passingScore}%`} />
           )}
-          <label
-            className={`flex items-center gap-2 mt-4 text-sm font-medium ${
-              !langPublished && blockers.length ? "text-slate-400" : "text-slate-800"
-            }`}
-          >
-            <input
-              type="checkbox"
-              checked={langPublished}
-              disabled={publishBusy || (!langPublished && blockers.length > 0)}
-              onChange={() => setPublished(!langPublished)}
-              className="accent-brand-600 h-4 w-4 disabled:opacity-40"
-            />
-            {externalOnly
-              ? "Published (tracked as a requirement)"
-              : `${LANG_LABEL[lang]} sürümü yayında (öğrenciye atanabilir)`}
-          </label>
+          {/* Yayın durumu bilgi olarak; karar aşağıdaki iki düğmede. Üçüncü
+              bir yol (kutucuk) olması, aynı işin üç farklı yerden yapılması
+              demekti. */}
+          <div className="mt-4 text-sm font-medium text-slate-700">
+            {externalOnly ? (
+              langPublished ? "Published (tracked as a requirement)" : "Draft"
+            ) : (
+              <>
+                {LANG_LABEL[lang]} sürümü:{" "}
+                <b className={langPublished ? "text-emerald-700" : "text-slate-500"}>
+                  {langPublished ? "yayında" : "taslak"}
+                </b>
+              </>
+            )}
+          </div>
 
-          {/* Neden yayınlanamıyor — kutuyu kapalı bırakıp sebebi söylemeden
-              geçmek, kullanıcıyı boş kursu yayınlamaya çalışırken bırakıyordu. */}
+          {/* Neden yayınlanamıyor — sebebi söylemeden düğmeyi kapatmak,
+              kullanıcıyı boş kursu yayınlamaya çalışırken bırakıyordu. */}
           {!langPublished && blockers.length > 0 && (
             <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
               <p className="text-[11.5px] font-semibold text-amber-900">
@@ -836,40 +823,68 @@ export function CourseDetail() {
             >
               Next →
             </button>
-          ) : blockers.length > 0 ? (
-            /* Yayınlanamıyorsa düğme "Save" olur — devre dışı bırakmak son
-               adımdaki değişiklikleri kaydetmeyi de imkânsız kılıyordu. */
-            <button
-              onClick={async () => {
-                if (await save()) navigate("/courses");
-              }}
-              className="btn-primary"
-            >
-              Save
-            </button>
           ) : (
-            <button
-              onClick={async () => {
-                if (!(await save())) return;
-                try {
-                  // Yayın = yeni revizyon. Anlık kopya ve isActive Function
-                  // tarafında yazılır; içerik yoksa Function reddediyor.
-                  await httpsCallable(functions, "publishCourse")({
-                    courseId: id,
-                    lang,
-                    active: true,
-                  });
-                } catch (e) {
-                  setErr((e as Error).message);
-                  return;
+            <>
+              {/* Taslak olarak kaydet. Sürüm yayındaysa yayından da alır —
+                  "taslağa çek" başka bir yerde aranmasın diye. */}
+              <button
+                onClick={async () => {
+                  if (!(await save())) return;
+                  if (langPublished) {
+                    setPublishBusy(true);
+                    try {
+                      await httpsCallable(functions, "publishCourse")({
+                        courseId: id,
+                        lang,
+                        active: false,
+                      });
+                    } catch (e) {
+                      setErr((e as Error).message);
+                      return;
+                    } finally {
+                      setPublishBusy(false);
+                    }
+                  }
+                  navigate("/courses");
+                }}
+                disabled={publishBusy}
+                className="btn-secondary disabled:opacity-40"
+                title={
+                  langPublished
+                    ? "Kaydeder ve bu dil sürümünü yayından alır"
+                    : "Kaydeder, yayınlamaz"
                 }
-                navigate("/courses");
-              }}
-              disabled={publishBusy}
-              className="btn-primary disabled:opacity-40"
-            >
-              Save &amp; Publish
-            </button>
+              >
+                Save (draft)
+              </button>
+
+              {/* Yayın = yeni revizyon. Anlık kopya ve publishedLangs Function
+                  tarafında yazılır; o dilde içerik yoksa Function reddediyor. */}
+              <button
+                onClick={async () => {
+                  if (!(await save())) return;
+                  setPublishBusy(true);
+                  try {
+                    await httpsCallable(functions, "publishCourse")({
+                      courseId: id,
+                      lang,
+                      active: true,
+                    });
+                  } catch (e) {
+                    setErr((e as Error).message);
+                    return;
+                  } finally {
+                    setPublishBusy(false);
+                  }
+                  navigate("/courses");
+                }}
+                disabled={publishBusy || blockers.length > 0}
+                title={blockers.join(" ")}
+                className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Save &amp; Publish
+              </button>
+            </>
           )}
         </div>
       </div>

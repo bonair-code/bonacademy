@@ -130,7 +130,13 @@ export function Learn() {
    * `languageChosen` ayrı tutuluyor — "varsayılan atandı" ile "kişi seçti"
    * farklı şeyler.
    */
-  const needsLangChoice = courseLangs.length > 1 && !a?.languageChosen;
+  const needsLangChoice =
+    courseLangs.length > 1 &&
+    !a?.languageChosen &&
+    // Biten eğitimde dil sorulmaz: sertifika verildi ve sunucu zaten dil
+    // değişimini reddediyor — kapı çıksaydı iki bayrak da hata verirdi.
+    a?.status !== "COMPLETED" &&
+    a?.status !== "EXAM_PASSED";
 
   const viewContents = viewIndex >= 0 ? contentsOf(sections[viewIndex]) : [];
   const currentContents = currentIndex >= 0 ? contentsOf(sections[currentIndex]) : [];
