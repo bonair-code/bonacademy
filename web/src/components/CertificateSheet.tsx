@@ -149,11 +149,15 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
                 left: "50%",
                 top: "52%",
                 transform: "translate(-50%, -50%)",
-                width: "62cqw",
-                maxHeight: "70%",
+                width: "68cqw",
+                maxHeight: "68%",
                 objectFit: "contain",
-                opacity: 0.06,
-                filter: "grayscale(1)",
+                // Çizim beyaz zeminli: multiply ile zemin kayboluyor, yalnızca
+                // kurşun kalem çizgileri kalıyor. Baskıda blend mode'a
+                // güvenilmediği için opaklık tek başına da çalışacak kadar
+                // düşük — zemin beyaz kâğıdın üstünde görünmez.
+                mixBlendMode: "multiply",
+                opacity: 0.12,
                 pointerEvents: "none",
                 userSelect: "none",
               }}
