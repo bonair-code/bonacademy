@@ -254,7 +254,7 @@ function CourseCard({
       {/* Kapak. Görsel yüklendiyse o, yoksa kurstan türetilen sabit desen —
           her kursun kapağı her zaman aynı renkte çıkar, tanınır olur. */}
       <div
-        className="relative h-[116px] shrink-0 flex items-end"
+        className="relative aspect-[16/9] shrink-0 flex items-end"
         style={
           course?.coverUrl
             ? { backgroundImage: `url(${course.coverUrl})`, backgroundSize: "cover", backgroundPosition: "center" }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useFullscreen } from "../lib/fullscreen";
 import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
@@ -44,8 +45,9 @@ export function ScormPlayer({
   const doneRef = useRef(false);
   /** Iframe'i yeniden kurmak için — src aynı kaldığında React iframe'i tazelemiyor. */
   const [nonce, setNonce] = useState(0);
-  /** Tam ekran düğmesi bu çerçeveyi açıyor. */
-  const frameRef = useRef<HTMLIFrameElement>(null);
+  /** Tam ekran bu kutuyu kaplar — iframe'in kendisi iOS'ta tam ekrana geçemiyor. */
+  const boxRef = useRef<HTMLDivElement>(null);
+  const { full, toggle: toggleFull } = useFullscreen(boxRef);
   const [reach, setReach] = useState<"checking" | "ok" | "error">("checking");
   const [httpCode, setHttpCode] = useState<number | null>(null);
 
@@ -195,7 +197,10 @@ export function ScormPlayer({
   }, [onDone, restored]);
 
   return (
-    <div>
+    <div
+      ref={boxRef}
+      className={full ? "fixed inset-0 z-50 bg-white p-3 flex flex-col" : undefined}
+    >
       {/* Telefonda bu satır taşıyor ve kartı yana kaydırıyordu: dosya adı,
           durum ve iki düğme 343px'e sığmıyor. Artık sarıyor. */}
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mb-2">
@@ -217,11 +222,11 @@ export function ScormPlayer({
               ekranda en azından bütün genişlik paketin oluyor. */}
           <button
             type="button"
-            onClick={() => frameRef.current?.requestFullscreen?.()}
+            onClick={toggleFull}
             className="btn-secondary text-[11px] py-1 px-2"
-            title="Open full screen"
+            title={full ? "Exit full screen (Esc)" : "Open full screen"}
           >
-            ⤢ Full screen
+            {full ? "✕ Exit full screen" : "⤢ Full screen"}
           </button>
         </div>
       </div>
@@ -250,10 +255,12 @@ export function ScormPlayer({
         </div>
       ) : (
       <iframe
-        ref={frameRef}
         key={nonce}
         src={src}
-        className="w-full h-[78vh] lg:h-[70vh] rounded border border-slate-200 bg-white"
+        allowFullScreen
+        className={`w-full rounded border border-slate-200 bg-white ${
+          full ? "flex-1 min-h-0" : "h-[78vh] lg:h-[70vh]"
+        }`}
         title={fileName}
       />
       )}

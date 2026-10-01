@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFullscreen } from "../lib/fullscreen";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -46,28 +47,18 @@ export function PdfReader({
   const [seen, setSeen] = useState<Set<number>>(new Set());
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [full, setFull] = useState(false);
+  // Tam ekran telefonda tarayıcı API'siyle çalışmıyor; ortak çözüm için
+  // lib/fullscreen.ts'e bak.
+  const { full, toggle: toggleFull } = useFullscreen(shellRef);
 
   useEffect(() => {
     onProgress(seen.size, total);
   }, [seen, total, onProgress]);
 
-  // Tam ekran, tarayıcının kendi API'siyle — Esc ile de çıkılabilsin diye
-  // durum `fullscreenchange` üzerinden okunur, kendi bayrağımızdan değil.
-  useEffect(() => {
-    const onChange = () => setFull(document.fullscreenElement === shellRef.current);
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, []);
-
-  const toggleFull = useCallback(() => {
-    if (document.fullscreenElement) void document.exitFullscreen();
-    else void shellRef.current?.requestFullscreen?.();
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     let doc: pdfjs.PDFDocumentProxy | null = null;
+    let sizeWatch: ResizeObserver | null = null;
     let io: IntersectionObserver | null = null;
     let onScroll: (() => void) | null = null;
     const slots: Slot[] = [];
@@ -167,7 +158,10 @@ export function PdfReader({
           if (!el) return;
           const box = el.getBoundingClientRect();
           if (box.height === 0) return; // gizliyken sayma
-          const atEnd = el.scrollHeight - (el.scrollTop + el.clientHeight) < 8;
+          // Hiç kaydırma yoksa (tek sayfalık belge, ya da kutuya sığan belge)
+          // "sonuna geldi" asla gerçekleşmiyordu ve bölüm tamamlanamıyordu.
+          const fits = el.scrollHeight <= el.clientHeight + 8;
+          const atEnd = fits || el.scrollHeight - (el.scrollTop + el.clientHeight) < 8;
           setSeen((prev) => {
             const next = new Set(prev);
             for (const s of slots) {
@@ -187,6 +181,11 @@ export function PdfReader({
           });
         };
         host.addEventListener("scroll", onScroll, { passive: true });
+        // Kutu yüksekliği mount'tan SONRA ölçülüp veriliyor ve sayfalar
+        // asenkron çiziliyor; ilk `mark()` o anda yanlış ölçüyle çalışıyordu.
+        // Kutu her boyut değiştirdiğinde yeniden sayılıyor.
+        sizeWatch = new ResizeObserver(() => mark());
+        sizeWatch.observe(host);
         mark();
       } catch (e) {
         if (!cancelled) {
@@ -199,6 +198,7 @@ export function PdfReader({
     return () => {
       cancelled = true;
       io?.disconnect();
+      sizeWatch?.disconnect();
       if (onScroll && hostRef.current) hostRef.current.removeEventListener("scroll", onScroll);
       doc?.destroy();
     };

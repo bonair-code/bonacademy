@@ -499,7 +499,7 @@ export function CourseDetail() {
             {/* Öğrencinin gördüğü kartın birebir aynısı: başlık kapağın
                 ALTINDA, üstünde değil. */}
             <div
-              className="h-[96px]"
+              className="aspect-[16/9]"
               style={
                 c.coverUrl
                   ? {
@@ -527,8 +527,9 @@ export function CourseDetail() {
           <div className="min-w-0 sm:min-w-[220px]">
             <div className="text-[12px] font-semibold text-slate-800">Cover image</div>
             <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed max-w-[42ch]">
-              Shown on the learner's training card. Landscape works best (about 2:1). Leave it
-              empty and the card uses a colour derived from the course title.
+              Shown on the learner's training card. Upload <b>16:9</b> — 1600 × 900 px is ideal.
+              The image is cropped to that ratio everywhere, so anything else loses its edges.
+              Leave it empty and the card uses a colour derived from the course title.
             </p>
             <div className="flex items-center gap-2 mt-2.5">
               <input

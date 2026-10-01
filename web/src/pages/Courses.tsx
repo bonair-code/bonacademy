@@ -413,7 +413,7 @@ function CourseCard({
 
       <button
         onClick={onOpen}
-        className="relative h-[96px] shrink-0 flex flex-col justify-end text-left px-3.5 py-2.5"
+        className="relative aspect-[16/9] shrink-0 flex flex-col justify-end text-left px-3.5 py-2.5"
         style={
           course.coverUrl
             ? {

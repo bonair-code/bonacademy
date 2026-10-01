@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asLang, LANG_LABEL, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
 import { Modal } from "../components/Modal";
+import { CertificateSheet, type Cert } from "../components/CertificateSheet";
+import { printCertificate } from "../lib/print";
 import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -141,6 +143,40 @@ export function Learn() {
 
   const viewContents = viewIndex >= 0 ? contentsOf(sections[viewIndex]) : [];
   const currentContents = currentIndex >= 0 ? contentsOf(sections[currentIndex]) : [];
+  /**
+   * Bölüm içinde açık olan materyal. Varsayılan: bitmemiş ilk materyal.
+   * Kullanıcı bitmiş olanlara geri dönebilir; ileriye atlayamaz.
+   */
+  const [itemIndex, setItemIndex] = useState<number | null>(null);
+  const firstOpenItem = Math.max(
+    0,
+    viewContents.findIndex((c) => !consumed[c.id])
+  );
+  const itemAt =
+    itemIndex !== null && itemIndex < viewContents.length ? itemIndex : firstOpenItem;
+  // Bölüm değişince seçim sıfırlanmalı, yoksa yeni bölümde yanlış materyal açılır.
+  useEffect(() => setItemIndex(null), [viewIndex]);
+
+
+  /**
+   * Bu atamanın sertifikası. Sertifika id'si atama id'siyle aynı
+   * (issueCertificateFor böyle yazıyor), o yüzden tek doküman okuması.
+   */
+  const [certOpen, setCertOpen] = useState(false);
+  const [myCert, setMyCert] = useState<Cert | null>(null);
+  const [certErr, setCertErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!certOpen || !id || myCert) return;
+    return onSnapshot(
+      doc(db, "certificates", id),
+      (d) => {
+        if (d.exists()) setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
+        else setCertErr("No certificate has been issued for this training.");
+      },
+      (e) => setCertErr(e.message)
+    );
+  }, [certOpen, id, myCert]);
+
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;
 
@@ -352,9 +388,9 @@ export function Learn() {
           </div>
           <p className="text-sm text-slate-600 mt-1">Your score: {result.score}%</p>
           {result.passed ? (
-            <Link to="/certificates" className="btn-primary mt-4 inline-flex">
+            <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
               View My Certificate
-            </Link>
+            </button>
           ) : result.status === "RETAKE_REQUIRED" ? (
             <p className="text-sm text-red-800 mt-3">
               You failed twice — you must retake the training from the beginning.
@@ -371,9 +407,9 @@ export function Learn() {
       {!result && a.status === "COMPLETED" && (
         <div className="card p-4 sm:p-6 border-l-4 border-l-emerald-500">
           <div className="text-xl font-bold text-emerald-700">You have completed this training ✓</div>
-          <Link to="/certificates" className="btn-primary mt-4 inline-flex">
+          <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
             View My Certificate
-          </Link>
+          </button>
         </div>
       )}
 
@@ -417,20 +453,68 @@ export function Learn() {
                     </span>
                   )}
                 </div>
+                {/* Bir bölümde birden fazla materyal varsa TEK TEK gösteriliyor:
+                    hepsini alt alta basmak hangisinin bitip hangisinin
+                    beklediğini belirsiz kılıyordu. Bitmiş olana geri dönülebilir,
+                    sıradakine ancak bir öncekini bitirince geçilir. */}
+                {viewContents.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                    {viewContents.map((c, i) => {
+                      const isDone = !!consumed[c.id];
+                      const reachable = i <= firstOpenItem;
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          disabled={!reachable}
+                          onClick={() => setItemIndex(i)}
+                          className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg border transition ${
+                            i === itemAt
+                              ? "border-brand-500 ring-2 ring-brand-500/15 text-slate-900"
+                              : isDone
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : reachable
+                              ? "border-slate-200 text-slate-500 hover:border-slate-400"
+                              : "border-slate-100 text-slate-300 cursor-not-allowed"
+                          }`}
+                          title={reachable ? c.fileName : "Finish the previous item first"}
+                        >
+                          {isDone ? "✓ " : !reachable ? "🔒 " : ""}
+                          {i + 1}/{viewContents.length}
+                        </button>
+                      );
+                    })}
+                    <span className="text-[11px] text-slate-400 ml-1">
+                      {viewContents.filter((c) => consumed[c.id]).length} of {viewContents.length}{" "}
+                      finished
+                    </span>
+                  </div>
+                )}
+
                 <div className="space-y-4">
-                  {viewContents.map((c) => (
+                  {viewContents[itemAt] && (
                     <ContentViewer
-                      key={c.id}
-                      item={c}
-                      done={!!consumed[c.id]}
-                      onDone={() => markConsumed(c.id)}
+                      key={viewContents[itemAt].id}
+                      item={viewContents[itemAt]}
+                      done={!!consumed[viewContents[itemAt].id]}
+                      onDone={() => markConsumed(viewContents[itemAt].id)}
                       assignmentId={id}
                     />
-                  ))}
+                  )}
                   {viewContents.length === 0 && (
                     <p className="text-sm text-slate-400">No content in this section.</p>
                   )}
                 </div>
+
+                {/* Sıradakine geçiş: bu materyal bitince beliriyor. */}
+                {itemAt < viewContents.length - 1 && consumed[viewContents[itemAt]?.id ?? ""] && (
+                  <button
+                    onClick={() => setItemIndex(itemAt + 1)}
+                    className="btn-secondary text-xs py-2 mt-3"
+                  >
+                    Next item ({itemAt + 2}/{viewContents.length}) →
+                  </button>
+                )}
 
                 {/* Tamamlama düğmesi yalnızca sıradaki bölümde. Sunucu da
                     sırayı zorunlu tutuyor; başka bölümde düğme göstermek
@@ -492,6 +576,53 @@ export function Learn() {
         </div>
       </div>
       </>
+      )}
+
+      {/* Sertifika uygulamadan çıkmadan burada açılıyor. Eskiden
+          "View My Certificate" listeye atıyordu ve kişi kendi belgesini
+          listede tekrar aramak zorunda kalıyordu. */}
+      {certOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/60 overflow-auto p-3 sm:p-6"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setCertOpen(false);
+          }}
+        >
+          <div className="mx-auto w-full max-w-5xl">
+            <div className="flex items-center justify-between gap-3 mb-3 no-print">
+              <span className="text-[13px] font-semibold text-white truncate">
+                {myCert ? `Certificate ${myCert.serialNo ?? ""}` : "Certificate"}
+              </span>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={printCertificate}
+                  disabled={!myCert}
+                  className="btn-primary text-xs py-2 disabled:opacity-40"
+                >
+                  Print / Download
+                </button>
+                <button
+                  onClick={() => setCertOpen(false)}
+                  className="btn-secondary text-xs py-2"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {myCert ? (
+              <div className="overflow-x-auto">
+                <div className="rounded-xl overflow-hidden shadow-2xl min-w-[640px] lg:min-w-0">
+                  <CertificateSheet cert={myCert} />
+                </div>
+              </div>
+            ) : (
+              <div className="card p-8 text-center text-sm text-slate-500">
+                {certErr ?? "Preparing your certificate…"}
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
