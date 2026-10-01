@@ -246,7 +246,7 @@ export function Learn() {
         <div className="card p-8 text-center max-w-md mx-auto">
           <div className="text-[15px] font-semibold text-slate-900 mb-1">{a.courseTitle}</div>
           <p className="text-[13px] text-slate-500 mb-5">
-            Bu eğitimi hangi dilde almak istersiniz?
+            Which language would you like to take this training in?
           </p>
           <div className="flex gap-3 justify-center">
             {courseLangs.map((l) => (
@@ -263,7 +263,7 @@ export function Learn() {
             ))}
           </div>
           <p className="text-[11px] text-slate-400 mt-4">
-            Sonradan değiştirebilirsiniz; ilerlemeniz her dil için ayrı tutulur.
+            You can change it later; progress is kept separately for each language.
           </p>
         </div>
       ) : (
@@ -273,7 +273,7 @@ export function Learn() {
           ilerlemeyi silmez: her dilin ilerlemesi ayrı tutuluyor. */}
       {courseLangs.length > 1 && (
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-[11.5px] text-slate-500">Dil</span>
+          <span className="text-[11.5px] text-slate-500">Language</span>
           {courseLangs.map((l) => (
             <button
               key={l}
@@ -297,20 +297,20 @@ export function Learn() {
           kişiyi bambaşka bir sürümün başına atıyor — sorulmadan yapılmamalı. */}
       {langAsk && (
         <Modal
-          title="Dili değiştir"
+          title="Change language"
           subtitle={`${LANG_LABEL[lang]} → ${LANG_LABEL[langAsk]}`}
           onClose={() => setLangAsk(null)}
           width="max-w-md"
         >
           <p className="text-sm text-slate-700">
-            Bu eğitimin <b>{LANG_LABEL[langAsk]}</b> sürümüne geçiyorsunuz. O sürümün bölümleri
-            ayrıdır; eğitime <b>sıfırdan</b> başlarsınız ve bitirmek için tüm bölümlerini
-            tamamlamanız gerekir.
+            You are switching to the <b>{LANG_LABEL[langAsk]}</b> version of this training. That
+            version has its own sections, so you start it <b>from the beginning</b> and must
+            complete all of its sections to finish.
           </p>
           <p className="text-[12.5px] text-slate-500 mt-2">
             {done.size > 0
-              ? `${LANG_LABEL[lang]} sürümünde tamamladığınız ${done.size} bölüm kaydınızda duruyor; geri dönerseniz kaldığınız yerden devam edersiniz.`
-              : "Bu sürümde henüz tamamladığınız bölüm yok."}
+              ? `The ${done.size} section(s) you completed in ${LANG_LABEL[lang]} stay on your record — switch back and you carry on where you left off.`
+              : "You have not completed any section in this version yet."}
           </p>
           <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
             <button
@@ -318,10 +318,10 @@ export function Learn() {
               disabled={langBusy}
               className="btn-primary text-xs py-2 disabled:opacity-40"
             >
-              {langBusy ? "Değiştiriliyor…" : `${LANG_LABEL[langAsk]} sürümüne geç`}
+              {langBusy ? "Switching…" : `Switch to ${LANG_LABEL[langAsk]}`}
             </button>
             <button onClick={() => setLangAsk(null)} className="btn-secondary text-xs py-2">
-              Vazgeç
+              Cancel
             </button>
           </div>
         </Modal>
@@ -343,7 +343,7 @@ export function Learn() {
       {/* SINAV SONUCU */}
       {result && (
         <div
-          className={`card p-6 mb-4 border-l-4 ${
+          className={`card p-4 sm:p-6 mb-4 border-l-4 ${
             result.passed ? "border-l-emerald-500" : "border-l-red-500"
           }`}
         >
@@ -369,7 +369,7 @@ export function Learn() {
 
       {/* TAMAMLANDI */}
       {!result && a.status === "COMPLETED" && (
-        <div className="card p-6 border-l-4 border-l-emerald-500">
+        <div className="card p-4 sm:p-6 border-l-4 border-l-emerald-500">
           <div className="text-xl font-bold text-emerald-700">You have completed this training ✓</div>
           <Link to="/certificates" className="btn-primary mt-4 inline-flex">
             View My Certificate
@@ -390,7 +390,7 @@ export function Learn() {
 
       {/* SINAVA HAZIR */}
       {!result && !exam && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
-        <div className="card p-6 text-center">
+        <div className="card p-5 sm:p-6 text-center">
           <div className="text-[15px] font-semibold text-slate-900 mb-1">
             All sections completed 🎯
           </div>
@@ -406,7 +406,7 @@ export function Learn() {
         a.status !== "EXAM_FAILED" && (
           <div>
             {viewIndex >= 0 && sections[viewIndex] && (
-              <div className="card p-5">
+              <div className="card p-3 sm:p-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="text-[13px] font-bold text-slate-900">
                     Section {viewIndex + 1}: {sections[viewIndex].title}

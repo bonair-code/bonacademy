@@ -347,15 +347,15 @@ export function CourseDetail() {
     ? []
     : [
         ...(sectionCount === 0
-          ? ["Bu dilde hiç bölüm yok."]
+          ? ["This language has no sections yet."]
           : filledCount === 0
-          ? ["Bölümler var ama hiçbirinde içerik yok."]
+          ? ["Sections exist but none has any content."]
           : []),
         ...(c.exam.required && questions.length === 0
-          ? ["Sınav zorunlu ama bu dilde soru bankası boş."]
+          ? ["Exam is required but this language has no questions."]
           : []),
       ];
-  if (!c.revisionNo.trim()) blockers.unshift("Revision No boş.");
+  if (!c.revisionNo.trim()) blockers.unshift("Revision No is empty.");
 
   const applicable = stepNos.filter((n) => readiness[n] !== null);
   const doneCount = applicable.filter((n) => readiness[n]).length;
@@ -389,7 +389,7 @@ export function CourseDetail() {
           yayınlanmış dilleri görür. */}
       {!externalOnly && (
         <div className="card px-4 py-2.5 mb-3 flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-semibold text-slate-500 mr-1">Dil sürümü</span>
+          <span className="text-[11px] font-semibold text-slate-500 mr-1">Language version</span>
           {LANGS.filter((l) => startedLangs.includes(l) || l === lang).map((l) => (
             <button
               key={l}
@@ -410,7 +410,7 @@ export function CourseDetail() {
                     : "bg-slate-100 text-slate-500"
                 }`}
               >
-                {c.publishedLangs.includes(l) ? "Yayında" : "Taslak"}
+                {c.publishedLangs.includes(l) ? "Published" : "Draft"}
               </span>
             </button>
           ))}
@@ -424,7 +424,7 @@ export function CourseDetail() {
               }}
               className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-[12.5px] font-semibold text-slate-500 hover:border-brand-400 hover:text-slate-800"
             >
-              <Flag lang={l} />+ {LANG_LABEL[l]} ekle
+              <Flag lang={l} />+ Add {LANG_LABEL[l]}
             </button>
           ))}
         </div>
@@ -779,9 +779,9 @@ export function CourseDetail() {
               langPublished ? "Published (tracked as a requirement)" : "Draft"
             ) : (
               <>
-                {LANG_LABEL[lang]} sürümü:{" "}
+                {LANG_LABEL[lang]} version:{" "}
                 <b className={langPublished ? "text-emerald-700" : "text-slate-500"}>
-                  {langPublished ? "yayında" : "taslak"}
+                  {langPublished ? "published" : "draft"}
                 </b>
               </>
             )}
@@ -792,7 +792,7 @@ export function CourseDetail() {
           {!langPublished && blockers.length > 0 && (
             <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
               <p className="text-[11.5px] font-semibold text-amber-900">
-                Yayına alınamaz — önce şunlar:
+                Cannot publish yet — fix these first:
               </p>
               <ul className="mt-1 space-y-0.5">
                 {blockers.map((b) => (
@@ -857,17 +857,17 @@ export function CourseDetail() {
                     } finally {
                       setPublishBusy(false);
                     }
-                    setToast(`Kaydedildi — ${LANG_LABEL[lang]} sürümü yayından alındı.`);
+                    setToast(`Saved — ${LANG_LABEL[lang]} version unpublished.`);
                   } else {
-                    setToast("Taslak olarak kaydedildi.");
+                    setToast("Saved as draft.");
                   }
                 }}
                 disabled={publishBusy}
                 className="btn-secondary disabled:opacity-40"
                 title={
                   langPublished
-                    ? "Kaydeder ve bu dil sürümünü yayından alır"
-                    : "Kaydeder, yayınlamaz"
+                    ? "Saves and unpublishes this language version"
+                    : "Saves without publishing"
                 }
               >
                 Save (draft)
@@ -893,7 +893,7 @@ export function CourseDetail() {
                   }
                   // Sayfada kalınıyor: kaydettikten sonra listeye atılınca ne
                   // olduğu anlaşılmıyordu.
-                  setToast(`Kaydedildi ve ${LANG_LABEL[lang]} sürümü yayınlandı.`);
+                  setToast(`Saved and published the ${LANG_LABEL[lang]} version.`);
                 }}
                 disabled={publishBusy || blockers.length > 0}
                 title={blockers.join(" ")}

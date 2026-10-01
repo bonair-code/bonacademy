@@ -217,6 +217,32 @@ export function PdfReader({
       </div>
     );
 
+
+  /**
+   * Gömülü kutunun yüksekliği kendi genişliğinden türüyor — bkz. aşağıdaki
+   * not. Genişlik kenar çubuğuna, tam ekrana ve telefon/masaüstüne göre
+   * değiştiği için ölçülüyor, tahmin edilmiyor.
+   */
+  const [boxHeight, setBoxHeight] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el || full) return;
+    const fit = () => {
+      const w = el.clientWidth;
+      if (!w) return;
+      const max = Math.round(window.innerHeight * 0.82);
+      setBoxHeight(Math.min(Math.round(w * 1.45) + 16, max));
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    window.addEventListener("resize", fit);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", fit);
+    };
+  }, [full]);
+
   const pct = total > 0 ? Math.round((seen.size / total) * 100) : 0;
 
   return (
@@ -225,8 +251,9 @@ export function PdfReader({
       className={
         full
           ? "fixed inset-0 z-50 bg-white p-4 flex flex-col"
-          : // Gömülü hâlde dar tutulur; okumak isteyen tam ekrana geçer.
-            "max-w-[680px]"
+          : // Gömülü hâlde de bütün genişlik kullanılır: dar tutmak telefonda
+            // sayfayı okunmaz hâle getiriyordu.
+            "w-full"
       }
     >
       <div className="flex items-center justify-between gap-3 mb-2">
@@ -255,11 +282,20 @@ export function PdfReader({
         </div>
       )}
 
+      {/*
+        Gömülü kutunun yüksekliği GENİŞLİKTEN hesaplanıyor: bir A4 sayfası
+        yaklaşık 1.414 oranında, yani kutu genişliğin ~1.45 katı olunca tam bir
+        sayfa görünüyor. Sabit vh değeriyle sayfa hep yarım kalıyordu — ne
+        okunuyordu ne de neyin kesildiği belliydi.
+
+        Ekranın tamamını da yutmasın diye %82'de sınırlanıyor; daha uzun
+        dokümanda tam ekran düğmesi var.
+      */}
       <div
         ref={hostRef}
-        // Telefonda 46vh ~300px kalıyor, tek satır bile zor okunuyor.
+        style={full ? undefined : { height: boxHeight }}
         className={`overflow-y-auto rounded border border-slate-200 bg-slate-100 p-2 ${
-          full ? "flex-1 min-h-0" : "max-h-[68vh] lg:max-h-[46vh]"
+          full ? "flex-1 min-h-0" : ""
         }`}
       />
     </div>

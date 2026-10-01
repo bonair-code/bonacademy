@@ -87,9 +87,14 @@ function useMyAssignments(uid?: string) {
  * Atanan eğitimler kart olarak. Kart, eğitime girmeden önce merak edilen her
  * şeyi taşır: ne kadarı bitti, konusu ne, kim veriyor, ne zamana kadar.
  */
-function LearnerDashboard() {
-  const { profile, role } = useAuth();
-  const { rows, loading } = useMyAssignments(profile?.uid);
+/**
+ * Atama kartları için kurs bilgisi ve bölüm sayısı.
+ *
+ * Hem öğrenci panosu hem yönetici panosu aynı kartı basıyor: yöneticiye
+ * atanan eğitim de tek satırlık bir özet değil, personeldekiyle aynı kart
+ * olmalı — kimse kendi eğitimini başka bir dille okumak zorunda kalmasın.
+ */
+function useAssignmentCards(rows: Assignment[]) {
   const [courses, setCourses] = useState<Record<string, Course>>({});
   /** Kurs başına bölüm sayısı — ilerleme yüzdesi bundan çıkar. */
   const [sectionCount, setSectionCount] = useState<Record<string, number>>({});
@@ -128,6 +133,14 @@ function LearnerDashboard() {
       alive = false;
     };
   }, [courseIds]);
+
+  return { courses, sectionCount };
+}
+
+function LearnerDashboard() {
+  const { profile, role } = useAuth();
+  const { rows, loading } = useMyAssignments(profile?.uid);
+  const { courses, sectionCount } = useAssignmentCards(rows);
 
   const now = Date.now();
   const open = useMemo(
@@ -362,7 +375,16 @@ function StaffDashboard() {
   );
   const [tab, setTab] = useState<Tab>("ALL");
   const { rows: mineRows } = useMyAssignments(profile?.uid);
-  const mine = mineRows.filter((r) => !isDone(r.status));
+  const { courses: myCourses, sectionCount: mySections } = useAssignmentCards(mineRows);
+  /** Açık olanlar, son teslimi yakın olan önce. */
+  const mine = useMemo(
+    () =>
+      mineRows
+        .filter((r) => !isDone(r.status))
+        .sort((a, b) => (a.dueDate?.toMillis?.() ?? 0) - (b.dueDate?.toMillis?.() ?? 0)),
+    [mineRows]
+  );
+  const mineDone = useMemo(() => mineRows.filter((r) => isDone(r.status)), [mineRows]);
 
   const list = useMemo(
     () => (tab === "ALL" ? c.findings : c.findings.filter((f) => f.kind === tab)),
@@ -427,60 +449,11 @@ function StaffDashboard() {
         </p>
       )}
 
-      {/* KENDİ eğitimlerin. Bu liste hesaplanıyor ama hiçbir yere basılmıyordu:
-          müdür/eğitmen/admin de personeldir ve kendine atanan eğitimi hiçbir
-          ekranda göremiyordu — departman panosu yalnızca başkalarını gösteriyor. */}
-      {mine.length > 0 && (
-        <div className="card mb-3">
-          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
-            <span className="text-[13px] font-bold text-slate-800">
-              Sana atanan eğitimler{" "}
-              <span className="text-slate-400 font-normal">({mine.length})</span>
-            </span>
-            <Link to="/certificates" className="text-[11.5px] font-semibold text-brand-700 hover:underline">
-              Sertifikalarım →
-            </Link>
-          </div>
-          <div className="divide-y divide-slate-100">
-            {mine.map((a) => {
-              const due = a.dueDate?.toDate?.() ?? null;
-              const late = due !== null && due.getTime() < Date.now();
-              return (
-                <div key={a.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[13px] font-semibold text-slate-900 truncate">
-                      {a.courseTitle}
-                    </span>
-                    <span className="block text-[11.5px] text-slate-400">
-                      {due
-                        ? late
-                          ? `Son teslim ${due.toLocaleDateString("tr-TR")} — gecikti`
-                          : `Son teslim ${due.toLocaleDateString("tr-TR")}`
-                        : "Son teslim yok"}
-                    </span>
-                  </span>
-                  <span
-                    className={`shrink-0 text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${
-                      late ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-800"
-                    }`}
-                  >
-                    {late ? "Gecikti" : a.status}
-                  </span>
-                  <Link to={`/learn/${a.id}`} className="btn-primary text-xs py-1.5 shrink-0">
-                    Başla
-                  </Link>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* ── Tek oran, tek cümle ─────────────────────────────── */}
-      <div className="card px-5 py-5 mb-3 flex items-center gap-6 flex-wrap">
+      <div className="card px-4 sm:px-5 py-5 mb-3 flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
         <ComplianceRing pct={pct} color={ringColor} />
 
-        <div className="flex-1 min-w-0 sm:min-w-[260px]">
+        <div className="flex-1 min-w-0 w-full text-center sm:text-left">
           <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-slate-900 leading-snug">
             {c.loading
               ? "Calculating…"
@@ -541,43 +514,49 @@ function StaffDashboard() {
 
       </div>
 
-      {/* ── Kendi eğitimi — yöneticide çoğu zaman boş, o yüzden tek satır ── */}
+      {/* ── Kendi eğitimin ──────────────────────────────────────
+          Yönetici de personeldir. Eskiden burada yalnızca ilk atamanın tek
+          satırlık özeti vardı; kaç eğitim beklediği, hangileri olduğu
+          görünmüyordu. Artık personeldekiyle AYNI kart. */}
       <div className="mt-5">
-        <SectionTitle title="My training" />
-        <div className="card px-5 py-3.5 flex items-center gap-3">
-          {mine.length === 0 ? (
-            <>
-              <span className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
-                <IconCheck />
-              </span>
-              <div className="flex-1">
-                <div className="text-[13px] font-semibold text-slate-900">Nothing pending</div>
-                <div className="text-[11px] text-slate-500">No training is waiting on you.</div>
+        <SectionTitle
+          title={`My Training${mine.length ? ` (${mine.length})` : ""}`}
+          right={
+            <Link
+              to="/certificates"
+              className="text-[12px] font-semibold text-brand-700 hover:underline"
+            >
+              My certificates →
+            </Link>
+          }
+        />
+        {mine.length > 0 ? (
+          <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
+            {mine.map((a, i) => (
+              <CourseCard
+                key={a.id}
+                a={a}
+                course={myCourses[a.courseId]}
+                total={mySections[a.courseId] ?? 0}
+                now={Date.now()}
+                urgent={i === 0}
+              />
+            ))}
+          </div>
+        ) : (
+          <div className="card px-5 py-3.5 flex items-center gap-3">
+            <span className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
+              <IconCheck />
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="text-[13px] font-semibold text-slate-900">Nothing pending</div>
+              <div className="text-[11px] text-slate-500">
+                No training is waiting on you.
+                {mineDone.length > 0 ? ` ${mineDone.length} completed.` : ""}
               </div>
-            </>
-          ) : (
-            <>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-semibold text-slate-900 truncate">
-                  {mine[0].courseTitle}
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Due {fmt(mine[0].dueDate)}
-                  {mine.length > 1 ? ` · ${mine.length - 1} more waiting` : ""}
-                </div>
-              </div>
-              <Link to={`/learn/${mine[0].id}`} className="btn-primary text-xs py-1.5 px-3.5 shrink-0">
-                {mine[0].status === "PENDING" ? "Start" : "Continue"}
-              </Link>
-            </>
-          )}
-          <Link
-            to="/certificates"
-            className="text-[12px] font-semibold text-brand-700 hover:underline shrink-0"
-          >
-            My certificates →
-          </Link>
-        </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

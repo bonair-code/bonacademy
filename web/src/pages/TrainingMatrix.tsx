@@ -1206,16 +1206,16 @@ function CellDetail({
       {state.kind === "DONE" && assignment && (
         <div className="mt-2 pt-2 border-t border-slate-100">
           <p className="text-[11.5px] text-sky-800 font-semibold">
-            Yenileme ataması açık — durum: {assignment.status}
+            Renewal assigned — status: {assignment.status}
           </p>
           {assignment.dueDate?.toDate?.() && (
             <p className="text-[10.5px] text-slate-500 mt-0.5">
-              Son teslim {fmt(assignment.dueDate.toDate())}
-              {assignment.dueDate.toDate().getTime() < Date.now() ? " · gecikti" : ""}
+              Due {fmt(assignment.dueDate.toDate())}
+              {assignment.dueDate.toDate().getTime() < Date.now() ? " · overdue" : ""}
             </p>
           )}
           <p className="text-[10.5px] text-slate-400 mt-0.5">
-            Tamamlanınca bu hücre yeni tarihe güncellenir.
+            This cell updates to the new date once it is completed.
           </p>
         </div>
       )}

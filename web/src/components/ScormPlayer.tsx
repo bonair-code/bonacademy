@@ -196,10 +196,14 @@ export function ScormPlayer({
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-3 mb-2">
-        <span className="text-[11px] text-slate-500 truncate">{fileName}</span>
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-[11px] font-semibold text-slate-600">SCORM status: {status}</span>
+      {/* Telefonda bu satır taşıyor ve kartı yana kaydırıyordu: dosya adı,
+          durum ve iki düğme 343px'e sığmıyor. Artık sarıyor. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 mb-2">
+        <span className="text-[11px] text-slate-500 truncate min-w-0">{fileName}</span>
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 ml-auto">
+          <span className="text-[11px] font-semibold text-slate-600 hidden sm:inline">
+            SCORM status: {status}
+          </span>
           <button
             type="button"
             onClick={() => setNonce((n) => n + 1)}

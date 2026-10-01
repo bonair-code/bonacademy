@@ -39,8 +39,8 @@ export function AssignOne({
         // Hiçbir şey açılmadıysa pencereyi kapatıp "atandı" demek yanlış olur.
         setErr(
           r.skipped.length > 0
-            ? `Atama yapılmadı.${skipNote(r.skipped)}`
-            : "Atama yapılmadı."
+            ? `Nothing was assigned.${skipNote(r.skipped)}`
+            : "Nothing was assigned."
         );
         setBusy(false);
         return;

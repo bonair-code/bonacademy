@@ -39,5 +39,5 @@ export function skipNote(skipped: string[]): string {
   const counts = new Map<string, number>();
   for (const r of skipped) counts.set(r, (counts.get(r) ?? 0) + 1);
   const parts = [...counts.entries()].map(([r, n]) => (n > 1 ? `${r} (${n})` : r));
-  return ` ${skipped.length} atlandı — ${parts.join(" ")}`;
+  return ` ${skipped.length} skipped — ${parts.join(" ")}`;
 }

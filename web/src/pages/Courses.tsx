@@ -379,11 +379,11 @@ function CourseCard({
    * hangisinin yayında olduğu bir metre öteden görünmeli.
    */
   const status = !course.isActive
-    ? { label: "Taslak", band: "bg-slate-200 text-slate-700", edit: "bg-white text-slate-700" }
+    ? { label: "Draft", band: "bg-slate-200 text-slate-700", edit: "bg-white text-slate-700" }
     : empty
-    ? { label: "⚠ İçerik yok", band: "bg-amber-500 text-white", edit: "bg-white/25 text-white" }
+    ? { label: "⚠ No content", band: "bg-amber-500 text-white", edit: "bg-white/25 text-white" }
     : {
-        label: `✓ Yayında${pubLangs.length ? ` · ${pubLangs.join(" + ")}` : ""}`,
+        label: `✓ Published${pubLangs.length ? ` · ${pubLangs.join(" + ")}` : ""}`,
         band: "bg-emerald-600 text-white",
         edit: "bg-white/25 text-white",
       };

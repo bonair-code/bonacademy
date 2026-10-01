@@ -19,15 +19,15 @@ const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
  * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
  */
 export const createUser = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   if (caller.data()?.role !== "ADMIN")
-    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins only.");
 
   const d = req.data || {};
   const email = String(d.email || "").trim().toLowerCase();
   const name = String(d.name || "").trim();
-  if (!email || !name) throw new HttpsError("invalid-argument", "E-posta ve ad zorunlu.");
+  if (!email || !name) throw new HttpsError("invalid-argument", "Email and name are required.");
   const role = ROLES.includes(d.role) ? d.role : "USER";
   const departmentId = d.departmentId ? String(d.departmentId) : null;
   const jobTitleIds: string[] = Array.isArray(d.jobTitleIds) ? d.jobTitleIds.map(String) : [];
@@ -46,7 +46,7 @@ export const createUser = onCall({ region: "europe-west3" }, async (req) => {
   try {
     userRecord = await getAuth().createUser({ email, password, displayName: name });
   } catch (e) {
-    throw new HttpsError("already-exists", "Kullanıcı oluşturulamadı: " + (e as Error).message);
+    throw new HttpsError("already-exists", "Could not create the user: " + (e as Error).message);
   }
   // Rolü custom claim'e de yaz (ileride claim-tabanlı kurallara geçiş için hazır).
   await getAuth().setCustomUserClaims(userRecord.uid, { role, departmentId });
@@ -88,10 +88,10 @@ function sanitizeCourseMethods(v: unknown): Record<string, string[]> {
 
 /** Çağıranın ADMIN olduğunu doğrular, değilse hata fırlatır. */
 async function assertAdmin(uid: string | undefined) {
-  if (!uid) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${uid}`).get();
   if (caller.data()?.role !== "ADMIN")
-    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins only.");
 }
 
 /**
@@ -103,9 +103,9 @@ export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
   await assertAdmin(req.auth?.uid);
 
   const uid = String(req.data?.uid || "");
-  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
   const snap = await getFirestore().doc(`users/${uid}`).get();
-  if (!snap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+  if (!snap.exists) throw new HttpsError("not-found", "User not found.");
 
   const d = req.data || {};
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -143,9 +143,9 @@ export const deleteUser = onCall({ region: "europe-west3" }, async (req) => {
   await assertAdmin(req.auth?.uid);
 
   const uid = String(req.data?.uid || "");
-  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
   if (uid === req.auth!.uid)
-    throw new HttpsError("failed-precondition", "Kendi hesabını silemezsin.");
+    throw new HttpsError("failed-precondition", "You cannot delete your own account.");
 
   try {
     await getAuth().deleteUser(uid);
@@ -191,12 +191,12 @@ function publishBlockers(
   const myQs = questions.filter((d) => asLang(d.data().lang) === lang);
   const out: string[] = [];
   if (mine.length === 0) {
-    out.push("Bu dilde hiç bölüm yok.");
+    out.push("This language has no sections yet.");
   } else if (!mine.some((d) => sectionHasContent(d.data()))) {
-    out.push("Bölümler var ama hiçbirinde içerik yok (video/PDF/SCORM ekle).");
+    out.push("Sections exist but none has any content (add a video, PDF or SCORM package).");
   }
   if (c?.exam?.required && myQs.length === 0)
-    out.push("Sınav zorunlu işaretli ama bu dilde soru bankası boş.");
+    out.push("The exam is required but this language has no questions.");
   return out;
 }
 
@@ -217,21 +217,21 @@ function publishedLangsOf(c: any): Lang[] {
  * dokunmasını engelliyor.
  */
 export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
 
   const courseId = String(req.data?.courseId || "");
-  if (!courseId) throw new HttpsError("invalid-argument", "courseId gerekli.");
+  if (!courseId) throw new HttpsError("invalid-argument", "courseId is required.");
   const ref = db.doc(`courses/${courseId}`);
   const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError("not-found", "Kurs bulunamadı.");
+  if (!snap.exists) throw new HttpsError("not-found", "Course not found.");
   const c = snap.data() as any;
 
   // Admin her kursu, eğitmen yalnızca sahibi olduğu kursu yayınlayabilir.
   const isOwner = c.ownerInstructorId === req.auth.uid;
   if (caller?.role !== "ADMIN" && !isOwner)
-    throw new HttpsError("permission-denied", "Bu kursu yayınlama yetkin yok.");
+    throw new HttpsError("permission-denied", "You are not allowed to publish this course.");
 
   // Yayın DİL BAŞINA. Türkçeyi bitirip yayınlamak, İngilizceyi sonra ayrıca
   // kurup ayrıca yayınlamak mümkün; öğrenci yalnızca yayınlanmış dilleri görür,
@@ -262,7 +262,7 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
   if (!revisionNo)
     throw new HttpsError(
       "failed-precondition",
-      "Revision No boş — yayınlamadan önce General Information'da doldur."
+      "Revision No is empty — fill it in under General Information before publishing."
     );
   const note = req.data?.note ? String(req.data.note).trim().slice(0, 500) : null;
 
@@ -329,24 +329,24 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
  * → aynı eğitim ikinci kez atanmaz (idempotent).
  */
 export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   const callerRole = caller.data()?.role;
   // Eğitim atamak eğitimi verenin işi: admin ve eğitmen. Müdür personelinin
   // durumunu görür ve dış eğitim kaydı girer, ama atama yapmaz.
   if (callerRole !== "ADMIN" && callerRole !== "INSTRUCTOR")
-    throw new HttpsError("permission-denied", "Bu işlem admin/eğitmen içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins and instructors.");
 
   const userId = String(req.data?.userId || "");
   const courseIds: string[] = Array.isArray(req.data?.courseIds)
     ? req.data.courseIds.map(String)
     : [];
   if (!userId || courseIds.length === 0)
-    throw new HttpsError("invalid-argument", "userId ve courseIds gerekli.");
+    throw new HttpsError("invalid-argument", "userId and courseIds are required.");
 
   const db = getFirestore();
   const userSnap = await db.doc(`users/${userId}`).get();
-  if (!userSnap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+  if (!userSnap.exists) throw new HttpsError("not-found", "User not found.");
   const userDepartmentId = userSnap.data()?.departmentId ?? null;
 
   // Son teslim süresi çağrıdan gelebilir (matristeki atama penceresi kullanıyor).
@@ -361,7 +361,7 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
   for (const courseId of courseIds) {
     const courseSnap = await db.doc(`courses/${courseId}`).get();
     if (!courseSnap.exists) {
-      skipped.push({ courseId, reason: "Kurs bulunamadı." });
+      skipped.push({ courseId, reason: "Course not found." });
       continue;
     }
     const course = courseSnap.data() as any;
@@ -370,19 +370,19 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
     // kişi açtığında yapacak bir şey bulamaz ve atama sonsuza kadar PENDING
     // kalır.
     if (course.isActive === false) {
-      skipped.push({ courseId, reason: "Kurs yayında değil." });
+      skipped.push({ courseId, reason: "The course is not published." });
       continue;
     }
     const langs = publishedLangsOf(course);
     if (langs.length === 0) {
-      skipped.push({ courseId, reason: "Kursun yayınlanmış bir dili yok." });
+      skipped.push({ courseId, reason: "The course has no published language." });
       continue;
     }
 
     const id = `${userId}_${courseId}`;
     const ref = db.doc(`assignments/${id}`);
     if ((await ref.get()).exists) {
-      skipped.push({ courseId, reason: "Zaten atanmış." });
+      skipped.push({ courseId, reason: "Already assigned." });
       continue; // idempotent
     }
     await ref.set({
@@ -419,12 +419,12 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
  * var. Durum COMPLETED ama completedVia = EXTERNAL olarak işaretlenir.
  */
 export const closeAssignmentExternally = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
   const role = caller?.role;
   if (role !== "ADMIN" && role !== "MANAGER")
-    throw new HttpsError("permission-denied", "Bu işlem admin/müdür içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins and managers.");
 
   const userId = String(req.data?.userId || "");
   const courseId = String(req.data?.courseId || "");
@@ -432,12 +432,12 @@ export const closeAssignmentExternally = onCall({ region: "europe-west3" }, asyn
     ? String(req.data.externalTrainingId)
     : null;
   if (!userId || !courseId)
-    throw new HttpsError("invalid-argument", "userId ve courseId gerekli.");
+    throw new HttpsError("invalid-argument", "userId and courseId are required.");
 
   // Müdür yalnızca kendi departmanındaki personel için.
   const target = (await db.doc(`users/${userId}`).get()).data();
   if (role === "MANAGER" && target?.departmentId !== caller?.departmentId)
-    throw new HttpsError("permission-denied", "Bu personel senin departmanında değil.");
+    throw new HttpsError("permission-denied", "That person is not in your department.");
 
   const ref = db.doc(`assignments/${userId}_${courseId}`);
   const snap = await ref.get();
@@ -463,9 +463,9 @@ export const closeAssignmentExternally = onCall({ region: "europe-west3" }, asyn
 async function loadOwnedAssignment(uid: string, assignmentId: string) {
   const db = getFirestore();
   const snap = await db.doc(`assignments/${assignmentId}`).get();
-  if (!snap.exists) throw new HttpsError("not-found", "Atama bulunamadı.");
+  if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
   const a = snap.data() as any;
-  if (a.userId !== uid) throw new HttpsError("permission-denied", "Bu atama sana ait değil.");
+  if (a.userId !== uid) throw new HttpsError("permission-denied", "This assignment is not yours.");
   return { ref: snap.ref, a };
 }
 
@@ -615,7 +615,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
 /** Bir bölümü tamamlar (sıralı zorunluluk kontrolüyle). Hepsi bitince sınav
  *  varsa SECTIONS_DONE, yoksa COMPLETED + sertifika. */
 export const completeSection = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, sectionId } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   if (a.status === "COMPLETED") return { status: "COMPLETED" };
@@ -625,15 +625,15 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
   const lang = asLang(a.contentLanguage);
   const sections = (await courseSections(a.courseId, lang)).map((d) => d.id);
   if (sections.length === 0)
-    throw new HttpsError("failed-precondition", "Bu dilde bölüm yok.");
+    throw new HttpsError("failed-precondition", "This language has no sections.");
   if (!sections.includes(String(sectionId)))
-    throw new HttpsError("invalid-argument", "Geçersiz bölüm.");
+    throw new HttpsError("invalid-argument", "Unknown section.");
 
   const done: string[] = Array.isArray(a.sectionsDone) ? a.sectionsDone : [];
   // Sıralı zorunluluk: bu bölüm, tamamlanmamış ilk bölüm olmalı.
   const nextExpected = sections.find((s) => !done.includes(s));
   if (nextExpected !== String(sectionId))
-    throw new HttpsError("failed-precondition", "Bölümleri sırayla tamamlamalısın.");
+    throw new HttpsError("failed-precondition", "Sections must be completed in order.");
 
   const newDone = [...done, String(sectionId)];
   const allDone = sections.every((s) => newDone.includes(s));
@@ -662,23 +662,23 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
 
 /** Sınavı başlatır: soruları seçer, snapshot yazar, CEVAPSIZ döndürür. */
 export const startExam = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId } = req.data || {};
   const { a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   if (a.status !== "SECTIONS_DONE" && a.status !== "EXAM_FAILED")
-    throw new HttpsError("failed-precondition", "Önce tüm bölümleri tamamla.");
+    throw new HttpsError("failed-precondition", "Complete every section first.");
 
   const db = getFirestore();
   const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
   const exam = course?.exam || { questionCount: 10, shuffle: true };
   if (exam.required === false)
-    throw new HttpsError("failed-precondition", "Bu kursun sınavı yok.");
+    throw new HttpsError("failed-precondition", "This course has no exam.");
   // Sınav, kişinin eğitimi aldığı dilin bankasından. Her dil sürümünün kendi
   // soruları var; dil ATAMADAN okunuyor, istemciden değil.
   const lang = asLang(a.contentLanguage);
   let qs = await courseQuestions(a.courseId, lang);
   if (qs.length === 0)
-    throw new HttpsError("failed-precondition", "Bu dilde sınav sorusu yok.");
+    throw new HttpsError("failed-precondition", "This language has no exam questions.");
   if (exam.shuffle) qs = qs.sort(() => Math.random() - 0.5);
   qs = qs.slice(0, Math.min(exam.questionCount || 10, qs.length));
 
@@ -712,9 +712,9 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
  * eğitimi hangi dilde aldı" sorusunun cevabı.
  */
 export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const assignmentId = String(req.data?.assignmentId || "");
-  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId gerekli.");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   const lang = asLang(req.data?.language);
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, assignmentId);
   if (asLang(a.contentLanguage) === lang) {
@@ -725,12 +725,12 @@ export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (r
 
   // Tamamlanmış eğitimin dili değişmez: sertifika verildi, kayıt kapandı.
   if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
-    throw new HttpsError("failed-precondition", "Tamamlanmış eğitimin dili değiştirilemez.");
+    throw new HttpsError("failed-precondition", "The language of a completed training cannot be changed.");
 
   const db = getFirestore();
   const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
   if (!publishedLangsOf(course).includes(lang))
-    throw new HttpsError("failed-precondition", "Bu eğitim o dilde yayınlanmamış.");
+    throw new HttpsError("failed-precondition", "This training is not published in that language.");
 
   // Durum YENİ dilin bölümlerine göre baştan hesaplanıyor. Diller ayrı sürüm
   // olduğu için Türkçeyi bitirip "SECTIONS_DONE" olan biri dili İngilizceye
@@ -765,15 +765,15 @@ export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (r
 
 /** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */
 export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, attemptNo, answers } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   const db = getFirestore();
 
   const sessRef = db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
   const sess = (await sessRef.get()).data() as any;
-  if (!sess) throw new HttpsError("not-found", "Sınav oturumu yok.");
-  if (sess.submittedAt) throw new HttpsError("failed-precondition", "Bu deneme zaten gönderildi.");
+  if (!sess) throw new HttpsError("not-found", "No exam session found.");
+  if (sess.submittedAt) throw new HttpsError("failed-precondition", "This attempt has already been submitted.");
 
   const allQs = await courseQuestions(a.courseId, asLang(a.contentLanguage));
   const byId = new Map(allQs.map((q) => [q.id, q]));
@@ -832,26 +832,26 @@ export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
  * Katılımcı sistemde kayıtlıysa aynı kursun açık ataması da kapatılır.
  */
 export const finishClassSession = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
   if (caller?.role !== "ADMIN" && caller?.role !== "INSTRUCTOR")
-    throw new HttpsError("permission-denied", "Bu işlem admin/eğitmen içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins and instructors.");
 
   const sessionId = String(req.data?.sessionId || "");
-  if (!sessionId) throw new HttpsError("invalid-argument", "sessionId gerekli.");
+  if (!sessionId) throw new HttpsError("invalid-argument", "sessionId is required.");
 
   const sRef = db.doc(`classSessions/${sessionId}`);
   const sSnap = await sRef.get();
-  if (!sSnap.exists) throw new HttpsError("not-found", "Oturum bulunamadı.");
+  if (!sSnap.exists) throw new HttpsError("not-found", "Session not found.");
   const ses = sSnap.data() as any;
   if (ses.status === "CLOSED")
-    throw new HttpsError("failed-precondition", "Bu oturum zaten kapatıldı.");
+    throw new HttpsError("failed-precondition", "This session is already closed.");
 
   const attSnap = await db.collection(`classSessions/${sessionId}/attendees`).orderBy("signedAt").get();
   const attendees = attSnap.docs.filter((d) => (d.data() as any).rejected !== true);
   if (attendees.length === 0)
-    throw new HttpsError("failed-precondition", "Katılımcı yok — sertifika üretilemez.");
+    throw new HttpsError("failed-precondition", "No attendees — no certificate can be issued.");
 
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
   // Numaralar merkezî sicilden, katılımcı sayısı kadar tek seferde alınır —
@@ -1058,21 +1058,21 @@ export const serveScormContent = onRequest(
  * hem sertifikaya yazılır.
  */
 export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
   if (caller?.role !== "ADMIN")
-    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins only.");
 
   const assignmentId = String(req.data?.assignmentId || "");
   const reason = String(req.data?.reason || "").trim();
-  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId gerekli.");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   if (reason.length < 5)
-    throw new HttpsError("invalid-argument", "Gerekçe zorunlu (en az 5 karakter).");
+    throw new HttpsError("invalid-argument", "A reason is required (at least 5 characters).");
 
   const ref = db.doc(`assignments/${assignmentId}`);
   const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError("not-found", "Atama bulunamadı.");
+  if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
   const a = snap.data() as any;
   if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
     return { closed: false, reason: "already-complete" };
@@ -1130,25 +1130,25 @@ export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async 
  * Kim, kime, ne zaman sıfırladı kullanıcı kaydına yazılır.
  */
 export const setUserPassword = onCall({ region: "europe-west3" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
   if (caller?.role !== "ADMIN")
-    throw new HttpsError("permission-denied", "Bu işlem yalnızca admin içindir.");
+    throw new HttpsError("permission-denied", "This action is for admins only.");
 
   const uid = String(req.data?.uid || "");
   const password = String(req.data?.password || "");
-  if (!uid) throw new HttpsError("invalid-argument", "uid gerekli.");
+  if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
   if (password.length < 6)
-    throw new HttpsError("invalid-argument", "Şifre en az 6 karakter olmalı.");
+    throw new HttpsError("invalid-argument", "Password must be at least 6 characters.");
 
   const target = await db.doc(`users/${uid}`).get();
-  if (!target.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
+  if (!target.exists) throw new HttpsError("not-found", "User not found.");
 
   try {
     await getAuth().updateUser(uid, { password });
   } catch (e) {
-    throw new HttpsError("internal", "Şifre değiştirilemedi: " + (e as Error).message);
+    throw new HttpsError("internal", "Could not change the password: " + (e as Error).message);
   }
 
   await db.doc(`users/${uid}`).update({
@@ -1179,9 +1179,9 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
   const db = getFirestore();
 
   const rows: any[] = Array.isArray(req.data?.rows) ? req.data.rows : [];
-  if (rows.length === 0) throw new HttpsError("invalid-argument", "Satır yok.");
+  if (rows.length === 0) throw new HttpsError("invalid-argument", "No rows.");
   if (rows.length > 500)
-    throw new HttpsError("invalid-argument", "Tek seferde en fazla 500 satır.");
+    throw new HttpsError("invalid-argument", "At most 500 rows at a time.");
 
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
   const norm = (s: unknown) => String(s ?? "").trim().toLocaleLowerCase("tr");
