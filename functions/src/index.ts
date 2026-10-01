@@ -1283,10 +1283,16 @@ export const sso = onRequest(
   makeSsoHandler({
     appId: "academy",
     idpProjectId: "bonappetit-c2db2",
-    // Bilet İSTEYEBİLEN adresler — Uygulama Merkezi.
+    // Bilet İSTEYEBİLEN adresler. İki istemci var: Uygulama Merkezi ve
+    // BonAir Technic portalı (ana sayfadaki Academy kartı). Mobil uygulama
+    // bu listede YOK — Origin başlığı göndermiyor, sso.js onu ayrıca
+    // ele alıyor.
     launcherOrigins: [
       "https://bonair-launcher.web.app",
       "https://bonair-launcher.firebaseapp.com",
+      "https://portal.bonair.com.tr",
+      "https://bonappetit-c2db2.web.app",
+      "https://bonappetit-c2db2.firebaseapp.com",
     ],
     // Bileti KULLANABİLEN adresler — bu uygulamanın kendi adresleri.
     // Yeni bir alan adı bağlanırsa buraya eklenmeli.

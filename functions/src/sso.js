@@ -148,8 +148,24 @@ function makeSsoHandler(cfg) {
 
     const allowed = action === "redeem" ? redeemOrigins : startOrigins;
     if (!applyCors(req, res, allowed)) {
-      fail(res, 403, "origin-not-allowed", "Bu adres için izin yok.");
-      return;
+      /* Origin BAŞLIĞI YOKSA istek bir tarayıcıdan gelmiyor: mobil uygulama
+       * (React Native fetch'i Origin göndermez), sunucu ya da curl.
+       *
+       * Bunlara `start` için izin veriliyor. CORS'u bir güvenlik duvarı
+       * sanmamak gerekir: yalnız TARAYICIYI bağlar, başka bir sayfanın
+       * kullanıcının kimliğiyle bu ucu çağırmasını engeller. Origin
+       * göndermeyen bir istemci zaten en baştan beri çağırabiliyordu —
+       * bu izin yeni bir kapı açmıyor, var olanı dürüstçe kabul ediyor.
+       * Asıl kapı değişmedi: imzalı ID token, hesap/profil kontrolü ve
+       * 90 saniyelik tek kullanımlık bilet.
+       *
+       * `redeem` ve `roster` DIŞARIDA: ikisi de tarayıcıdan çağrılıyor,
+       * orada Origin var ve dar tutmanın bedeli yok. */
+      const yerliIstemci = !req.headers.origin && action === "start";
+      if (!yerliIstemci) {
+        fail(res, 403, "origin-not-allowed", "Bu adres için izin yok.");
+        return;
+      }
     }
 
     /* Her istek için tek satır erişim kaydı.
