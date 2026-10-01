@@ -203,6 +203,14 @@ service cloud.firestore {
     match /sso_tickets/{ticketHash} {
       allow read, write: if false;
     }
+    // ── Atama silme kaydı ───────────────────────────────────
+    // Silinen atamanın izi: kim, ne zaman, neden kaldırdı. Yalnızca Function
+    // (Admin SDK) yazar; admin okuyabilsin diye okuma açık.
+    match /assignmentRemovals/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /{document=**} { allow read, write: if false; }
   }
 }

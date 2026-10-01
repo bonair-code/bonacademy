@@ -407,18 +407,34 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
     const ref = db.doc(`assignments/${id}`);
     const existing = await ref.get();
     if (existing.exists) {
-      // Tamamlanmış bir eğitimi tekrar atamak meşru bir istek (yenileme).
-      // Arayüz bunu ayırt edip "sıfırla ve yeniden ata" diye sorabilsin diye
-      // sebep ayrı veriliyor; sessizce "zaten atanmış" demek yanlıştı.
-      const st = (existing.data() as any)?.status;
-      skipped.push({
-        courseId,
-        reason:
-          st === "COMPLETED" || st === "EXAM_PASSED"
-            ? "Already completed — reset it to assign again."
-            : "Already assigned.",
-      });
-      continue; // idempotent
+      const prev = existing.data() as any;
+      const st = prev?.status;
+      const finished = st === "COMPLETED" || st === "EXAM_PASSED";
+
+      // Tamamlanmış eğitimi tekrar atamak meşru bir istek: yenileme dönemi.
+      // Engellemek yerine YENİ BİR DÖNGÜ açılıyor — ilerleme sıfırlanıyor,
+      // önceki sertifika yerinde kalıyor (certIdFor döngüyü taşıyor).
+      if (finished) {
+        await ref.update({
+          status: "PENDING",
+          cycleNumber: (Number(prev.cycleNumber) || 1) + 1,
+          sectionsDone: [],
+          examAttemptCount: 0,
+          dueDate,
+          startedAt: FieldValue.delete(),
+          completedAt: FieldValue.delete(),
+          completedVia: FieldValue.delete(),
+          triggeredBy: "MANAGER_REQUESTED",
+          triggeredById: req.auth.uid,
+          reassignedAt: FieldValue.serverTimestamp(),
+        });
+        created++;
+        continue;
+      }
+
+      // Hâlâ açık olan atamada yapacak bir şey yok.
+      skipped.push({ courseId, reason: "Already assigned and still open." });
+      continue;
     }
     await ref.set({
       userId,
@@ -500,14 +516,14 @@ export const resetAssignment = onCall({ region: "europe-west3" }, async (req) =>
 });
 
 /**
- * Atamayı geri alır.
+ * Atamayı geri alır — doküman silinir.
  *
- * Hiç başlanmamışsa doküman siliniyor: ortada korunacak bir öğrenme kaydı yok,
- * yanlış atanmış bir eğitimin matriste "PLAN" olarak durması yanlış bilgi.
- * Başlanmışsa siliNMİyor, CANCELLED işaretleniyor — kişi o eğitimde zaman
- * geçirdi, kayıt kalmalı.
+ * Tamamlanmamış bir atama bir KAYIT değil, bir görevdir: yanlış atandıysa
+ * ortadan kalkmalı, yoksa matriste "PLAN" olarak durup yanlış bilgi verir.
+ * Yarım bırakılmış ilerleme de bir uygunluk kaydı üretmiyor.
  *
- * Tamamlanmış eğitim geri alınamaz: sertifika verildi.
+ * Tamamlanmış eğitim silinemez: sertifika verildi, belge kaydın parçası.
+ * Tekrar aldırmak gerekiyorsa resetAssignment kullanılır.
  */
 export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
@@ -527,19 +543,21 @@ export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) =
       "A completed training cannot be withdrawn — a certificate was issued. Reset it instead if it must be taken again."
     );
 
-  const started = (Array.isArray(a.sectionsDone) ? a.sectionsDone.length : 0) > 0 || !!a.startedAt;
-  if (!started) {
-    await ref.delete();
-    return { ok: true, deleted: true };
-  }
-
-  await ref.update({
-    status: "CANCELLED",
-    cancelledAt: FieldValue.serverTimestamp(),
-    cancelledById: req.auth!.uid,
-    cancelReason: reason || null,
+  // Silmeden önce iz bırak: kim, ne zaman, neden kaldırdı.
+  await db.collection("assignmentRemovals").add({
+    assignmentId,
+    userId: a.userId ?? null,
+    userDepartmentId: a.userDepartmentId ?? null,
+    courseId: a.courseId ?? null,
+    courseTitle: a.courseTitle ?? null,
+    statusAtRemoval: a.status ?? null,
+    sectionsDoneCount: Array.isArray(a.sectionsDone) ? a.sectionsDone.length : 0,
+    removedAt: FieldValue.serverTimestamp(),
+    removedById: req.auth!.uid,
+    reason: reason || null,
   });
-  return { ok: true, deleted: false };
+  await ref.delete();
+  return { ok: true, deleted: true };
 });
 
 /**

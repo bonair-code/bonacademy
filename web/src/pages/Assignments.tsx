@@ -549,9 +549,9 @@ function AssignmentAction({
         </p>
       ) : (
         <p className="text-sm text-slate-700">
-          {started
-            ? "The assignment is marked withdrawn and stops counting as outstanding. It stays on the record because the person already spent time on it."
-            : "Nothing has been started, so the assignment is removed completely."}
+          The assignment is removed completely and stops counting as outstanding.
+          {started ? " Any progress on it is discarded." : ""} Who removed it and why is kept
+          in the audit log.
         </p>
       )}
 
@@ -625,13 +625,26 @@ function AssignForm({
   }
 
   /** Bu seçim için zaten atanmış olanlar. */
-  const already = useMemo(() => {
-    if (!anchor) return new Set<string>();
-    return new Set(
-      byCourse
-        ? existing.filter((a) => a.courseId === anchor).map((a) => a.userId)
-        : existing.filter((a) => a.userId === anchor).map((a) => a.courseId)
-    );
+  /**
+   * Bu seçim için var olan atamalar.
+   *
+   * İki durum ayrı: hâlâ AÇIK olan atamaya yeniden atama yapmanın bir anlamı
+   * yok (zaten bekliyor). TAMAMLANMIŞ olan ise yenileme dönemi demek —
+   * seçilebilir olmalı, sunucu yeni bir döngü açıyor. Eskiden ikisi birden
+   * kilitliydi ve "neden atayamıyorum" sorusunun cevabı hiçbir yerde yoktu.
+   */
+  const { openSet, doneSet } = useMemo(() => {
+    const open = new Set<string>();
+    const done = new Set<string>();
+    if (!anchor) return { openSet: open, doneSet: done };
+    const mine = byCourse
+      ? existing.filter((a) => a.courseId === anchor)
+      : existing.filter((a) => a.userId === anchor);
+    for (const a of mine) {
+      const key = byCourse ? a.userId : a.courseId;
+      (isDone(a.status) ? done : open).add(key);
+    }
+    return { openSet: open, doneSet: done };
   }, [existing, anchor, byCourse]);
 
   /** İşaretlenecek kalemler: kişiler ya da eğitimler. */
@@ -657,7 +670,9 @@ function AssignForm({
       }));
   }, [byCourse, users, courses, dept, q, departments]);
 
-  const selectable = list.filter((x) => !already.has(x.id));
+  const selectable = list.filter((x) => !openSet.has(x.id));
+  /** Seçilenlerden kaçı yenileme (tamamlanmış ve tekrar atanacak). */
+  const renewCount = [...picked].filter((id) => doneSet.has(id)).length;
   const allPicked = selectable.length > 0 && selectable.every((x) => picked.has(x.id));
 
   async function submit() {
@@ -793,7 +808,7 @@ function AssignForm({
             </button>
             <span className="text-[11.5px] text-slate-500 ml-auto">
               {picked.size} selected
-              {already.size > 0 ? ` · ${already.size} already assigned` : ""}
+              {openSet.size > 0 ? ` · ${openSet.size} already waiting` : ""}
             </span>
           </div>
 
@@ -802,18 +817,19 @@ function AssignForm({
               <p className="p-6 text-center text-sm text-slate-400">Nothing matches.</p>
             )}
             {list.map((x) => {
-              const has = already.has(x.id);
+              const waiting = openSet.has(x.id);
+              const finished = doneSet.has(x.id);
               return (
                 <label
                   key={x.id}
                   className={`flex items-center gap-2.5 px-3 py-2 text-[13px] ${
-                    has ? "opacity-50" : "hover:bg-slate-50 cursor-pointer"
+                    waiting ? "opacity-50" : "hover:bg-slate-50 cursor-pointer"
                   }`}
                 >
                   <input
                     type="checkbox"
                     className="accent-brand-600 h-3.5 w-3.5"
-                    disabled={has}
+                    disabled={waiting}
                     checked={picked.has(x.id)}
                     onChange={(e) =>
                       setPicked((p) => {
@@ -825,8 +841,12 @@ function AssignForm({
                     }
                   />
                   <span className="flex-1 min-w-0 truncate text-slate-800">{x.label}</span>
-                  <span className="text-[11px] text-slate-400 shrink-0">
-                    {has ? "already assigned" : x.note}
+                  <span
+                    className={`text-[11px] shrink-0 ${
+                      finished ? "text-amber-700" : "text-slate-400"
+                    }`}
+                  >
+                    {waiting ? "already waiting" : finished ? "completed — will restart" : x.note}
                   </span>
                 </label>
               );
@@ -850,6 +870,8 @@ function AssignForm({
               ? byCourse
                 ? "Pick who should take it."
                 : "Pick the training to assign."
+              : renewCount > 0
+              ? `Due in 30 days. ${renewCount} already completed — progress restarts, earlier certificates stay.`
               : "Due in 30 days from today."}
           </span>
         )}

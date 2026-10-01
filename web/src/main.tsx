@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "./lib/auth";
 import { consumeSsoTicket } from "./lib/sso";
 import { App } from "./App";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 
 /* Launcher'dan gelen oturum devri, uygulama MONTE EDİLMEDEN ÖNCE tamamlanır.
@@ -19,11 +20,13 @@ import "./index.css";
 consumeSsoTicket().finally(() => {
   createRoot(document.getElementById("root")!).render(
     <StrictMode>
+      <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
           <App />
         </AuthProvider>
       </BrowserRouter>
+      </ErrorBoundary>
     </StrictMode>
   );
 });
