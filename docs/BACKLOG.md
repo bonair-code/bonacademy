@@ -1,7 +1,12 @@
 # BonAcademy — Eksikler ve Yapılacaklar
 
 > Çalışma sırasında tespit edilen açık maddeler. Tamamlananlar listeden silinir.
-> Son güncelleme: 30.09.2026
+> Son güncelleme: 01.10.2026
+>
+> **01.10.2026'da kapanan maddeler:** atama döngüsü (yenileme artık yeni
+> döngü açıyor ve her döngü kendi sertifikasını alıyor), dış eğitim kaydı
+> düzenleme, eski kayıtlarda `userDepartmentId` (geriye dönük dolduruldu +
+> `updateUser` departman değişiminde kendisi güncelliyor), hosting dağıtımı.
 
 ## 1. Veri bütünlüğünü bozan açıklar
 
@@ -11,13 +16,6 @@ Firestore doküman silmek alt koleksiyonu silmez. `courses/{id}` silinince
 `jobTitles.requiredCourseIds` (= authorisation scopes) ve `externalTrainings.courseId` içinde ölü
 referans oluşuyor.
 **Çözüm:** özyinelemeli silme yapan `deleteCourse` Function'ı + referans temizliği.
-
-### Atama id'si tekrar döngüsünü engelliyor
-`assignCourses` doc id'yi `{userId}_{courseId}` üretiyor ve varsa atlıyor.
-Bu yüzden **aynı kurs ikinci kez atanamıyor** — Validity Period alanı var ama
-periyodik yenileme kurulamıyor. Veri modeli dokümanı `{planId}_{userId}_{cycleNumber}`
-diyor.
-**Çözüm:** id'ye `cycleNumber` ekle, yenilemede yeni döngü aç.
 
 ## 2. Hiç yazılmamış parçalar
 
@@ -59,9 +57,6 @@ iz bırakmıyor.
 
 ## 3. Yarım kalanlar
 
-### Dış eğitim kaydı düzenlenemiyor
-Ekle ve sil var, düzenle yok. Yanlış giren silip yeniden giriyor.
-
 ### Excel toplu soru yüklemede tekrar kontrolü yok
 Aynı dosya iki kez yüklenirse sorular çiftleniyor.
 
@@ -85,14 +80,7 @@ Online sertifikalar `BA-00001` monoton sayacından, sınıf sertifikaları elle
 girilen `25-131` dizisinden gidiyor. İki alan çakışmıyor ama tek bir kayıt
 defterinde birleştirilmeleri gerekebilir.
 
-### Eski sertifikalarda `userDepartmentId` yok
-Müdür, bu alan eklenmeden önce düzenlenmiş sertifikaları göremiyor. Geriye dönük
-dolduran betik gerekiyor.
-
 ## 4. Altyapı
-
-### Hosting'e hiç deploy edilmedi
-`bonair-academy.web.app` → 404. Sistem yalnızca `localhost:5173`'te çalışıyor.
 
 ## Yetki (authorisation) modeli — 25.08.2026
 
