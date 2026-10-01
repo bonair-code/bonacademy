@@ -204,24 +204,16 @@ export function PdfReader({
     };
   }, [url]);
 
-  if (err)
-    return (
-      <div className="rounded border border-brand-200 bg-brand-50/60 p-4">
-        <p className="text-[13px] text-brand-700 font-semibold mb-1">
-          This PDF could not be displayed.
-        </p>
-        <p className="text-[11px] text-brand-700/80 mb-2">{err}</p>
-        <a href={url} target="_blank" rel="noreferrer" className="text-[12px] underline">
-          Open {fileName} in a new tab
-        </a>
-      </div>
-    );
-
 
   /**
    * Gömülü kutunun yüksekliği kendi genişliğinden türüyor — bkz. aşağıdaki
    * not. Genişlik kenar çubuğuna, tam ekrana ve telefon/masaüstüne göre
    * değiştiği için ölçülüyor, tahmin edilmiyor.
+   *
+   * DİKKAT: bu hook her türlü erken \`return\`ün ÜSTÜNDE kalmalı. Altına
+   * konulduğunda PDF açılamadığında (err dolu) bileşen erkenden dönüyor,
+   * hook sayısı değişiyor ve React bütün ağacı söküyordu — ekran bembeyaz
+   * kalıyordu (React #300).
    */
   const [boxHeight, setBoxHeight] = useState<number | undefined>(undefined);
   useEffect(() => {
@@ -242,6 +234,20 @@ export function PdfReader({
       window.removeEventListener("resize", fit);
     };
   }, [full]);
+
+  if (err)
+    return (
+      <div className="rounded border border-brand-200 bg-brand-50/60 p-4">
+        <p className="text-[13px] text-brand-700 font-semibold mb-1">
+          This PDF could not be displayed.
+        </p>
+        <p className="text-[11px] text-brand-700/80 mb-2">{err}</p>
+        <a href={url} target="_blank" rel="noreferrer" className="text-[12px] underline">
+          Open {fileName} in a new tab
+        </a>
+      </div>
+    );
+
 
   const pct = total > 0 ? Math.round((seen.size / total) * 100) : 0;
 
