@@ -124,7 +124,7 @@ const NAV: NavItem[] = [
   {
     to: "/assignments",
     label: "Assign Training",
-    roles: ["ADMIN", "MANAGER"],
+    roles: ["ADMIN", "INSTRUCTOR"],
     group: "Training",
     icon: Icon.assign,
   },

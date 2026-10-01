@@ -19,6 +19,7 @@ import { Modal } from "../components/Modal";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { FilePreview } from "../components/FilePreview";
 import {
+  isAssignmentDone,
   daysLeft,
   expiryOf,
   fmt,
@@ -284,6 +285,20 @@ export function TrainingMatrix() {
 
   const assignedSet = useMemo(() => openAssignmentSet(assignments), [assignments]);
 
+  /**
+   * (kişi|kurs) → açık atamanın kendisi. Geçerli kaydı olan birine eğitim
+   * atandığında hücre tarihi göstermeye devam ediyor (doğrusu bu: kayıt hâlâ
+   * geçerli), ama atamanın varlığı hiçbir yerde görünmüyordu.
+   */
+  const openAssignments = useMemo(() => {
+    const m = new Map<string, AssignmentRow>();
+    for (const a of assignments) {
+      if (isAssignmentDone(a.status)) continue;
+      if (a.userId && a.courseId) m.set(keyOf(a.userId, a.courseId), a);
+    }
+    return m;
+  }, [assignments]);
+
   const hover = useCellHover();
 
   /** Düzenlenecek dış kayıt — id.den bulunur. */
@@ -303,6 +318,13 @@ export function TrainingMatrix() {
    */
   const canRecordFor = (u: UserRow) =>
     role === "ADMIN" || (role === "MANAGER" && u.departmentId === profile?.departmentId);
+
+  /**
+   * Eğitim ATAMAK kayıt girmekten ayrı bir yetki: eğitimi veren atar. Müdür
+   * personelinin durumunu görür ve dışarıdan alınmış eğitimi kaydeder, ama
+   * sistemde eğitim atamaz. Sunucu da aynı kuralı uyguluyor.
+   */
+  const canAssign = role === "ADMIN" || role === "INSTRUCTOR";
 
   /**
    * Atanabilir eğitim: dışarıdan alınan eğitim sistemde tamamlanamaz, yayında
@@ -670,7 +692,7 @@ export function TrainingMatrix() {
                           {/* Eksiği olan kişide tek tek hücre gezmek yerine
                               hepsini bir kerede atama kısayolu. */}
                           {(() => {
-                            if (!canRecordFor(u)) return null;
+                            if (!canAssign) return null;
                             const missing = visibleCourses.filter(
                               (c) => cellFor(u, c).kind === "MISSING" && canAssignCourse(c)
                             );
@@ -700,7 +722,9 @@ export function TrainingMatrix() {
                               st.kind === "MISSING" ? "cell-missing" : ""
                             } ${st.kind === "NA" ? "matrix-na" : ""}`}
                             style={{ background: h.bg, color: h.fg }}
-                            onMouseEnter={(e) => hover.enter(e.currentTarget, u, c, st)}
+                            onMouseEnter={(e) =>
+                              hover.enter(e.currentTarget, u, c, st, openAssignments.get(keyOf(u.id, c.id)))
+                            }
                             onMouseLeave={hover.leave}
                           >
                             {/* Eksik hücre eylem menüsü açar: eğitim ya başka
@@ -712,7 +736,7 @@ export function TrainingMatrix() {
 
                                 Metod bazlı eğitimde dolu hücreden de girilir —
                                 ikinci bir metod her zaman eklenebilmeli. */}
-                            {canRecordFor(u) &&
+                            {(canRecordFor(u) || canAssign) &&
                             (st.kind === "MISSING" ||
                               (methodsOf(c).length > 0 && st.kind !== "NA")) ? (
                               <button
@@ -787,7 +811,7 @@ export function TrainingMatrix() {
               : undefined
           }
           onAssign={
-            canRecordFor(hover.at.user) && canAssignCourse(hover.at.course)
+            canAssign && canAssignCourse(hover.at.course)
               ? () => {
                   const { user, course } = hover.at!;
                   hover.closeNow();
@@ -815,19 +839,21 @@ export function TrainingMatrix() {
                 {menu.course.title}
               </p>
             </div>
-            <button
-              onClick={() => {
-                setRecord({ user: menu.user, course: menu.course });
-                setMenu(null);
-              }}
-              className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
-            >
-              + Record training
-              <span className="block text-[10px] text-slate-400 font-normal leading-tight">
-                Already taken elsewhere
-              </span>
-            </button>
-            {canAssignCourse(menu.course) ? (
+            {canRecordFor(menu.user) && (
+              <button
+                onClick={() => {
+                  setRecord({ user: menu.user, course: menu.course });
+                  setMenu(null);
+                }}
+                className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
+              >
+                + Record training
+                <span className="block text-[10px] text-slate-400 font-normal leading-tight">
+                  Already taken elsewhere
+                </span>
+              </button>
+            )}
+            {!canAssign ? null : canAssignCourse(menu.course) ? (
               <button
                 onClick={() => {
                   setAssign({ user: menu.user, course: menu.course });
@@ -966,11 +992,21 @@ export function TrainingMatrix() {
  */
 const HOVER_DELAY_MS = 1000;
 
+type AssignmentRow = {
+  userId?: string;
+  courseId?: string;
+  status?: string;
+  dueDate?: Timestamp | null;
+  contentLanguage?: string;
+};
+
 type HoverState = {
   user: UserRow;
   course: CourseRow;
   state: CellState;
   rect: DOMRect;
+  /** Bu hücrede açık bir atama varsa — tamamlanmış kayıtla birlikte de olabilir. */
+  assignment?: AssignmentRow | null;
 };
 
 function useCellHover() {
@@ -985,14 +1021,20 @@ function useCellHover() {
     }
   };
 
-  const enter = (el: HTMLElement, user: UserRow, course: CourseRow, state: CellState) => {
+  const enter = (
+    el: HTMLElement,
+    user: UserRow,
+    course: CourseRow,
+    state: CellState,
+    assignment?: AssignmentRow | null
+  ) => {
     clear();
     holdOpen();
     // Gerekli olmayan hücrede yalnızca muafiyet varsa gösterilecek bir şey var.
     if (state.kind === "NA" && !state.exemptBy) return;
     const rect = el.getBoundingClientRect();
     timer.current = window.setTimeout(
-      () => setAt({ user, course, state, rect }),
+      () => setAt({ user, course, state, rect, assignment }),
       HOVER_DELAY_MS
     );
   };
@@ -1059,7 +1101,7 @@ function CellDetail({
   /** Eksik hücrede "eğitim ata" — verilmezse yetki yok ya da atanamaz. */
   onAssign?: () => void;
 }) {
-  const { user, course, state, rect } = at;
+  const { user, course, state, rect, assignment } = at;
   const W = 260;
 
   const row = (k: string, v: React.ReactNode) => (
@@ -1156,6 +1198,26 @@ function CellDetail({
         <p className="text-[11.5px] text-amber-800 font-semibold">
           Assigned but not completed yet.
         </p>
+      )}
+
+      {/* Geçerli kaydı olan birine eğitim atanmış olabilir (yenileme). Hücre
+          doğru olanı gösteriyor — kayıt hâlâ geçerli — ama atamanın da burada
+          görünmesi lazım, yoksa "atadım mı, atamadım mı" belli olmuyor. */}
+      {state.kind === "DONE" && assignment && (
+        <div className="mt-2 pt-2 border-t border-slate-100">
+          <p className="text-[11.5px] text-sky-800 font-semibold">
+            Yenileme ataması açık — durum: {assignment.status}
+          </p>
+          {assignment.dueDate?.toDate?.() && (
+            <p className="text-[10.5px] text-slate-500 mt-0.5">
+              Son teslim {fmt(assignment.dueDate.toDate())}
+              {assignment.dueDate.toDate().getTime() < Date.now() ? " · gecikti" : ""}
+            </p>
+          )}
+          <p className="text-[10.5px] text-slate-400 mt-0.5">
+            Tamamlanınca bu hücre yeni tarihe güncellenir.
+          </p>
+        </div>
       )}
 
       {state.kind === "DONE" && (

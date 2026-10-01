@@ -427,6 +427,55 @@ function StaffDashboard() {
         </p>
       )}
 
+      {/* KENDİ eğitimlerin. Bu liste hesaplanıyor ama hiçbir yere basılmıyordu:
+          müdür/eğitmen/admin de personeldir ve kendine atanan eğitimi hiçbir
+          ekranda göremiyordu — departman panosu yalnızca başkalarını gösteriyor. */}
+      {mine.length > 0 && (
+        <div className="card mb-3">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+            <span className="text-[13px] font-bold text-slate-800">
+              Sana atanan eğitimler{" "}
+              <span className="text-slate-400 font-normal">({mine.length})</span>
+            </span>
+            <Link to="/certificates" className="text-[11.5px] font-semibold text-brand-700 hover:underline">
+              Sertifikalarım →
+            </Link>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {mine.map((a) => {
+              const due = a.dueDate?.toDate?.() ?? null;
+              const late = due !== null && due.getTime() < Date.now();
+              return (
+                <div key={a.id} className="px-5 py-3 flex items-center gap-3 flex-wrap">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[13px] font-semibold text-slate-900 truncate">
+                      {a.courseTitle}
+                    </span>
+                    <span className="block text-[11.5px] text-slate-400">
+                      {due
+                        ? late
+                          ? `Son teslim ${due.toLocaleDateString("tr-TR")} — gecikti`
+                          : `Son teslim ${due.toLocaleDateString("tr-TR")}`
+                        : "Son teslim yok"}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${
+                      late ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-800"
+                    }`}
+                  >
+                    {late ? "Gecikti" : a.status}
+                  </span>
+                  <Link to={`/learn/${a.id}`} className="btn-primary text-xs py-1.5 shrink-0">
+                    Başla
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Tek oran, tek cümle ─────────────────────────────── */}
       <div className="card px-5 py-5 mb-3 flex items-center gap-6 flex-wrap">
         <ComplianceRing pct={pct} color={ringColor} />

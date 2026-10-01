@@ -1,6 +1,6 @@
 import { PageHead } from "../components/PageHead";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   addDoc,
   collection,
@@ -123,7 +123,7 @@ function recurText(every: number | null, unit: RecurUnit) {
 
 export function CourseDetail() {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+
   const [c, setC] = useState<Course | null>(null);
   const [allQuestions, setAllQuestions] = useState<Question[]>([]);
   /** Bütün dillerin bölümleri; ekranda yalnızca seçili dil gösteriliyor. */
@@ -135,6 +135,13 @@ export function CourseDetail() {
    */
   const [lang, setLang] = useState<Lang>("TR");
   const [publishBusy, setPublishBusy] = useState(false);
+  /** Kaydetme/yayınlama sonucu — sayfada kalındığı için geri bildirim şart. */
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -800,6 +807,12 @@ export function CourseDetail() {
       </Section>
       )}
 
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl no-print">
+          {toast}
+        </div>
+      )}
+
       {/* Alt navigasyon — yeni kurs kurarken sırayla ilerlemek için;
           mevcut kursta soldaki raydan istenen adıma doğrudan gidilir. */}
       <div className="flex items-center justify-between mt-3">
@@ -844,8 +857,10 @@ export function CourseDetail() {
                     } finally {
                       setPublishBusy(false);
                     }
+                    setToast(`Kaydedildi — ${LANG_LABEL[lang]} sürümü yayından alındı.`);
+                  } else {
+                    setToast("Taslak olarak kaydedildi.");
                   }
-                  navigate("/courses");
                 }}
                 disabled={publishBusy}
                 className="btn-secondary disabled:opacity-40"
@@ -876,7 +891,9 @@ export function CourseDetail() {
                   } finally {
                     setPublishBusy(false);
                   }
-                  navigate("/courses");
+                  // Sayfada kalınıyor: kaydettikten sonra listeye atılınca ne
+                  // olduğu anlaşılmıyordu.
+                  setToast(`Kaydedildi ve ${LANG_LABEL[lang]} sürümü yayınlandı.`);
                 }}
                 disabled={publishBusy || blockers.length > 0}
                 title={blockers.join(" ")}

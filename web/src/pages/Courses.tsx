@@ -20,7 +20,7 @@ import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { coverTone } from "../lib/coverTone";
-import { LANG_LABEL, publishedLangsOf } from "../lib/lang";
+import { publishedLangsOf } from "../lib/lang";
 import { Flag } from "../components/Flag";
 
 type Course = {
@@ -373,11 +373,20 @@ function CourseCard({
   const sections = counts?.sections;
   // İçeriği olmayan bir kurs yayında olmamalı: atanan kişi boş ekranla karşılaşır.
   const empty = sections === 0;
+  /**
+   * Durum kartın en üstünde dolu renkli bir bant: yayında yeşil, taslak gri,
+   * içeriği boş turuncu. Küçük bir rozet 17 kart arasında kayboluyordu —
+   * hangisinin yayında olduğu bir metre öteden görünmeli.
+   */
   const status = !course.isActive
-    ? { label: "Draft", cls: "bg-slate-100 text-slate-600" }
+    ? { label: "Taslak", band: "bg-slate-200 text-slate-700", edit: "bg-white text-slate-700" }
     : empty
-    ? { label: "Empty", cls: "bg-amber-50 text-amber-800" }
-    : { label: "Published", cls: "bg-emerald-50 text-emerald-700" };
+    ? { label: "⚠ İçerik yok", band: "bg-amber-500 text-white", edit: "bg-white/25 text-white" }
+    : {
+        label: `✓ Yayında${pubLangs.length ? ` · ${pubLangs.join(" + ")}` : ""}`,
+        band: "bg-emerald-600 text-white",
+        edit: "bg-white/25 text-white",
+      };
 
   const row = (k: string, v: React.ReactNode) => (
     <div className="flex justify-between gap-3 py-1 border-t border-slate-100 first:border-t-0 text-[11.5px]">
@@ -388,6 +397,20 @@ function CourseCard({
 
   return (
     <div className="card overflow-hidden flex flex-col">
+      {/* Durum bandı + Edit. Edit kartın en görünen yerinde: eskiden alt köşede
+          küçük bir bağlantıydı ve aranıyordu. */}
+      <div
+        className={`flex items-center justify-between gap-2 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.05em] ${status.band}`}
+      >
+        <span className="min-w-0 truncate">{status.label}</span>
+        <Link
+          to={`/courses/${course.id}`}
+          className={`shrink-0 rounded-md px-2.5 py-1 text-[10px] font-bold hover:opacity-85 transition ${status.edit}`}
+        >
+          Edit
+        </Link>
+      </div>
+
       <button
         onClick={onOpen}
         className="relative h-[96px] shrink-0 flex flex-col justify-end text-left px-3.5 py-2.5"
@@ -436,21 +459,6 @@ function CourseCard({
           )}
           {row("Duration", course.durationHours != null ? `${course.durationHours} hours` : "—")}
           {row("Recurrence", recurrenceText(course))}
-          {/* Yayınlanmış dil sürümleri. Taslak kalan dil burada görünmez —
-              öğrenci de görmüyor. */}
-          {pubLangs.length > 0
-            ? row(
-                "Language",
-                <span className="inline-flex items-center gap-1.5 justify-end">
-                  {pubLangs.map((l) => (
-                    <span key={l} className="inline-flex items-center gap-1">
-                      <Flag lang={l} size={16} />
-                      <span className="text-[11px]">{LANG_LABEL[l]}</span>
-                    </span>
-                  ))}
-                </span>
-              )
-            : null}
           {row(
             "Revision",
             course.revisionNo
@@ -464,18 +472,16 @@ function CourseCard({
         </div>
 
         <div className="mt-auto pt-3 flex items-center justify-between gap-2">
-          <span
-            className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${status.cls}`}
-          >
-            {status.label}
+          {/* Yayınlanmış dil sürümleri. Taslak kalan dil görünmez — öğrenci de
+              görmüyor. */}
+          <span className="inline-flex items-center gap-1.5">
+            {pubLangs.length === 0 ? (
+              <span className="text-[11px] text-slate-300">—</span>
+            ) : (
+              pubLangs.map((l) => <Flag key={l} lang={l} size={18} />)
+            )}
           </span>
           <div className="flex items-center gap-1">
-            <Link
-              to={`/courses/${course.id}`}
-              className="text-[11.5px] font-semibold text-brand-700 hover:underline"
-            >
-              Edit
-            </Link>
             <RowMenu
               label={`Actions for ${course.title}`}
               items={[

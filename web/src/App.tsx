@@ -126,7 +126,7 @@ function AuthedApp() {
         <Route
           path="/assignments"
           element={
-            <Only roles={["ADMIN", "MANAGER"]}>
+            <Only roles={["ADMIN", "INSTRUCTOR"]}>
               <Assignments />
             </Only>
           }

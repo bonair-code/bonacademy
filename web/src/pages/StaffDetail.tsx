@@ -244,6 +244,12 @@ export function StaffDetail() {
   const canEdit =
     role === "ADMIN" || (role === "MANAGER" && user?.departmentId === profile?.departmentId);
 
+  /**
+   * Eğitim atamak kişiyi yönetmekten ayrı yetki: eğitimi veren atar. Müdür
+   * personelinin kaydını düzenler ve dış eğitim girer, ama atama yapmaz.
+   */
+  const canAssign = role === "ADMIN" || role === "INSTRUCTOR";
+
   /** Hesabı aktif/pasif et. Users sayfasındaki ile aynı çağrı. */
   async function setActive(isActive: boolean) {
     if (!userId) return;
@@ -335,7 +341,15 @@ export function StaffDetail() {
                 items={[
                   { label: "Edit details", icon: "✎", onClick: () => setDialog({ kind: "editUser" }) },
                   { label: "Reset password", icon: "🔑", onClick: () => setDialog({ kind: "password" }) },
-                  { label: "Assign training", icon: "▤", onClick: () => setDialog({ kind: "assign" }) },
+                  ...(canAssign
+                    ? [
+                        {
+                          label: "Assign training",
+                          icon: "▤",
+                          onClick: () => setDialog({ kind: "assign" }),
+                        },
+                      ]
+                    : []),
                   {
                     label: user.isActive === false ? "Activate" : "Deactivate",
                     icon: user.isActive === false ? "✓" : "⦸",
@@ -405,7 +419,7 @@ export function StaffDetail() {
             <span className="text-[13px] font-bold text-slate-800">
               Gaps <span className="text-slate-400 font-normal">({missing.length})</span>
             </span>
-            {canEdit && missing.length > 0 && (
+            {canAssign && missing.length > 0 && (
               <button
                 onClick={() => setDialog({ kind: "assign" })}
                 className="text-[11.5px] font-semibold text-brand-700 hover:underline no-print"
@@ -837,7 +851,7 @@ export function StaffDetail() {
             Assignments{" "}
             <span className="text-slate-400 font-normal">({assignments.length})</span>
           </span>
-          {canEdit && (
+          {canAssign && (
             <button
               onClick={() => setDialog({ kind: "assign" })}
               className="btn-secondary text-xs py-1.5 no-print"

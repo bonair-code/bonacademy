@@ -332,8 +332,10 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Giriş gerekli.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   const callerRole = caller.data()?.role;
-  if (callerRole !== "ADMIN" && callerRole !== "MANAGER")
-    throw new HttpsError("permission-denied", "Bu işlem admin/müdür içindir.");
+  // Eğitim atamak eğitimi verenin işi: admin ve eğitmen. Müdür personelinin
+  // durumunu görür ve dış eğitim kaydı girer, ama atama yapmaz.
+  if (callerRole !== "ADMIN" && callerRole !== "INSTRUCTOR")
+    throw new HttpsError("permission-denied", "Bu işlem admin/eğitmen içindir.");
 
   const userId = String(req.data?.userId || "");
   const courseIds: string[] = Array.isArray(req.data?.courseIds)
@@ -346,11 +348,6 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
   const userSnap = await db.doc(`users/${userId}`).get();
   if (!userSnap.exists) throw new HttpsError("not-found", "Kullanıcı bulunamadı.");
   const userDepartmentId = userSnap.data()?.departmentId ?? null;
-
-  // Müdür yalnızca kendi departmanına atar. Bu kontrol eksikti: arayüz müdüre
-  // sadece kendi personelini gösteriyordu ama çağrı doğrudan yapılabiliyordu.
-  if (callerRole === "MANAGER" && userDepartmentId !== caller.data()?.departmentId)
-    throw new HttpsError("permission-denied", "Yalnızca kendi departmanına atama yapabilirsin.");
 
   // Son teslim süresi çağrıdan gelebilir (matristeki atama penceresi kullanıyor).
   const rawDue = Number(req.data?.dueDays);

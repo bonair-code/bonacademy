@@ -2,6 +2,7 @@ import { PageHead } from "../components/PageHead";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { asLang, LANG_LABEL, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
+import { Modal } from "../components/Modal";
 import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -148,8 +149,12 @@ export function Learn() {
    * Function durumu yeni dilin bölümlerine göre baştan hesaplıyor.
    */
   const [langBusy, setLangBusy] = useState(false);
+  /** Onay bekleyen dil değişikliği. */
+  const [langAsk, setLangAsk] = useState<Lang | null>(null);
+
   async function switchLang(next: Lang) {
     if (!id || next === lang) return;
+    setLangAsk(null);
     setErr(null);
     setLangBusy(true);
     try {
@@ -269,7 +274,7 @@ export function Learn() {
               key={l}
               type="button"
               disabled={langBusy}
-              onClick={() => void switchLang(l)}
+              onClick={() => setLangAsk(l)}
               title={LANG_LABEL[l]}
               className={`inline-flex items-center rounded-md p-1 border transition disabled:opacity-40 ${
                 lang === l
@@ -281,6 +286,40 @@ export function Learn() {
             </button>
           ))}
         </div>
+      )}
+
+      {/* Dil değiştirme onayı. Eğitimin ortasında yanlışlıkla bayrağa basmak,
+          kişiyi bambaşka bir sürümün başına atıyor — sorulmadan yapılmamalı. */}
+      {langAsk && (
+        <Modal
+          title="Dili değiştir"
+          subtitle={`${LANG_LABEL[lang]} → ${LANG_LABEL[langAsk]}`}
+          onClose={() => setLangAsk(null)}
+          width="max-w-md"
+        >
+          <p className="text-sm text-slate-700">
+            Bu eğitimin <b>{LANG_LABEL[langAsk]}</b> sürümüne geçiyorsunuz. O sürümün bölümleri
+            ayrıdır; eğitime <b>sıfırdan</b> başlarsınız ve bitirmek için tüm bölümlerini
+            tamamlamanız gerekir.
+          </p>
+          <p className="text-[12.5px] text-slate-500 mt-2">
+            {done.size > 0
+              ? `${LANG_LABEL[lang]} sürümünde tamamladığınız ${done.size} bölüm kaydınızda duruyor; geri dönerseniz kaldığınız yerden devam edersiniz.`
+              : "Bu sürümde henüz tamamladığınız bölüm yok."}
+          </p>
+          <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
+            <button
+              onClick={() => void switchLang(langAsk)}
+              disabled={langBusy}
+              className="btn-primary text-xs py-2 disabled:opacity-40"
+            >
+              {langBusy ? "Değiştiriliyor…" : `${LANG_LABEL[langAsk]} sürümüne geç`}
+            </button>
+            <button onClick={() => setLangAsk(null)} className="btn-secondary text-xs py-2">
+              Vazgeç
+            </button>
+          </div>
+        </Modal>
       )}
 
       <div className="grid lg:grid-cols-[230px_1fr] gap-3 items-start">

@@ -482,7 +482,9 @@ function UserRowView({
                 onClick: onToggle,
               },
               { label: "Reset password", icon: "🔑", onClick: onPassword },
-              { label: "Assign Training", icon: "▤", onClick: onAssign },
+              // Eğitim atamak admin ve eğitmenin işi; müdür personelini
+              // yönetir ama eğitim atamaz. Sunucu da aynı kuralı uyguluyor.
+              ...(isAdmin ? [{ label: "Assign Training", icon: "▤", onClick: onAssign }] : []),
               // Hesap silmek adminde kalıyor: personel silmek sertifika ve
               // atama kayıtlarını öksüz bırakıyor, denetim izi meselesi.
               ...(isAdmin
