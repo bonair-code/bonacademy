@@ -1,6 +1,7 @@
 import { PageHead } from "../components/PageHead";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { langsOf, LANGS, LANG_LABEL, pickForLang, type Lang } from "../lib/lang";
+import { asLang, LANG_LABEL, publishedLangsOf, type Lang } from "../lib/lang";
+import { Flag } from "../components/Flag";
 import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -13,13 +14,20 @@ import { ExamRunner, type ExamQ } from "../components/ExamRunner";
 // LMS API'sini window.parent üzerinde arıyor, çapraz origin'de erişemez.
 const SCORM_SERVE_BASE = "/scorm-content";
 
-type Content = { lang?: Lang | null } & (
+type Content =
   | { id: string; type: "VIDEO"; url: string; fileName: string }
   | { id: string; type: "PDF"; url: string; fileName: string }
-  | { id: string; type: "SCORM"; entryPoint: string; basePath: string; fileName: string }
-);
+  | { id: string; type: "SCORM"; entryPoint: string; basePath: string; fileName: string };
 
-type Section = { id: string; order: number; title: string; contents?: Content[]; content?: any };
+/** Bölüm bir DİL SÜRÜMÜNE ait; başka dilin bölümleri ayrı kayıt. */
+type Section = {
+  id: string;
+  order: number;
+  title: string;
+  lang?: string;
+  contents?: Content[];
+  content?: any;
+};
 type Assignment = {
   courseId: string;
   courseTitle: string;
@@ -27,6 +35,8 @@ type Assignment = {
   sectionsDone?: string[];
   /** Öğrencinin eğitimi aldığı dil. Kayıtta tutuluyor, görüntüleme tercihi değil. */
   contentLanguage?: Lang;
+  /** Kişi dili bizzat seçti mi? Atama açılırken yazılan varsayılandan ayırır. */
+  languageChosen?: boolean;
 };
 
 /** Bölümün ham içerik listesi (eski tek-içerik alanı dahil). */
@@ -52,13 +62,23 @@ export function Learn() {
     return onSnapshot(doc(db, "assignments", id), (d) => setA(d.data() as Assignment));
   }, [id]);
 
+  /**
+   * Yalnızca kişinin aldığı DİL SÜRÜMÜNÜN bölümleri. Diller ayrı sürüm:
+   * İngilizce sürümün bölüm sayısı ve sırası Türkçeden farklı olabilir.
+   */
   useEffect(() => {
     if (!a?.courseId) return;
+    const lang = asLang(a.contentLanguage);
     return onSnapshot(
       query(collection(db, "courses", a.courseId, "sections"), orderBy("order")),
-      (snap) => setSections(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
+      (snap) =>
+        setSections(
+          snap.docs
+            .map((d) => ({ id: d.id, ...(d.data() as any) }))
+            .filter((s: Section) => asLang(s.lang) === lang)
+        )
     );
-  }, [a?.courseId]);
+  }, [a?.courseId, a?.contentLanguage]);
 
   /**
    * Kursun sınavı var mı — soldaki rayda sınav satırının en baştan görünmesi
@@ -66,11 +86,14 @@ export function Learn() {
    * beliriyordu; o ana kadar varlığından haberin olmuyordu.
    */
   const [examRequired, setExamRequired] = useState<boolean | null>(null);
+  /** Kursun yayınlanmış dilleri — kapıda yalnızca bunlar gösterilir. */
+  const [courseLangs, setCourseLangs] = useState<Lang[]>([]);
   useEffect(() => {
     if (!a?.courseId) return;
     return onSnapshot(doc(db, "courses", a.courseId), (d) => {
       const x = d.data() as any;
       setExamRequired(x?.exam?.required !== false);
+      setCourseLangs(publishedLangsOf(x ?? {}));
     });
   }, [a?.courseId]);
 
@@ -97,36 +120,38 @@ export function Learn() {
 
   /**
    * Seçili dil. Kaynak atama dokümanı — kişi hangi dilde çalıştıysa kaydın
-   * parçası. Henüz yazılmamışsa Türkçe.
+   * parçası.
    */
-  const lang: Lang = a?.contentLanguage === "EN" ? "EN" : "TR";
-
-  /** Kursun gerçekten sunduğu diller; tek dil varsa seçici gösterilmez. */
-  const courseLangs = useMemo(
-    () => langsOf(sections.flatMap((s) => contentsOf(s))),
-    [sections]
-  );
+  const lang: Lang = asLang(a?.contentLanguage);
 
   /**
-   * Dile göre süzülmüş içerik. O dilde hiç kalem yoksa hepsi dönüyor —
-   * tamamlama kapısı (`canComplete`) bu listeye baktığı için boş liste
-   * öğrenciyi eğitimde kilitler.
+   * Dil kapısı yalnızca gerçek bir seçim varsa çıkar: birden fazla dil
+   * yayınlanmış VE kişi henüz seçmemiş. Atama açılırken bir dil yazıldığı için
+   * `languageChosen` ayrı tutuluyor — "varsayılan atandı" ile "kişi seçti"
+   * farklı şeyler.
    */
-  const viewPick = viewIndex >= 0 ? pickForLang(contentsOf(sections[viewIndex]), lang) : null;
-  const viewContents = viewPick?.items ?? [];
-  const currentContents =
-    currentIndex >= 0 ? pickForLang(contentsOf(sections[currentIndex]), lang).items : [];
+  const needsLangChoice = courseLangs.length > 1 && !a?.languageChosen;
+
+  const viewContents = viewIndex >= 0 ? contentsOf(sections[viewIndex]) : [];
+  const currentContents = currentIndex >= 0 ? contentsOf(sections[currentIndex]) : [];
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;
 
-  /** Dili değiştir. Atamaya istemci yazamıyor, Function üzerinden geçiyor. */
+  /**
+   * Dili değiştir. Atamaya istemci yazamıyor, Function üzerinden geçiyor;
+   * Function durumu yeni dilin bölümlerine göre baştan hesaplıyor.
+   */
+  const [langBusy, setLangBusy] = useState(false);
   async function switchLang(next: Lang) {
     if (!id || next === lang) return;
     setErr(null);
+    setLangBusy(true);
     try {
       await httpsCallable(functions, "setAssignmentLanguage")({ assignmentId: id, language: next });
     } catch (e) {
       setErr((e as Error).message);
+    } finally {
+      setLangBusy(false);
     }
   }
 
@@ -195,26 +220,60 @@ export function Learn() {
       <div className="mb-4" />
       {err && <p className="text-xs text-brand-700 mb-3">{err}</p>}
 
-      {/* Dil seçici — yalnızca eğitimin birden fazla dili varsa. Tek dilli
-          kursta seçenek göstermek, olmayan bir şeyi vaat etmek olurdu. */}
-      {courseLangs.length > 1 && (
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-[11.5px] text-slate-500">Language</span>
-          <div className="inline-flex bg-slate-100 rounded-[9px] p-0.5">
-            {LANGS.filter((l) => courseLangs.includes(l)).map((l) => (
+      {/* DİL KAPISI — eğitimin birden fazla dili yayınlanmışsa, içeriğe
+          geçmeden önce tek soru. Seçim atama kaydına yazılıyor; bir daha
+          sorulmuyor, üstteki küçük bayraktan değiştirilebiliyor.
+
+          Tek dil yayınlandıysa kapı hiç çıkmaz: tek cevaplı soru sormak
+          kullanıcıyı boşuna durdurmak olurdu. */}
+      {needsLangChoice ? (
+        <div className="card p-8 text-center max-w-md mx-auto">
+          <div className="text-[15px] font-semibold text-slate-900 mb-1">{a.courseTitle}</div>
+          <p className="text-[13px] text-slate-500 mb-5">
+            Bu eğitimi hangi dilde almak istersiniz?
+          </p>
+          <div className="flex gap-3 justify-center">
+            {courseLangs.map((l) => (
               <button
                 key={l}
                 type="button"
+                disabled={langBusy}
                 onClick={() => void switchLang(l)}
-                className={`text-[12px] font-semibold px-3 py-1.5 rounded-[7px] transition ${
-                  lang === l ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-                }`}
+                className="flex flex-col items-center gap-2.5 rounded-xl border border-slate-200 px-6 py-4 hover:border-brand-500 hover:bg-brand-50/30 transition disabled:opacity-40"
               >
-                {LANG_LABEL[l]}
+                <Flag lang={l} size={44} />
+                <span className="text-[13px] font-semibold text-slate-700">{LANG_LABEL[l]}</span>
               </button>
             ))}
           </div>
-          <span className="text-[11px] text-slate-400">Your progress is kept either way.</span>
+          <p className="text-[11px] text-slate-400 mt-4">
+            Sonradan değiştirebilirsiniz; ilerlemeniz her dil için ayrı tutulur.
+          </p>
+        </div>
+      ) : (
+      <>
+
+      {/* Seçili dil + değiştirme. Eğitim başladıktan sonra dil değişimi
+          ilerlemeyi silmez: her dilin ilerlemesi ayrı tutuluyor. */}
+      {courseLangs.length > 1 && (
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-[11.5px] text-slate-500">Dil</span>
+          {courseLangs.map((l) => (
+            <button
+              key={l}
+              type="button"
+              disabled={langBusy}
+              onClick={() => void switchLang(l)}
+              title={LANG_LABEL[l]}
+              className={`inline-flex items-center rounded-md p-1 border transition disabled:opacity-40 ${
+                lang === l
+                  ? "border-brand-500 ring-2 ring-brand-500/15"
+                  : "border-slate-200 opacity-60 hover:opacity-100"
+              }`}
+            >
+              <Flag lang={l} size={22} />
+            </button>
+          ))}
         </div>
       )}
 
@@ -321,15 +380,6 @@ export function Learn() {
                   {viewContents.length === 0 && (
                     <p className="text-sm text-slate-400">No content in this section.</p>
                   )}
-                  {/* Seçilen dilde bu bölüm yoksa eldeki dil gösteriliyor.
-                      Boş ekran vermek öğrenciyi bölümü tamamlayamaz hâle
-                      getirirdi; durumu söylemek daha dürüst. */}
-                  {viewPick?.fellBack && courseLangs.length > 1 && (
-                    <p className="text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      This section is not available in {LANG_LABEL[lang]} yet — showing the version
-                      that exists.
-                    </p>
-                  )}
                 </div>
 
                 {/* Tamamlama düğmesi yalnızca sıradaki bölümde. Sunucu da
@@ -391,6 +441,8 @@ export function Learn() {
         )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

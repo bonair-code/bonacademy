@@ -1,14 +1,15 @@
 /**
- * Eğitim içeriğinin dili.
+ * Eğitim dili.
  *
- * Bir eğitim tek kurs olarak durur; içeriği iki dilde yüklenir ve öğrenci
- * hangisinde çalışacağını seçer. İlerleme ortaktır — tamamlanan bölüm
- * `sectionsDone` içinde bölüm id'si olarak tutuluyor, içerik id'si olarak
- * değil, yani dil değiştirmek ilerlemeyi sıfırlamaz.
+ * Bir eğitim tek kayıttır — tek sertifika numarası serisi, matriste tek sütun,
+ * yetki kapsamında tek satır. İçinde DİL SÜRÜMLERİ vardır: her sürümün kendi
+ * bölümleri, kendi içeriği, kendi soru bankası ve kendi yayın durumu.
  *
- * `null` = dilden bağımsız içerik (şema, çizim, uygulama videosu): iki dilde
- * de gösterilir. Etiketsiz eski kayıtlar da bu kovaya düşer, böylece dil
- * eklemek var olan kursları bozmaz.
+ * Yani İngilizce sürüm Türkçenin iskeletine mahkûm değil; ayrı bir eğitim
+ * kurar gibi kurulur ve ayrı yayınlanır. Öğrenci yalnızca YAYINLANMIŞ dilleri
+ * görür — yarım kalmış bir çeviri kimseye görünmez.
+ *
+ * Yeni dil eklemek: buraya bir satır, components/Flag.tsx'e bir bayrak.
  */
 export type Lang = "TR" | "EN";
 
@@ -19,48 +20,22 @@ export const LANG_LABEL: Record<Lang, string> = {
   EN: "English",
 };
 
-/** Dar yerlerde (içerik satırı, kurs kartı) kullanılan kısa etiket. */
+/** Dar yerlerde (sekme, rozet) kullanılan kısa etiket. */
 export const LANG_SHORT: Record<Lang, string> = { TR: "TR", EN: "EN" };
 
-export type WithLang = { lang?: Lang | null };
-
-/**
- * Bu kalem seçilen dilde gösterilir mi? Etiketsiz kalem her dilde gösterilir.
- */
-export function matchesLang(item: WithLang, lang: Lang): boolean {
-  return !item.lang || item.lang === lang;
+/** Bilinmeyen/boş değerleri güvenli bir dile indirger. */
+export function asLang(v: unknown): Lang {
+  return String(v ?? "").toUpperCase() === "EN" ? "EN" : "TR";
 }
 
-/**
- * İçerik listesinin gerçekten sunduğu diller. Etiketsiz kalemler bir dil
- * saymaz — "sadece Türkçe yüklenmiş" ile "dil ayrımı yapılmamış" farklı
- * şeyler ve kurs kartında ikisini aynı göstermek yanıltıcı olur.
- */
-export function langsOf(items: WithLang[]): Lang[] {
-  const s = new Set<Lang>();
-  for (const i of items) if (i.lang) s.add(i.lang);
-  return LANGS.filter((l) => s.has(l));
+/** Kursun yayınlanmış dilleri — bozuk/eksik alan güvenli listeye çevrilir. */
+export function publishedLangsOf(course: { publishedLangs?: unknown }): Lang[] {
+  const raw = Array.isArray(course.publishedLangs) ? course.publishedLangs : [];
+  const set = new Set(raw.map(asLang));
+  return LANGS.filter((l) => set.has(l));
 }
 
-/**
- * Seçilen dil için gösterilecek kalemler.
- *
- * Bölümde o dilde hiç kalem yoksa HEPSİ döner: öğrenciyi boş ekranda bırakıp
- * bölümü tamamlayamaz hâle getirmektense, eldeki dili gösterip durumu
- * söylemek doğru. Tamamlama kapısı bu listeye bakıyor (`canComplete`), yani
- * boş liste dönmek kişiyi eğitimde kilitler.
- */
-export function pickForLang<T extends WithLang>(
-  items: T[],
-  lang: Lang
-): { items: T[]; fellBack: boolean } {
-  const hit = items.filter((i) => matchesLang(i, lang));
-  if (hit.length > 0) return { items: hit, fellBack: false };
-  return { items, fellBack: items.length > 0 };
-}
-
-/** Çeviri varsa onu, yoksa aslını ver. Boş çeviri alanı yok sayılır. */
-export function tr(base: string, english: string | null | undefined, lang: Lang): string {
-  if (lang === "EN") return english?.trim() ? english : base;
-  return base;
+/** `lang` alanı taşıyan kayıtları (bölüm, soru) bir dile göre süzer. */
+export function ofLang<T extends { lang?: unknown }>(rows: T[], lang: Lang): T[] {
+  return rows.filter((r) => asLang(r.lang) === lang);
 }

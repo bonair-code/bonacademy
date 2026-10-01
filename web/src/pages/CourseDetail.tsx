@@ -1,5 +1,5 @@
 import { PageHead } from "../components/PageHead";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   addDoc,
@@ -19,7 +19,8 @@ import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "../lib/firebase";
 import { coverTone } from "../lib/coverTone";
-import { LANGS, LANG_LABEL, langsOf, type Lang } from "../lib/lang";
+import { asLang, LANGS, LANG_LABEL, ofLang, publishedLangsOf, type Lang } from "../lib/lang";
+import { Flag } from "../components/Flag";
 import { downloadTemplate, parseWorkbook, type ParseResult } from "../lib/questionExcel";
 
 type RecurUnit = "NONE" | "DAY" | "MONTH" | "YEAR";
@@ -56,16 +57,19 @@ type Course = {
   recurrenceUnit: RecurUnit;
   passingScore: number;
   isActive: boolean;
+  /** Yayınlanmış dil sürümleri. Öğrenci yalnızca bunları görür. */
+  publishedLangs: Lang[];
   scorm: { packagePath: string; entryPoint: string; version: string } | null;
   exam: ExamCfg;
 };
 
 /** `textEn` isteğe bağlı: yoksa sınav İngilizce alınsa bile asıl metin gelir. */
-type Option = { id: string; text: string; textEn?: string | null; isCorrect: boolean };
+type Option = { id: string; text: string; isCorrect: boolean };
+/** Her dil sürümünün kendi soru bankası var; `lang` hangi sürüme ait olduğunu söyler. */
 type Question = {
   id: string;
+  lang?: string;
   text: string;
-  textEn?: string | null;
   points: number;
   options: Option[];
 };
@@ -121,10 +125,15 @@ export function CourseDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [c, setC] = useState<Course | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [sectionCount, setSectionCount] = useState(0);
-  /** İçinde gerçekten materyal olan bölüm sayısı — boş kabuk bölümler sayılmaz. */
-  const [filledCount, setFilledCount] = useState(0);
+  const [allQuestions, setAllQuestions] = useState<Question[]>([]);
+  /** Bütün dillerin bölümleri; ekranda yalnızca seçili dil gösteriliyor. */
+  const [allSections, setAllSections] = useState<RawSection[]>([]);
+  /**
+   * Düzenlenen dil sürümü. Her dil kendi bölümlerini, kendi soru bankasını ve
+   * kendi yayın durumunu taşıyor — ekranda hangi bayrak seçiliyse o sürüm
+   * düzenleniyor.
+   */
+  const [lang, setLang] = useState<Lang>("TR");
   const [publishBusy, setPublishBusy] = useState(false);
   const [step, setStep] = useState(1);
   const [saved, setSaved] = useState(false);
@@ -151,6 +160,7 @@ export function CourseDetail() {
         // Alan yoksa YAYINDA DEĞİL sayılır. Eskiden tersiydi ve alanı olmayan
         // kurs editörde "yayında" görünüyordu.
         isActive: data.isActive ?? false,
+        publishedLangs: publishedLangsOf(data as { publishedLangs?: unknown }),
         scorm: data.scorm ?? null,
         exam: {
           questionCount: 10,
@@ -164,23 +174,38 @@ export function CourseDetail() {
       });
     });
     const unQ = onSnapshot(collection(db, "courses", id, "questions"), (snap) =>
-      setQuestions(snap.docs.map((q) => ({ id: q.id, ...(q.data() as Omit<Question, "id">) })))
+      setAllQuestions(snap.docs.map((q) => ({ id: q.id, ...(q.data() as Omit<Question, "id">) })))
     );
-    const unS = onSnapshot(collection(db, "courses", id, "sections"), (snap) => {
-      setSectionCount(snap.size);
-      setFilledCount(
-        snap.docs.filter((d) => {
-          const s = d.data() as { contents?: unknown[]; content?: unknown };
-          return Array.isArray(s.contents) ? s.contents.length > 0 : s.content != null;
-        }).length
-      );
-    });
+    const unS = onSnapshot(collection(db, "courses", id, "sections"), (snap) =>
+      setAllSections(
+        snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) })) as RawSection[]
+      )
+    );
     return () => {
       unC();
       unQ();
       unS();
     };
   }, [id]);
+
+
+  /**
+   * Ekranda yalnızca SEÇİLİ DİLİN sürümü var. Bölümler ve sorular tek
+   * koleksiyonda duruyor, `lang` alanıyla ayrılıyor; dil değiştirmek ikinci
+   * bir sorgu açmıyor, sadece süzgeci değiştiriyor.
+   */
+  const sections = useMemo(() => ofLang(allSections, lang), [allSections, lang]);
+  const questions = useMemo(() => ofLang(allQuestions, lang), [allQuestions, lang]);
+  const sectionCount = sections.length;
+  const filledCount = sections.filter((s) =>
+    Array.isArray(s.contents) ? s.contents.length > 0 : s.content != null
+  ).length;
+
+  /** Hangi dillerde en az bir bölüm kurulmuş — "+ Dil ekle" buna bakıyor. */
+  const startedLangs = useMemo(
+    () => LANGS.filter((l) => allSections.some((s) => asLang(s.lang) === l)),
+    [allSections]
+  );
 
   function set<K extends keyof Course>(k: K, v: Course[K]) {
     setC((prev) => (prev ? { ...prev, [k]: v } : prev));
@@ -294,13 +319,16 @@ export function CourseDetail() {
    * "bu kurs yayına hazır mı" sorusu sayfa açılır açılmaz cevaplanmalı.
    * `null` = bu kursta geçerli değil (dış eğitimde içerik/sınav yok).
    */
+  /** Seçili dil sürümü yayında mı? Diğer dil taslak olabilir. */
+  const langPublished = externalOnly ? c.isActive : c.publishedLangs.includes(lang);
+
   const readiness: Record<number, boolean | null> = {
     // Revizyon numarası denetimde zorunlu; başlık zaten hep dolu.
     1: !!c.revisionNo.trim(),
     2: externalOnly ? null : filledCount > 0,
     3: externalOnly ? null : true,
     4: externalOnly || !c.exam.required ? null : questions.length >= c.exam.questionCount,
-    5: c.isActive,
+    5: langPublished,
   };
 
   /**
@@ -312,21 +340,26 @@ export function CourseDetail() {
     ? []
     : [
         ...(sectionCount === 0
-          ? ["Kursun hiç bölümü yok."]
+          ? ["Bu dilde hiç bölüm yok."]
           : filledCount === 0
           ? ["Bölümler var ama hiçbirinde içerik yok."]
           : []),
-        ...(c.exam.required && questions.length === 0 ? ["Sınav zorunlu ama soru bankası boş."] : []),
+        ...(c.exam.required && questions.length === 0
+          ? ["Sınav zorunlu ama bu dilde soru bankası boş."]
+          : []),
       ];
   if (!c.revisionNo.trim()) blockers.unshift("Revision No boş.");
 
-  /** Yayına al / yayından çıkar. isActive'i yalnızca bu Function yazabiliyor. */
+  /**
+   * Seçili DİL SÜRÜMÜNÜ yayına al / yayından çıkar. publishedLangs'i yalnızca
+   * bu Function yazabiliyor; güvenlik kuralı istemcinin dokunmasını engelliyor.
+   */
   async function setPublished(active: boolean) {
     if (!id) return;
     setErr(null);
     setPublishBusy(true);
     try {
-      await httpsCallable(functions, "publishCourse")({ courseId: id, active });
+      await httpsCallable(functions, "publishCourse")({ courseId: id, lang, active });
     } catch (e) {
       setErr((e as Error).message);
     } finally {
@@ -345,7 +378,7 @@ export function CourseDetail() {
         }`,
     3: c.exam.required ? `Exam · pass ${c.passingScore}%` : "Exam · not required",
     4: `Question bank · ${questions.length}`,
-    5: c.isActive ? "Published" : "Summary & publish",
+    5: langPublished ? "Published" : "Summary & publish",
   };
 
   return (
@@ -358,6 +391,54 @@ export function CourseDetail() {
 
       {/* Kurs künyesi. Başlık üst barda zaten sabit duruyor, burada tekrar
           edilmiyor; burada olması gereken kapak, künye ve kaydetme. */}
+
+      {/* Dil sürümü çubuğu. Bir eğitim tek kayıt ama içinde ayrı ayrı kurulan
+          ve ayrı ayrı yayınlanan dil sürümleri var: Türkçeyi bitirip yayınla,
+          sonra İngilizceyi sıfırdan kur ve onu da yayınla. Öğrenci yalnızca
+          yayınlanmış dilleri görür. */}
+      {!externalOnly && (
+        <div className="card px-4 py-2.5 mb-3 flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] font-semibold text-slate-500 mr-1">Dil sürümü</span>
+          {LANGS.filter((l) => startedLangs.includes(l) || l === lang).map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLang(l)}
+              className={`inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px] font-semibold transition ${
+                lang === l
+                  ? "border-brand-500 ring-2 ring-brand-500/15 text-slate-900"
+                  : "border-slate-200 text-slate-500 hover:border-slate-400"
+              }`}
+            >
+              <Flag lang={l} />
+              {LANG_LABEL[l]}
+              <span
+                className={`text-[9.5px] font-bold uppercase px-1.5 py-0.5 rounded ${
+                  c.publishedLangs.includes(l)
+                    ? "bg-emerald-50 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+              >
+                {c.publishedLangs.includes(l) ? "Yayında" : "Taslak"}
+              </span>
+            </button>
+          ))}
+          {LANGS.filter((l) => !startedLangs.includes(l) && l !== lang).map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => {
+                setLang(l);
+                setStep(2);
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-dashed border-slate-300 px-2.5 py-1.5 text-[12.5px] font-semibold text-slate-500 hover:border-brand-400 hover:text-slate-800"
+            >
+              <Flag lang={l} />+ {LANG_LABEL[l]} ekle
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="card px-4 py-3 mb-3 flex items-center gap-3.5 flex-wrap">
         <div
           className="w-[62px] h-[36px] rounded-lg shrink-0"
@@ -381,16 +462,18 @@ export function CourseDetail() {
             .filter(Boolean)
             .join(" · ")}
         </div>
+{/* Rozet SEÇİLİ DİLİN durumunu gösterir: Türkçesi yayında olan bir
+            kursun İngilizcesi taslak olabilir. */}
         <span
           className={`text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded shrink-0 ${
-            !c.isActive
+            !langPublished
               ? "bg-slate-100 text-slate-600"
               : !externalOnly && filledCount === 0
               ? "bg-amber-50 text-amber-800"
               : "bg-emerald-50 text-emerald-700"
           }`}
         >
-          {!c.isActive ? "Draft" : !externalOnly && filledCount === 0 ? "Empty" : "Published"}
+          {!langPublished ? "Draft" : !externalOnly && filledCount === 0 ? "Empty" : "Published"}
         </span>
         {saved && <span className="text-[11px] font-semibold text-emerald-600">✓ Saved</span>}
         <button onClick={() => void save()} className="btn-secondary text-xs py-1.5 px-3 shrink-0">
@@ -561,7 +644,7 @@ export function CourseDetail() {
       )}
       {show(2) && (
       <Section title="Training Content — Sections">
-        <Sections courseId={id!} />
+        <Sections courseId={id!} lang={lang} />
       </Section>
       )}
       {show(3) && (
@@ -653,6 +736,7 @@ export function CourseDetail() {
           courseId={id!}
           courseTitle={c.title}
           questions={questions}
+          lang={lang}
           pointsPer={pointsPerQuestion(c.exam.questionCount)}
         />
       </Section>
@@ -694,24 +778,24 @@ export function CourseDetail() {
           )}
           <label
             className={`flex items-center gap-2 mt-4 text-sm font-medium ${
-              !c.isActive && blockers.length ? "text-slate-400" : "text-slate-800"
+              !langPublished && blockers.length ? "text-slate-400" : "text-slate-800"
             }`}
           >
             <input
               type="checkbox"
-              checked={c.isActive}
-              disabled={publishBusy || (!c.isActive && blockers.length > 0)}
-              onChange={() => setPublished(!c.isActive)}
+              checked={langPublished}
+              disabled={publishBusy || (!langPublished && blockers.length > 0)}
+              onChange={() => setPublished(!langPublished)}
               className="accent-brand-600 h-4 w-4 disabled:opacity-40"
             />
             {externalOnly
               ? "Published (tracked as a requirement)"
-              : "Published (assignable to employees)"}
+              : `${LANG_LABEL[lang]} sürümü yayında (öğrenciye atanabilir)`}
           </label>
 
           {/* Neden yayınlanamıyor — kutuyu kapalı bırakıp sebebi söylemeden
               geçmek, kullanıcıyı boş kursu yayınlamaya çalışırken bırakıyordu. */}
-          {!c.isActive && blockers.length > 0 && (
+          {!langPublished && blockers.length > 0 && (
             <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
               <p className="text-[11.5px] font-semibold text-amber-900">
                 Yayına alınamaz — önce şunlar:
@@ -772,6 +856,7 @@ export function CourseDetail() {
                   // tarafında yazılır; içerik yoksa Function reddediyor.
                   await httpsCallable(functions, "publishCourse")({
                     courseId: id,
+                    lang,
                     active: true,
                   });
                 } catch (e) {
@@ -915,15 +1000,17 @@ function Field({
 }
 
 /**
- * `lang` boşsa kalem dilden bağımsız sayılır (şema, konuşmasız uygulama
- * videosu) ve iki dilde de gösterilir. Etiketsiz eski kayıtlar da bu kovaya
- * düşüyor, yani dil eklemek var olan kursları bozmuyor.
+ * İçerik kalemi dil taşımaz: dil BÖLÜMÜN özelliği. Türkçe bölüme yüklenen her
+ * şey Türkçedir — dosya başına dil sormak, aynı bölümde iki dil karışmasına
+ * ve "bu bölümün İngilizcesi var mı" sorusunun cevapsız kalmasına yol açardı.
  */
-type SectionContent = { lang?: Lang | null } & (
+type SectionContent =
   | { id: string; type: "VIDEO"; url: string; fileName: string; storagePath: string }
   | { id: string; type: "PDF"; url: string; fileName: string; storagePath: string }
-  | { id: string; type: "SCORM"; entryPoint: string; version: string; basePath: string; fileName: string }
-);
+  | { id: string; type: "SCORM"; entryPoint: string; version: string; basePath: string; fileName: string };
+
+/** Firestore'dan geldiği hâliyle bölüm — dil süzgeci bunun üzerinde çalışıyor. */
+type RawSection = SectionT & { lang?: string };
 
 type SectionT = {
   id: string;
@@ -946,7 +1033,11 @@ function sectionContents(s: SectionT): SectionContent[] {
   return [];
 }
 
-function Sections({ courseId }: { courseId: string }) {
+/**
+ * Bölüm listesi — yalnızca SEÇİLİ DİLİN bölümleri. Diller ayrı sürüm olduğu
+ * için İngilizce sürümün bölüm sayısı ve sırası Türkçeden farklı olabilir.
+ */
+function Sections({ courseId, lang }: { courseId: string; lang: Lang }) {
   const [rows, setRows] = useState<SectionT[]>([]);
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
@@ -956,9 +1047,14 @@ function Sections({ courseId }: { courseId: string }) {
   useEffect(() => {
     return onSnapshot(
       query(collection(db, "courses", courseId, "sections"), orderBy("order")),
-      (snap) => setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SectionT, "id">) })))
+      (snap) =>
+        setRows(
+          snap.docs
+            .filter((d) => asLang((d.data() as { lang?: unknown }).lang) === lang)
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<SectionT, "id">) }))
+        )
     );
-  }, [courseId]);
+  }, [courseId, lang]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -969,6 +1065,8 @@ function Sections({ courseId }: { courseId: string }) {
       const nextOrder = rows.length ? Math.max(...rows.map((r) => r.order)) + 1 : 1;
       await addDoc(collection(db, "courses", courseId, "sections"), {
         title: title.trim(),
+        // Bölüm hangi dil sürümüne ait. Sıra numarası da dil içinde anlamlı.
+        lang,
         order: nextOrder,
         content: null,
         createdAt: serverTimestamp(),
@@ -1059,16 +1157,6 @@ function Sections({ courseId }: { courseId: string }) {
                   ) : (
                     <span className="text-amber-600">● No content</span>
                   )}
-                  {/* Hangi dillerde içerik var — iki dilli kursta bir bölümün
-                      yalnızca Türkçe kaldığı buradan görülsün. */}
-                  {langsOf(cs).map((l) => (
-                    <span
-                      key={l}
-                      className="px-1 py-px rounded bg-slate-200 text-slate-700 text-[9.5px] font-bold"
-                    >
-                      {l}
-                    </span>
-                  ))}
                 </div>
               </div>
               <div
@@ -1129,8 +1217,6 @@ function uploadError(e: unknown) {
 function SectionContentEditor({ courseId, section }: { courseId: string; section: SectionT }) {
   // Önce "ne yükleyeceğim" sorulur; tip seçilmeden yükleme alanı açılmaz.
   const [type, setType] = useState<SectionContent["type"] | null>(null);
-  /** Yüklenecek kalemin dili. null = dilden bağımsız, iki dilde de gösterilir. */
-  const [lang, setLang] = useState<Lang | null>("TR");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1162,7 +1248,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
       const r = ref(storage, path);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
-      await addContent({ id: cid, type: kind, url, fileName: file.name, storagePath: path, lang });
+      await addContent({ id: cid, type: kind, url, fileName: file.name, storagePath: path });
       setMsg(`${kind === "VIDEO" ? "Video" : "PDF"} added.`);
       setType(null);
     } catch (e) {
@@ -1226,15 +1312,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
         }
       };
       await Promise.all(Array.from({ length: 6 }, () => worker()));
-      await addContent({
-        id: cid,
-        type: "SCORM",
-        entryPoint,
-        version,
-        basePath,
-        fileName: file.name,
-        lang,
-      });
+      await addContent({ id: cid, type: "SCORM", entryPoint, version, basePath, fileName: file.name });
       setMsg(
         `SCORM processed — entry: ${entryPoint} (${version === "SCORM_2004" ? "2004" : "1.2"})`
       );
@@ -1299,42 +1377,6 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
             </button>
           </div>
 
-          {/* Dil dosya seçilmeden ÖNCE belirleniyor: yükleme bitince kalem
-              listeye giriyor ve sonradan değiştirecek bir yer yok. */}
-          <div className="mb-3">
-            <label className="label">Language of this file</label>
-            <div className="flex flex-wrap gap-1.5">
-              {LANGS.map((l) => (
-                <button
-                  key={l}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setLang(l)}
-                  className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition disabled:opacity-40 ${
-                    lang === l
-                      ? "bg-slate-900 text-white border-slate-900"
-                      : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                  }`}
-                >
-                  {LANG_LABEL[l]}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setLang(null)}
-                title="Shown to learners in both languages — diagrams, hands-on video, anything without speech or text"
-                className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition disabled:opacity-40 ${
-                  lang === null
-                    ? "bg-slate-900 text-white border-slate-900"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-                }`}
-              >
-                Both
-              </button>
-            </div>
-          </div>
-
       {type === "VIDEO" && (
         <div>
           <label className="label">Upload Video (mp4)</label>
@@ -1397,18 +1439,6 @@ function ContentItem({ item, onRemove }: { item: SectionContent; onRemove: () =>
         <div className="text-[12px] min-w-0 flex items-center gap-2">
           <span className="inline-block px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 text-[10px] font-bold">
             {CONTENT_LABEL[item.type]}
-          </span>
-          {/* Dil rozeti: hangi kalemin hangi dilde olduğu listede görünmeli,
-              yoksa iki dil yüklenince dosya adından ayırt etmek gerekiyor. */}
-          <span
-            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
-              item.lang
-                ? "bg-slate-200 text-slate-700"
-                : "bg-emerald-50 text-emerald-700"
-            }`}
-            title={item.lang ? LANG_LABEL[item.lang] : "Shown in both languages"}
-          >
-            {item.lang ?? "TR+EN"}
           </span>
           <span className="text-slate-700 truncate">{item.fileName}</span>
         </div>
@@ -1496,10 +1526,12 @@ function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => 
 function BulkImport({
   courseId,
   courseTitle,
+  lang,
   pointsPer,
 }: {
   courseId: string;
   courseTitle: string;
+  lang: Lang;
   pointsPer: number;
 }) {
   const [parsed, setParsed] = useState<ParseResult | null>(null);
@@ -1541,12 +1573,12 @@ function BulkImport({
         for (const q of parsed.questions.slice(i, i + 400)) {
           batch.set(doc(col), {
             text: q.text,
-            textEn: q.textEn,
+            // Sorular içe aktarıldıkları DİL SÜRÜMÜNE yazılır.
+            lang,
             points: q.points,
             options: q.options.map((o) => ({
               id: crypto.randomUUID(),
               text: o.text,
-              textEn: o.textEn,
               isCorrect: o.isCorrect,
             })),
           });
@@ -1651,29 +1683,24 @@ function BulkImport({
   );
 }
 
+/** Soru bankası — yalnızca seçili dilinki. Her dil sürümünün kendi soruları var. */
 function QuestionBank({
   courseId,
   courseTitle,
   questions,
+  lang,
   pointsPer,
 }: {
   courseId: string;
   courseTitle: string;
   questions: Question[];
+  lang: Lang;
   pointsPer: number;
 }) {
   const [text, setText] = useState("");
   const [opts, setOpts] = useState(["", "", "", ""]);
   const [correct, setCorrect] = useState(0);
   const [busy, setBusy] = useState(false);
-  /**
-   * İngilizce karşılıklar isteğe bağlı. Girilmezse sınav İngilizce alınsa bile
-   * soru Türkçe hâliyle gelir — yarım çeviri yüzünden soruyu boş göstermek
-   * yerine eldeki metni göstermek doğru.
-   */
-  const [showEn, setShowEn] = useState(false);
-  const [textEn, setTextEn] = useState("");
-  const [optsEn, setOptsEn] = useState(["", "", "", ""]);
 
   async function add(e: React.FormEvent) {
     e.preventDefault();
@@ -1682,23 +1709,17 @@ function QuestionBank({
     setBusy(true);
     try {
       const options: Option[] = filled
-        .map((t, i) => ({
-          id: crypto.randomUUID(),
-          text: t,
-          textEn: optsEn[i]?.trim() || null,
-          isCorrect: i === correct,
-        }))
+        .map((t, i) => ({ id: crypto.randomUUID(), text: t, isCorrect: i === correct }))
         .filter((o) => o.text);
       await addDoc(collection(db, "courses", courseId, "questions"), {
         text: text.trim(),
-        textEn: textEn.trim() || null,
+        // Soru hangi dil sürümüne ait.
+        lang,
         points: pointsPer,
         options,
       });
       setText("");
       setOpts(["", "", "", ""]);
-      setTextEn("");
-      setOptsEn(["", "", "", ""]);
       setCorrect(0);
     } finally {
       setBusy(false);
@@ -1711,33 +1732,16 @@ function QuestionBank({
 
   return (
     <div>
-      <BulkImport courseId={courseId} courseTitle={courseTitle} pointsPer={pointsPer} />
+      <BulkImport courseId={courseId} courseTitle={courseTitle} lang={lang} pointsPer={pointsPer} />
 
       <form onSubmit={add} className="rounded-lg border border-slate-200 p-4 mb-4 bg-slate-50/50">
-        <div className="flex items-center justify-between gap-3 mb-1">
-          <label className="label !mb-0">Question Text</label>
-          <button
-            type="button"
-            onClick={() => setShowEn((v) => !v)}
-            className="text-[11px] font-semibold text-brand-700 hover:underline"
-          >
-            {showEn ? "Hide English" : "+ English version"}
-          </button>
-        </div>
+        <label className="label">Question Text</label>
         <input
-          className="input mb-2"
+          className="input mb-3"
           value={text}
           onChange={(e) => setText(e.target.value)}
           placeholder="Type the question…"
         />
-        {showEn && (
-          <input
-            className="input mb-3 !bg-slate-50"
-            value={textEn}
-            onChange={(e) => setTextEn(e.target.value)}
-            placeholder="Same question in English (optional)"
-          />
-        )}
         <label className="label">Options (select the correct one)</label>
         <div className="space-y-2 mb-3">
           {opts.map((o, i) => (
@@ -1749,24 +1753,12 @@ function QuestionBank({
                 onChange={() => setCorrect(i)}
                 className="accent-brand-600"
               />
-              <div className="flex-1 min-w-0 space-y-1">
-                <input
-                  className="input"
-                  value={o}
-                  onChange={(e) => setOpts((p) => p.map((x, j) => (j === i ? e.target.value : x)))}
-                  placeholder={`Option ${i + 1}`}
-                />
-                {showEn && (
-                  <input
-                    className="input !bg-slate-50"
-                    value={optsEn[i]}
-                    onChange={(e) =>
-                      setOptsEn((p) => p.map((x, j) => (j === i ? e.target.value : x)))
-                    }
-                    placeholder={`Option ${i + 1} in English (optional)`}
-                  />
-                )}
-              </div>
+              <input
+                className="input"
+                value={o}
+                onChange={(e) => setOpts((p) => p.map((x, j) => (j === i ? e.target.value : x)))}
+                placeholder={`Option ${i + 1}`}
+              />
             </div>
           ))}
         </div>

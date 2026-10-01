@@ -20,7 +20,8 @@ import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { coverTone } from "../lib/coverTone";
-import { LANG_LABEL, langsOf, type Lang } from "../lib/lang";
+import { LANG_LABEL, publishedLangsOf } from "../lib/lang";
+import { Flag } from "../components/Flag";
 
 type Course = {
   id: string;
@@ -41,7 +42,7 @@ type Course = {
 
 /** Kurs başına bölüm ve soru sayısı — kartta "içeriği var mı" bunu söyler. */
 /** `filled` = içinde gerçekten materyal olan bölüm sayısı. */
-type Counts = { sections: number; filled: number; questions: number; langs: Lang[] };
+type Counts = { sections: number; filled: number; questions: number };
 
 type Dialog =
   | { kind: "delete"; course: Course }
@@ -164,13 +165,7 @@ export function Courses() {
             const x = d.data() as { contents?: unknown[]; content?: unknown };
             return Array.isArray(x.contents) ? x.contents.length > 0 : x.content != null;
           }).length;
-          // Eğitimin hangi dillerde sunulduğu içerik kalemlerinden çıkıyor;
-          // kursta ayrı bir "diller" alanı tutmak ikinci bir doğruluk kaynağı
-          // olurdu ve içerik silinince yanlışa düşerdi.
-          const langs = langsOf(
-            s.docs.flatMap((d) => ((d.data() as { contents?: { lang?: Lang | null }[] }).contents ?? []))
-          );
-          out[id] = { sections: s.size, filled, questions: q.size, langs };
+          out[id] = { sections: s.size, filled, questions: q.size };
         })
       );
       if (alive) setCounts(out);
@@ -374,6 +369,7 @@ function CourseCard({
   onDelete: () => void;
 }) {
   const tone = coverTone(course.title);
+  const pubLangs = publishedLangsOf(course as { publishedLangs?: unknown });
   const sections = counts?.sections;
   // İçeriği olmayan bir kurs yayında olmamalı: atanan kişi boş ekranla karşılaşır.
   const empty = sections === 0;
@@ -440,13 +436,19 @@ function CourseCard({
           )}
           {row("Duration", course.durationHours != null ? `${course.durationHours} hours` : "—")}
           {row("Recurrence", recurrenceText(course))}
-          {/* Dil satırı yalnızca içerik dil etiketi taşıyorsa. Etiketsiz
-              kurslarda "—" basmak, dil ayrımı yapılmamışı eksikmiş gibi
-              gösterirdi. */}
-          {counts?.langs?.length
+          {/* Yayınlanmış dil sürümleri. Taslak kalan dil burada görünmez —
+              öğrenci de görmüyor. */}
+          {pubLangs.length > 0
             ? row(
                 "Language",
-                counts.langs.map((l) => LANG_LABEL[l]).join(" · ")
+                <span className="inline-flex items-center gap-1.5 justify-end">
+                  {pubLangs.map((l) => (
+                    <span key={l} className="inline-flex items-center gap-1">
+                      <Flag lang={l} size={16} />
+                      <span className="text-[11px]">{LANG_LABEL[l]}</span>
+                    </span>
+                  ))}
+                </span>
               )
             : null}
           {row(

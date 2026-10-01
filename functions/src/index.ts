@@ -182,19 +182,29 @@ function sectionHasContent(d: any): boolean {
  */
 function publishBlockers(
   c: any,
-  sections: { size: number; docs: { data(): any }[] },
-  questions: { size: number }
+  sections: { data(): any }[],
+  questions: { data(): any }[],
+  lang: Lang
 ): string[] {
   if ((c?.delivery ?? "ONLINE") === "EXTERNAL_ONLY") return [];
+  const mine = sections.filter((d) => asLang(d.data().lang) === lang);
+  const myQs = questions.filter((d) => asLang(d.data().lang) === lang);
   const out: string[] = [];
-  if (sections.size === 0) {
-    out.push("Kursun hiç bölümü yok.");
-  } else if (!sections.docs.some((d) => sectionHasContent(d.data()))) {
+  if (mine.length === 0) {
+    out.push("Bu dilde hiç bölüm yok.");
+  } else if (!mine.some((d) => sectionHasContent(d.data()))) {
     out.push("Bölümler var ama hiçbirinde içerik yok (video/PDF/SCORM ekle).");
   }
-  if (c?.exam?.required && questions.size === 0)
-    out.push("Sınav zorunlu işaretli ama soru bankası boş.");
+  if (c?.exam?.required && myQs.length === 0)
+    out.push("Sınav zorunlu işaretli ama bu dilde soru bankası boş.");
   return out;
+}
+
+/** Kursun yayınlanmış dilleri — bozuk alan güvenli listeye indirgenir. */
+function publishedLangsOf(c: any): Lang[] {
+  const raw = Array.isArray(c?.publishedLangs) ? c.publishedLangs : [];
+  const set = new Set(raw.map(asLang));
+  return (["TR", "EN"] as Lang[]).filter((l) => set.has(l));
 }
 
 /**
@@ -223,16 +233,27 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
   if (caller?.role !== "ADMIN" && !isOwner)
     throw new HttpsError("permission-denied", "Bu kursu yayınlama yetkin yok.");
 
-  // `active` verilmezse yayınlama sayılır — eski çağrı biçimi bozulmasın.
+  // Yayın DİL BAŞINA. Türkçeyi bitirip yayınlamak, İngilizceyi sonra ayrıca
+  // kurup ayrıca yayınlamak mümkün; öğrenci yalnızca yayınlanmış dilleri görür,
+  // yarım kalmış bir çeviri kimseye görünmez.
+  const lang = asLang(req.data?.lang);
   const active = req.data?.active === undefined ? true : Boolean(req.data.active);
+  const current = publishedLangsOf(c);
 
   // Yayından ALMA hiçbir ön koşul istemez ve BURADA, her kontrolden önce
-  // duruyor: yanlışlıkla yayınlanmış ya da içi boşalmış bir kurs her zaman
-  // kapatılabilmeli. Aşağıdaki Revision No kontrolünün altında kalsaydı,
+  // duruyor: yanlışlıkla yayınlanmış ya da içi boşalmış bir sürüm her zaman
+  // geri çekilebilmeli. Aşağıdaki Revision No kontrolünün altında kalsaydı,
   // revizyon numarası olmayan bir kurs yayından da alınamazdı.
   if (!active) {
-    await ref.update({ isActive: false, updatedAt: FieldValue.serverTimestamp() });
-    return { active: false };
+    const next = current.filter((l) => l !== lang);
+    await ref.update({
+      publishedLangs: next,
+      // Hiç yayınlanmış dil kalmadıysa kurs da yayında değildir. `isActive`
+      // tek bir yerden türüyor ki liste, atama ve matris aynı cevabı versin.
+      isActive: next.length > 0,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    return { active: false, lang, publishedLangs: next };
   }
 
   // Revizyon numarası ELLE girilir (kurs formundaki Revision No alanı).
@@ -250,15 +271,19 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
     db.collection(`courses/${courseId}/questions`).get(),
   ]);
 
-  const blockers = publishBlockers(c, sections, questions);
+  const blockers = publishBlockers(c, sections.docs, questions.docs, lang);
   if (blockers.length)
     throw new HttpsError("failed-precondition", blockers.join(" "));
+
+  const mySections = sections.docs.filter((d) => asLang((d.data() as any).lang) === lang);
+  const myQuestions = questions.docs.filter((d) => asLang((d.data() as any).lang) === lang);
 
   // Append-only arşiv: aynı revizyon numarası tekrar yayınlanabilir, her yayın
   // ayrı kayıt olur — denetim izi bozulmasın.
   await db.collection(`courses/${courseId}/revisions`).add({
     revisionNo,
     revisionDate: c.revisionDate ?? null,
+    lang,
     note,
     publishedById: req.auth.uid,
     publishedByName: caller?.name || "",
@@ -276,16 +301,20 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
       passingScore: c.passingScore ?? null,
       isActive: c.isActive ?? false,
       exam: c.exam ?? null,
-      sectionCount: sections.size,
-      questionCount: questions.size,
-      sectionTitles: sections.docs
+      // Arşiv yalnızca yayınlanan DİLİN anlık kopyası; diğer dilin bölümleri
+      // bu revizyona karışmamalı.
+      sectionCount: mySections.length,
+      questionCount: myQuestions.length,
+      sectionTitles: mySections
         .map((d) => ({ order: (d.data() as any).order ?? 0, title: (d.data() as any).title ?? "" }))
         .sort((a, b) => a.order - b.order)
         .map((x) => x.title),
     },
   });
 
+  const nextLangs = current.includes(lang) ? current : [...current, lang];
   await ref.update({
+    publishedLangs: nextLangs,
     isActive: true,
     lastPublishedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -340,19 +369,16 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
     }
     const course = courseSnap.data() as any;
 
-    // Yayında olmayan ya da içi boş kursa atama yapılmaz — kişi açtığında
-    // yapacak bir şey bulamaz ve atama sonsuza kadar PENDING kalır.
+    // Yayında olmayan ya da hiçbir dili yayınlanmamış kursa atama yapılmaz —
+    // kişi açtığında yapacak bir şey bulamaz ve atama sonsuza kadar PENDING
+    // kalır.
     if (course.isActive === false) {
       skipped.push({ courseId, reason: "Kurs yayında değil." });
       continue;
     }
-    const [secs, qs] = await Promise.all([
-      db.collection(`courses/${courseId}/sections`).get(),
-      db.collection(`courses/${courseId}/questions`).get(),
-    ]);
-    const blockers = publishBlockers(course, secs, qs);
-    if (blockers.length) {
-      skipped.push({ courseId, reason: blockers.join(" ") });
+    const langs = publishedLangsOf(course);
+    if (langs.length === 0) {
+      skipped.push({ courseId, reason: "Kursun yayınlanmış bir dili yok." });
       continue;
     }
 
@@ -370,6 +396,12 @@ export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
       status: "PENDING",
       cycleNumber: 1,
       sectionsDone: [],
+      // Atamanın dili: kişinin profil dili yayınlanmışsa o, değilse yayınlanmış
+      // ilk dil. Birden çok dil varsa öğrenci eğitime girerken kendisi seçiyor
+      // (setAssignmentLanguage).
+      contentLanguage: langs.includes(asLang(userSnap.data()?.locale))
+        ? asLang(userSnap.data()?.locale)
+        : langs[0],
       dueDate,
       triggeredBy: "MANAGER_REQUESTED",
       triggeredById: req.auth.uid,
@@ -447,15 +479,21 @@ async function loadOwnedAssignment(uid: string, assignmentId: string) {
 type Lang = "TR" | "EN";
 const asLang = (v: unknown): Lang => (String(v).toUpperCase() === "EN" ? "EN" : "TR");
 
-/** Çeviri varsa onu, yoksa aslını ver. */
-const pickText = (base: unknown, english: unknown, lang: Lang): string => {
-  const en = String(english ?? "").trim();
-  return lang === "EN" && en ? en : String(base ?? "");
-};
-
-async function courseQuestions(courseId: string) {
+/** Bir dilin soru bankası. Her dil sürümünün kendi soruları var. */
+async function courseQuestions(courseId: string, lang: Lang) {
   const snap = await getFirestore().collection(`courses/${courseId}/questions`).get();
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as any) }))
+    .filter((q) => asLang(q.lang) === lang);
+}
+
+/** Bir dilin bölümleri, sırasıyla. */
+async function courseSections(courseId: string, lang: Lang) {
+  const snap = await getFirestore()
+    .collection(`courses/${courseId}/sections`)
+    .orderBy("order")
+    .get();
+  return snap.docs.filter((d) => asLang((d.data() as any).lang) === lang);
 }
 
 type ExamInfo = { required: boolean; score?: number | null; passingScore?: number | null };
@@ -585,11 +623,12 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   if (a.status === "COMPLETED") return { status: "COMPLETED" };
 
-  const secSnap = await getFirestore()
-    .collection(`courses/${a.courseId}/sections`)
-    .orderBy("order")
-    .get();
-  const sections = secSnap.docs.map((d) => d.id);
+  // Bölümler kişinin aldığı DİLE ait olanlar. Diller ayrı sürüm olduğu için
+  // başka dilin bölümünü tamamlamak ilerlemeyi bozardı.
+  const lang = asLang(a.contentLanguage);
+  const sections = (await courseSections(a.courseId, lang)).map((d) => d.id);
+  if (sections.length === 0)
+    throw new HttpsError("failed-precondition", "Bu dilde bölüm yok.");
   if (!sections.includes(String(sectionId)))
     throw new HttpsError("invalid-argument", "Geçersiz bölüm.");
 
@@ -607,7 +646,7 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
     // exam.required alanı eski kayıtlarda yok; o kurslarda sınav vardı sayılır.
     const course = (await getFirestore().doc(`courses/${a.courseId}`).get()).data() as any;
     const examRequired = course?.exam?.required ?? true;
-    const qs = examRequired ? await courseQuestions(a.courseId) : [];
+    const qs = examRequired ? await courseQuestions(a.courseId, lang) : [];
     status = qs.length > 0 ? "SECTIONS_DONE" : "COMPLETED";
   }
 
@@ -637,8 +676,12 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
   const exam = course?.exam || { questionCount: 10, shuffle: true };
   if (exam.required === false)
     throw new HttpsError("failed-precondition", "Bu kursun sınavı yok.");
-  let qs = await courseQuestions(a.courseId);
-  if (qs.length === 0) throw new HttpsError("failed-precondition", "Kursta sınav sorusu yok.");
+  // Sınav, kişinin eğitimi aldığı dilin bankasından. Her dil sürümünün kendi
+  // soruları var; dil ATAMADAN okunuyor, istemciden değil.
+  const lang = asLang(a.contentLanguage);
+  let qs = await courseQuestions(a.courseId, lang);
+  if (qs.length === 0)
+    throw new HttpsError("failed-precondition", "Bu dilde sınav sorusu yok.");
   if (exam.shuffle) qs = qs.sort(() => Math.random() - 0.5);
   qs = qs.slice(0, Math.min(exam.questionCount || 10, qs.length));
 
@@ -651,6 +694,7 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
   // Cevapları çıkararak döndür.
   return {
     attemptNo,
+    language: lang,
     passingScore: exam.passingScore || course?.passingScore || 70,
     questions: qs.map((q) => ({
       id: q.id,
@@ -676,9 +720,50 @@ export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (r
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId gerekli.");
   const lang = asLang(req.data?.language);
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, assignmentId);
-  if (asLang(a.contentLanguage) === lang) return { language: lang };
-  await ref.update({ contentLanguage: lang, updatedAt: FieldValue.serverTimestamp() });
-  return { language: lang };
+  if (asLang(a.contentLanguage) === lang) {
+    // Aynı dili seçmek de bir seçimdir: kapı bir daha çıkmamalı.
+    if (!a.languageChosen) await ref.update({ languageChosen: true });
+    return { language: lang };
+  }
+
+  // Tamamlanmış eğitimin dili değişmez: sertifika verildi, kayıt kapandı.
+  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+    throw new HttpsError("failed-precondition", "Tamamlanmış eğitimin dili değiştirilemez.");
+
+  const db = getFirestore();
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
+  if (!publishedLangsOf(course).includes(lang))
+    throw new HttpsError("failed-precondition", "Bu eğitim o dilde yayınlanmamış.");
+
+  // Durum YENİ dilin bölümlerine göre baştan hesaplanıyor. Diller ayrı sürüm
+  // olduğu için Türkçeyi bitirip "SECTIONS_DONE" olan biri dili İngilizceye
+  // çevirince, İngilizce bölümleri hiç açmadan sınava girebilirdi.
+  //
+  // İlerleme kaybolmuyor: sectionsDone bölüm id'si tutuyor ve id'ler dile göre
+  // ayrı, yani eski dile dönünce kaldığı yerden devam ediyor.
+  const sections = (await courseSections(a.courseId, lang)).map((d) => d.id);
+  const done: string[] = Array.isArray(a.sectionsDone) ? a.sectionsDone : [];
+  const doneHere = sections.filter((id) => done.includes(id));
+  const examRequired = course?.exam?.required ?? true;
+  const qs = examRequired ? await courseQuestions(a.courseId, lang) : [];
+
+  let status: string;
+  if (sections.length > 0 && doneHere.length === sections.length) {
+    status = qs.length > 0 ? "SECTIONS_DONE" : "COMPLETED";
+  } else {
+    status = doneHere.length > 0 ? "IN_PROGRESS" : "PENDING";
+  }
+
+  await ref.update({
+    contentLanguage: lang,
+    languageChosen: true,
+    status,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  // Bu dilde zaten her bölüm bitmiş ve sınav yoksa eğitim burada kapanır.
+  if (status === "COMPLETED")
+    await issueCertificateFor(assignmentId, { ...a, contentLanguage: lang }, { required: false });
+  return { language: lang, status };
 });
 
 /** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */
@@ -693,7 +778,7 @@ export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
   if (!sess) throw new HttpsError("not-found", "Sınav oturumu yok.");
   if (sess.submittedAt) throw new HttpsError("failed-precondition", "Bu deneme zaten gönderildi.");
 
-  const allQs = await courseQuestions(a.courseId);
+  const allQs = await courseQuestions(a.courseId, asLang(a.contentLanguage));
   const byId = new Map(allQs.map((q) => [q.id, q]));
   const answerMap: Record<string, string> = answers || {};
   let correct = 0;

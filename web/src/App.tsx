@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, needsOnboarding, type Role } from "./lib/auth";
 import { Shell } from "./components/Shell";
+import { AppFlagDefs } from "./components/Flag";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Courses } from "./pages/Courses";
@@ -47,6 +48,9 @@ const TRAINING_ADMIN: Role[] = ["ADMIN", "INSTRUCTOR"];
 function AuthedApp() {
   return (
     <Shell>
+      {/* Union Jack'in çapraz şeritlerini kesen clip-path. Sayfada bir kez
+          tanımlanıyor; her bayrakta tekrar etmek aynı id'yi çoğaltırdı. */}
+      <AppFlagDefs />
       <Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         {/* Herkes — müşteri dahil: kendi eğitimi ve kendi belgeleri */}
