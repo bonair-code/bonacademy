@@ -375,4 +375,116 @@ async function redeem(req, res) {
   res.json({ token: token });
 }
 
-module.exports = { makeSsoHandler: makeSsoHandler, TICKETS: TICKETS, DEV_ORIGINS: DEV_ORIGINS };
+/* ── Üyelik değişimini kimlik kaynağına bildir ────────────────────
+ *
+ * Yetki (kimin hangi uygulamaya girebildiği) BonAppetit'te tutuluyor, ama
+ * gerçeği bu uygulama biliyor: burada kullanıcı açılınca/silinince yetkinin
+ * de değişmesi gerekiyor. Elle "eşitle" düğmesine basmaya bırakılırsa er geç
+ * unutulur ve yetkiler sessizce kayar.
+ *
+ * KİMLİK DOĞRULAMASI: paylaşılan parola yok. Çalışma zamanı, metadata
+ * sunucusundan kendi servis hesabı için GOOGLE'IN İMZALADIĞI bir kimlik
+ * belirteci alıyor; kimlik kaynağı da imzayı doğrulayıp gönderenin servis
+ * hesabı adresine bakıyor. Paylaşılan parolanın saklanması, döndürülmesi ve
+ * sızması diye bir sorun kalmıyor.
+ *
+ * Bildirim BEST-EFFORT: başarısız olursa kullanıcı açma/silme işlemi
+ * etkilenmemeli. Kaçan bir bildirimi "Kaynaktan Eşitle" toparlıyor. */
+// format=full ŞART: varsayılan biçimde belirteçte e-posta alanı YOK ve alıcı
+// göndereni servis hesabının e-postasından tanıyor. Olmasa her bildirim
+// "not-allowed" ile reddedilirdi.
+const METADATA_KIMLIK =
+  "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity?format=full&audience=";
+
+async function oidcBelirteci(hedefAdres) {
+  const r = await fetch(METADATA_KIMLIK + encodeURIComponent(hedefAdres), {
+    headers: { "Metadata-Flavor": "Google" },
+  });
+  if (!r.ok) throw new Error("kimlik belirteci alinamadi: " + r.status);
+  return r.text();
+}
+
+/**
+ * @param {object} cfg
+ * @param {string} cfg.appId        Bu uygulamanın kimliği.
+ * @param {string} cfg.idpBildirUrl Kimlik kaynağındaki bildirim ucu.
+ * @returns {(email: string, uye: boolean) => Promise<void>}
+ */
+function makeUyelikBildirici(cfg) {
+  const appId = cfg.appId;
+  const url = cfg.idpBildirUrl;
+  if (!appId || !url) throw new Error("makeUyelikBildirici: appId ve idpBildirUrl zorunlu.");
+
+  return async function bildir(email, uye) {
+    const e = String(email || "").toLowerCase().trim();
+    if (!e) return;
+    try {
+      const belirtec = await oidcBelirteci(url);
+      const r = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + belirtec,
+        },
+        body: JSON.stringify({ appId: appId, email: e, uye: !!uye }),
+      });
+      const govde = await r.text();
+      // Yalnız DEĞİŞİKLİK ve hata loglanıyor: tetikleyici kullanıcı dokümanının
+      // her yazımında çalışıyor, değişmeyen durum log gürültüsünden ibaret.
+      if (!r.ok || govde.indexOf('"degisti":true') !== -1) {
+        console.log("[sso:" + appId + "] uyelik bildirimi " + (uye ? "+" : "-") + " " + e +
+          " -> " + r.status + " " + govde.slice(0, 120));
+      }
+    } catch (err) {
+      // Yetki eşitlemesi, kullanıcı yönetimini engellememeli.
+      console.error("[sso:" + appId + "] uyelik bildirimi basarisiz:", err && err.message);
+    }
+  };
+}
+
+/**
+ * Bir kullanıcı dokümanı yazıldığında üyelik durumunu kimlik kaynağına
+ * bildirir. Tetikleyiciler bunu çağırır; v1 ve v2 olay biçimleri farklı
+ * olduğu için önce/sonra verisi düz nesne olarak veriliyor.
+ *
+ * DURUM TABANLI, kenar tabanlı değil: her yazımda "şu an üye mi" bilgisi
+ * gönderiliyor, alıcı da değişmeyen durumu yok sayıyor. Böylece tetikleyici
+ * devreye girmeden önce açılmış hesaplar bile, dokümanları bir sonraki
+ * yazımda (ör. giriş kaydı) kendiliğinden düzeliyor.
+ *
+ * E-posta dokümanda yoksa Auth hesabından okunuyor — bazı kayıtlarda alan
+ * eksik ve onlar sessizce dışarıda kalırdı.
+ *
+ * @param {Function} bildir  makeUyelikBildirici çıktısı
+ * @param {string} uid
+ * @param {object|null} once   yazımdan önceki veri (yoksa null)
+ * @param {object|null} sonra  yazımdan sonraki veri (silindiyse null)
+ */
+async function uyelikDegisiminiBildir(bildir, uid, once, sonra) {
+  async function authEposta() {
+    try { return (await getAuth().getUser(uid)).email || null; } catch (_) { return null; }
+  }
+  const ePosta = (v) => String((v && v.email) || "").toLowerCase().trim() || null;
+
+  let eOnce = ePosta(once);
+  let eSonra = ePosta(sonra);
+  if (sonra && !eSonra) eSonra = await authEposta();
+  if (once && !sonra && !eOnce) eOnce = await authEposta();
+
+  // E-posta değiştiyse eski adresin yetkisi düşmeli, yenisine verilmeli.
+  if (eOnce && eSonra && eOnce !== eSonra) {
+    await bildir(eOnce, false);
+    await bildir(eSonra, true);
+    return;
+  }
+  const e = eSonra || eOnce;
+  if (e) await bildir(e, !!sonra);
+}
+
+module.exports = {
+  makeSsoHandler: makeSsoHandler,
+  makeUyelikBildirici: makeUyelikBildirici,
+  uyelikDegisiminiBildir: uyelikDegisiminiBildir,
+  TICKETS: TICKETS,
+  DEV_ORIGINS: DEV_ORIGINS,
+};
