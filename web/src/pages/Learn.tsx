@@ -153,7 +153,12 @@ export function Learn() {
   const [langAsk, setLangAsk] = useState<Lang | null>(null);
 
   async function switchLang(next: Lang) {
-    if (!id || next === lang) return;
+    // Aynı dili seçmek de bir SEÇİMDİR: kapı "hangi dilde alacaksın" diye
+    // soruyor ve atamada zaten yazılı olan varsayılan genelde Türkçe. Burada
+    // "zaten o dildesin" deyip çıkılırsa Türkçe'ye basmak hiçbir şey yapmıyor,
+    // seçim kaydedilmiyor ve kapı kapanmıyordu. Function idempotent: aynı
+    // dilde yalnızca languageChosen işaretliyor.
+    if (!id) return;
     setLangAsk(null);
     setErr(null);
     setLangBusy(true);
@@ -273,13 +278,13 @@ export function Learn() {
             <button
               key={l}
               type="button"
-              disabled={langBusy}
-              onClick={() => setLangAsk(l)}
+              disabled={langBusy || lang === l}
+              onClick={() => lang !== l && setLangAsk(l)}
               title={LANG_LABEL[l]}
-              className={`inline-flex items-center rounded-md p-1 border transition disabled:opacity-40 ${
+              className={`inline-flex items-center rounded-md p-1 border transition ${
                 lang === l
-                  ? "border-brand-500 ring-2 ring-brand-500/15"
-                  : "border-slate-200 opacity-60 hover:opacity-100"
+                  ? "border-brand-500 ring-2 ring-brand-500/15 cursor-default"
+                  : "border-slate-200 opacity-60 hover:opacity-100 disabled:opacity-30"
               }`}
             >
               <Flag lang={l} size={22} />
