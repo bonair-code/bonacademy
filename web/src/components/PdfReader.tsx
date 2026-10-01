@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useFullscreen } from "../lib/fullscreen";
+import { fileLoadError } from "../lib/fileError";
 import * as pdfjs from "pdfjs-dist";
 import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -81,7 +82,9 @@ export function PdfReader({
           const viewport = page.getViewport({ scale: RENDER_WIDTH / base.width });
 
           const wrap = document.createElement("div");
-          wrap.className = "relative mb-3 last:mb-0 bg-white rounded border border-slate-200";
+          wrap.className = "relative mb-3 last:mb-0 bg-white rounded border border-slate-200 mx-auto";
+          // Genişlik yakınlaştırmadan geliyor; yükseklik en-boy oranından.
+          wrap.style.width = "calc(100% * var(--pdf-zoom, 1))";
           wrap.dataset.page = String(n);
           // Yükseklik en-boy oranından gelir; böylece canvas boşaltılsa bile
           // sayfa yerini korur ve kaydırma çubuğu zıplamaz.
@@ -205,6 +208,44 @@ export function PdfReader({
   }, [url]);
 
 
+
+  /**
+   * Yakınlaştırma. Sayfa 1240px genişliğinde çizilip kutuya CSS ile
+   * sığdırılıyor; yakınlaştırma da bu CSS genişliğini değiştiriyor, yeniden
+   * çizim gerekmiyor. 1240px çoğu ekrandan geniş olduğu için 2 katına kadar
+   * bulanıklaşmıyor.
+   */
+  const [zoom, setZoom] = useState(1);
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 3;
+  const nudgeZoom = useCallback(
+    (delta: number) =>
+      setZoom((z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round((z + delta) * 20) / 20))),
+    []
+  );
+
+  // Sayfa genişliği CSS değişkeninden geliyor; her sayfa onu kullanıyor.
+  useEffect(() => {
+    hostRef.current?.style.setProperty("--pdf-zoom", String(zoom));
+  }, [zoom, loading]);
+
+  /**
+   * Ctrl + tekerlek ile yakınlaştırma — belge okuyucularda beklenen davranış.
+   * Dinleyici passive OLAMAZ: tarayıcının kendi sayfa yakınlaştırmasını
+   * engellemek için preventDefault gerekiyor.
+   */
+  useEffect(() => {
+    const el = hostRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      nudgeZoom(e.deltaY < 0 ? 0.1 : -0.1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [nudgeZoom]);
+
   /**
    * Gömülü kutunun yüksekliği kendi genişliğinden türüyor — bkz. aşağıdaki
    * not. Genişlik kenar çubuğuna, tam ekrana ve telefon/masaüstüne göre
@@ -235,18 +276,26 @@ export function PdfReader({
     };
   }, [full]);
 
-  if (err)
+  if (err) {
+    // Ham hata metni ("Failed to fetch") kullanıcıya hiçbir şey anlatmıyor;
+    // sebebi ve ne yapması gerektiği yazılı olmalı.
+    const f = fileLoadError(new Error(err));
     return (
-      <div className="rounded border border-brand-200 bg-brand-50/60 p-4">
-        <p className="text-[13px] text-brand-700 font-semibold mb-1">
-          This PDF could not be displayed.
-        </p>
-        <p className="text-[11px] text-brand-700/80 mb-2">{err}</p>
-        <a href={url} target="_blank" rel="noreferrer" className="text-[12px] underline">
-          Open {fileName} in a new tab
+      <div className="rounded-lg border border-brand-200 bg-brand-50/60 p-4">
+        <p className="text-[13px] text-brand-800 font-semibold">{f.title}</p>
+        {f.hint && <p className="text-[12px] text-brand-800/90 mt-1 max-w-[62ch]">{f.hint}</p>}
+        <p className="text-[11px] text-brand-700/70 mt-2 font-mono break-all">{f.detail}</p>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-[12px] underline mt-2"
+        >
+          Try opening {fileName} in a new tab
         </a>
       </div>
     );
+  }
 
 
   const pct = total > 0 ? Math.round((seen.size / total) * 100) : 0;
@@ -267,6 +316,35 @@ export function PdfReader({
         <div className="flex items-center gap-3 shrink-0">
           <span className="text-[11px] font-semibold text-slate-600 tabular-nums">
             {loading ? "Preparing…" : `${seen.size} / ${total} pages read`}
+          </span>
+          {/* Yakınlaştırma. Ctrl + tekerlek de aynı işi yapıyor. */}
+          <span className="inline-flex items-center rounded-lg border border-slate-200 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => nudgeZoom(-0.25)}
+              disabled={zoom <= ZOOM_MIN}
+              title="Zoom out"
+              className="px-2 py-1 text-[13px] leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(1)}
+              title="Reset zoom"
+              className="px-1.5 py-1 text-[11px] tabular-nums text-slate-600 hover:bg-slate-100 border-x border-slate-200 min-w-[44px]"
+            >
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => nudgeZoom(0.25)}
+              disabled={zoom >= ZOOM_MAX}
+              title="Zoom in (Ctrl + scroll)"
+              className="px-2 py-1 text-[13px] leading-none text-slate-600 hover:bg-slate-100 disabled:opacity-30"
+            >
+              +
+            </button>
           </span>
           <button
             type="button"
@@ -300,7 +378,7 @@ export function PdfReader({
       <div
         ref={hostRef}
         style={full ? undefined : { height: boxHeight }}
-        className={`overflow-y-auto rounded border border-slate-200 bg-slate-100 p-2 ${
+        className={`overflow-auto rounded border border-slate-200 bg-slate-100 p-2 ${
           full ? "flex-1 min-h-0" : ""
         }`}
       />
