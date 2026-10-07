@@ -124,7 +124,7 @@ export function ExamRunner({
             {t.questions.toLowerCase()}
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <div className="text-[12px] font-semibold text-slate-600 tabular-nums">
             {t.answered(answeredCount, questions.length)}
           </div>
@@ -146,12 +146,47 @@ export function ExamRunner({
               <div className="text-[18px] font-bold tabular-nums leading-tight">{clock(left)}</div>
             </div>
           )}
+          {/* Bitir düğmesi üstte, soru gezinmesinden ayrı: altta "Sonraki"nin
+              yanında dururken yanlışlıkla basılıyordu. */}
+          <button
+            onClick={() => (unanswered > 0 ? setConfirming(true) : onSubmit(answers))}
+            disabled={locked}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-brand-600 bg-white px-3.5 py-2 text-[12.5px] font-semibold text-brand-700 hover:bg-brand-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {busy ? t.submitting : t.submit}
+          </button>
         </div>
       </div>
 
       {timeUp && (
         <div className="rounded-lg border border-red-300 bg-red-50 p-3 mb-3 text-[13px] font-semibold text-red-800">
           {t.timeUp}
+        </div>
+      )}
+
+      {/* Gönderim onayı */}
+      {confirming && !timeUp && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
+          <p className="text-[13px] text-amber-900 font-semibold mb-1">{t.unanswered(unanswered)}</p>
+          <p className="text-[11px] text-amber-800 mb-2">{t.unansweredHint}</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onSubmit(answers)}
+              disabled={busy}
+              className="btn-primary text-xs py-1.5"
+            >
+              {t.submitAnyway}
+            </button>
+            <button
+              onClick={() => {
+                const first = questions.findIndex((x) => !answers[x.id]);
+                if (first >= 0) go(first);
+              }}
+              className="btn-secondary text-xs py-1.5"
+            >
+              {t.firstUnanswered}
+            </button>
+          </div>
         </div>
       )}
 
@@ -236,34 +271,7 @@ export function ExamRunner({
         )}
       </div>
 
-      {/* Gönderim onayı */}
-      {confirming && !timeUp && (
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 mb-3">
-          <p className="text-[13px] text-amber-900 font-semibold mb-1">{t.unanswered(unanswered)}</p>
-          <p className="text-[11px] text-amber-800 mb-2">{t.unansweredHint}</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => onSubmit(answers)}
-              disabled={busy}
-              className="btn-primary text-xs py-1.5"
-            >
-              {t.submitAnyway}
-            </button>
-            <button
-              onClick={() => {
-                const first = questions.findIndex((x) => !answers[x.id]);
-                if (first >= 0) go(first);
-              }}
-              className="btn-secondary text-xs py-1.5"
-            >
-              {t.firstUnanswered}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Alt navigasyon. Gönder düğmesi her soruda var — süreli sınavda kişi
-          son soruya gitmeden de bitirebilmeli. */}
+      {/* Alt navigasyon: yalnızca sorular arasında gezinme. */}
       <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-4">
         <button
           onClick={() => go(i - 1)}
@@ -272,20 +280,11 @@ export function ExamRunner({
         >
           {t.prev}
         </button>
-        <div className="flex items-center gap-2">
-          {!isLast && (
-            <button onClick={() => go(i + 1)} className="btn-secondary text-xs py-2">
-              {t.next}
-            </button>
-          )}
-          <button
-            onClick={() => (unanswered > 0 ? setConfirming(true) : onSubmit(answers))}
-            disabled={locked}
-            className="btn-primary text-xs py-2"
-          >
-            {busy ? t.submitting : t.submit}
+        {!isLast && (
+          <button onClick={() => go(i + 1)} className="btn-primary text-xs py-2">
+            {t.next}
           </button>
-        </div>
+        )}
       </div>
     </div>
   );
