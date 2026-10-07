@@ -1,4 +1,6 @@
-# BonAcademy — Eksikler ve Yapılacaklar
+# Capella Academy — Eksikler ve Yapılacaklar
+
+> BonAcademy'den devralınan liste; CAPELLA'ya özel talepler 0. bölümde.
 
 > Çalışma sırasında tespit edilen açık maddeler. Tamamlananlar listeden silinir.
 > Son güncelleme: 01.10.2026
@@ -7,6 +9,59 @@
 > döngü açıyor ve her döngü kendi sertifikasını alıyor), dış eğitim kaydı
 > düzenleme, eski kayıtlarda `userDepartmentId` (geriye dönük dolduruldu +
 > `updateUser` departman değişiminde kendisi güncelliyor), hosting dağıtımı.
+
+## 0. CAPELLA talepleri
+
+### Canlı (gözetimli) toplu sınav — istendi 07.10.2026
+Birden fazla kişinin (ör. 10 kişi) **aynı anda, admin'in başlattığı** bir
+sınava girmesi. Mevcut sınav kursa bağlı ve herkes kendi zamanında giriyor;
+bu ondan ayrı bir "sınav oturumu" kavramı.
+
+**İstenen akış (kullanıcının tarifi):**
+1. Admin **Sınavlar** sayfasından sınav oluşturur: soru seti, süre, geçme
+   notu, sınavın geçerli olduğu **tarih ve saat aralığı**.
+2. Kişileri sınava atar, sonra **"Sınavı aç"** der.
+3. Atanan kişi, sınav saati içinde girişte **bekleme alanına** düşer.
+   Sınav henüz başlamamıştır.
+4. Admin canlı listede kimin bekleme alanında olduğunu görür (katıldı /
+   gelmedi). Herkes gelince **"Sınavı başlat"** der; sınav herkeste aynı
+   anda başlar.
+5. Sınav ekranında:
+   - üstte soru numaraları (hangi soruda olduğu, hangileri cevaplandı),
+   - kalan süre (geri sayım),
+   - kaç soru cevapladı / kaç soru kaldı, tüm ilerleme detayları.
+6. Kişi **"Sınavı bitir ve gönder"** der. Süre dolarsa otomatik gönderilir.
+
+**Tasarlarken karar verilecekler:**
+- Sınav bağımsız mı, yoksa bir kursa bağlı mı (geçince sertifika çıkacak mı,
+  hangi kurs adıyla)?
+- Süre herkes için admin'in "başlat" anından mı sayılır, yoksa kişinin
+  ekranı açtığı andan mı? Bağlantısı kopan kişi geri dönünce süre devam eder
+  mi?
+- Admin canlı ekranda kişi bazında ilerlemeyi (kaçıncı soruda) de görsün mü?
+- Geç gelen kişi sınav başladıktan sonra girebilir mi?
+- Soru ve şık sırası kişiye göre karışık mı? (kopya önlemi)
+- Kalanlar için tekrar hakkı: aynı oturumda mı, yeni oturum mu?
+
+**Teknik notlar:**
+- Mevcut güvenlik modeli korunmalı: sorular istemciye **cevapsız** gider,
+  puanlama sunucuda (`startExam` / `submitExam` kalıbı).
+- Bekleme alanı ve "başlat" için Firestore canlı dinleme yeterli
+  (`examSessions/{id}` + `participants` alt koleksiyonu; admin `status`
+  alanını `WAITING → RUNNING → CLOSED` yapar, istemciler dinler).
+- Süre istemcide değil sunucu zamanında tutulmalı (`startedAt` +
+  `durationMin`); gönderim süre dışında gelirse sunucu reddeder ya da
+  o ana kadarki cevapları puanlar.
+
+### "Yalnızca sınav" kurs tipi — istendi 07.10.2026
+Bugün bir kurs, içeriği olan en az bir bölüm olmadan yayınlanamıyor ve sınav
+yalnızca bölümler bitince açılıyor. Geçici çözüm: tek bölüm + tek belge
+(CAPELLA'da TNA yükleniyor), öğrenci onu tamamlayınca sınava geçiyor.
+Kalıcı çözüm için değişecek yerler: `publishBlockers` (sunucu) +
+CourseDetail yayın kontrolü, atamada başlangıç durumu (doğrudan
+`SECTIONS_DONE`), yenileme döngüsü, 2. başarısızlıkta "bölümleri sıfırla"
+kuralı (bölüm yoksa kişi kilitli kalır), Learn ekranı. Canlı sınav
+yapılırsa bu ihtiyaç onun içinde de çözülebilir — birlikte değerlendirilmeli.
 
 ## 1. Veri bütünlüğünü bozan açıklar
 
