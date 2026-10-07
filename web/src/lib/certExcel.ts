@@ -91,7 +91,7 @@ export function downloadCertTemplate(courseTitles: string[]) {
       "İSTANBUL",
       "23.10.2007",
       courseTitles[0] ?? "Fuel Tank Safety Training (Phase 2) | Initial Training",
-      "Cevdet Berkan ÖZBAY",
+      "Ahmet YILMAZ",
       "8 Hours",
       "19.09.2025",
       "19.09.2025",
