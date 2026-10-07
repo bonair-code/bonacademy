@@ -112,6 +112,10 @@ function fail(res, status, code, message) {
  *        o zaman tek kapı, bu uygulamada hesabının olması. Yetki listesini
  *        ayrıca tutmak, "hesabı var ama yetkisi verilmemiş" diye çalışmayan
  *        bir ara durum üretirdi.
+ * @param {string} [cfg.selfUrl]  Bu ucun kendi adresi. `uyelik` sorusundaki
+ *        belirtecin hedefi (aud) bununla karşılaştırılır.
+ * @param {string[]} [cfg.uyelikSoranlar]  `uyelik` sorabilen servis
+ *        hesapları (kimlik kaynağının fonksiyonları). Boşsa eylem kapalı.
  * @returns {(req, res) => Promise<void>}  onRequest gövdesi
  */
 function makeSsoHandler(cfg) {
@@ -123,6 +127,8 @@ function makeSsoHandler(cfg) {
   const requireProfile = cfg.requireProfile || null;
   const startOrigins = (cfg.launcherOrigins || []).concat(DEV_ORIGINS);
   const redeemOrigins = (cfg.appOrigins || []).concat(DEV_ORIGINS);
+  const uyelikSoranlar = (cfg.uyelikSoranlar || []).map((e) => e.toLowerCase());
+  const selfUrl = cfg.selfUrl || "";
 
   if (!appId || !idpProjectId) {
     throw new Error("makeSsoHandler: appId ve idpProjectId zorunlu.");
@@ -161,7 +167,10 @@ function makeSsoHandler(cfg) {
        *
        * `redeem` ve `roster` DIŞARIDA: ikisi de tarayıcıdan çağrılıyor,
        * orada Origin var ve dar tutmanın bedeli yok. */
-      const yerliIstemci = !req.headers.origin && action === "start";
+      // `uyelik` sunucudan sunucuya: tarayıcı yok, Origin de yok. Kapısı
+      // Origin değil, Google imzalı servis hesabı belirteci.
+      const yerliIstemci = !req.headers.origin &&
+        (action === "start" || action === "uyelik");
       if (!yerliIstemci) {
         fail(res, 403, "origin-not-allowed", "Bu adres için izin yok.");
         return;
@@ -187,7 +196,10 @@ function makeSsoHandler(cfg) {
       if (action === "roster") {
         return await roster(req, res, appId, idpProjectId, requireProfile);
       }
-      fail(res, 400, "bad-action", "action 'start', 'redeem' veya 'roster' olmali.");
+      if (action === "uyelik") {
+        return await uyelik(req, res, selfUrl, uyelikSoranlar, requireProfile);
+      }
+      fail(res, 400, "bad-action", "action 'start', 'redeem', 'roster' veya 'uyelik' olmali.");
     } catch (err) {
       console.error("[sso:" + appId + "] " + action + " hatasi:", err);
       fail(res, 500, "internal", "Beklenmeyen hata.");
@@ -343,6 +355,62 @@ async function roster(req, res, appId, idpProjectId, requireProfile) {
   res.json({ appId: appId, emails: emails, authCount: hesaplar.length });
 }
 
+/* Tek bir e-posta için "bu kişi burada kullanıcı mı?" sorusu.
+ *
+ * Neden var: Eşitleme bu uygulamadaki YAZIMLA tetikleniyor. Kişi burada
+ * zaten kayıtlıyken kimlik kaynağında hesabı SONRADAN açılırsa burada
+ * hiçbir şey yazılmaz ve yetki hiç gitmez. O boşluğu kapatmak için kimlik
+ * kaynağı, yeni hesap açılınca buraya sorar.
+ *
+ * Kapı: Google'ın imzaladığı servis hesabı belirteci. Hedefi (aud) bu ucun
+ * kendi adresi olmalı — başka bir uç için alınmış belirteç burada geçmez —
+ * ve sahibi izinli listede olmalı. Yanıt tek bir evet/hayır; liste dönmez. */
+async function uyelik(req, res, selfUrl, soranlar, requireProfile) {
+  if (!selfUrl || !soranlar.length) {
+    return fail(res, 403, "disabled", "Bu uçta uyelik sorusu kapalı.");
+  }
+  const m = /^Bearer\s+(.+)$/.exec(req.headers.authorization || "");
+  if (!m) return fail(res, 401, "no-token", "Kimlik belirteci yok.");
+
+  // tokeninfo imzayı ve süreyi Google tarafında doğrular; süresi geçmiş ya
+  // da sahte belirteç 400 döner. Hacim düşük (hesap açılışı başına bir).
+  const r = await fetch("https://oauth2.googleapis.com/tokeninfo?id_token=" +
+    encodeURIComponent(m[1]));
+  const b = r.ok ? await r.json() : null;
+  if (!b) return fail(res, 401, "invalid-token", "Belirteç doğrulanamadı.");
+  const gonderen = String(b.email || "").toLowerCase();
+  if (b.aud !== selfUrl ||
+      String(b.email_verified) !== "true" ||
+      !/^(https:\/\/)?accounts\.google\.com$/.test(b.iss || "") ||
+      !soranlar.includes(gonderen)) {
+    return fail(res, 403, "not-allowed", "Bu hesap soramaz.");
+  }
+
+  const email = String((req.body || {}).email || "").toLowerCase().trim();
+  if (!email) return fail(res, 400, "no-email", "email zorunlu.");
+
+  let u;
+  try {
+    u = await getAuth().getUserByEmail(email);
+  } catch (err) {
+    if (err && err.code === "auth/user-not-found") return res.json({ uye: false });
+    throw err;
+  }
+  if (u.disabled) return res.json({ uye: false });
+
+  // `start` ve `roster` ile AYNI ölçü: personel kaydı da şart.
+  if (requireProfile) {
+    const col = getFirestore().collection(requireProfile.collection);
+    if (requireProfile.matchField) {
+      const q = await col.where(requireProfile.matchField, "==", u.uid).limit(1).get();
+      if (q.empty) return res.json({ uye: false });
+    } else if (!(await col.doc(u.uid).get()).exists) {
+      return res.json({ uye: false });
+    }
+  }
+  res.json({ uye: true });
+}
+
 async function redeem(req, res) {
   const ticket = (req.body || {}).ticket;
   if (!ticket || typeof ticket !== "string") {
@@ -484,6 +552,7 @@ async function uyelikDegisiminiBildir(bildir, uid, once, sonra) {
 module.exports = {
   makeSsoHandler: makeSsoHandler,
   makeUyelikBildirici: makeUyelikBildirici,
+  oidcBelirteci: oidcBelirteci,
   uyelikDegisiminiBildir: uyelikDegisiminiBildir,
   TICKETS: TICKETS,
   DEV_ORIGINS: DEV_ORIGINS,
