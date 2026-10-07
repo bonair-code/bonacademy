@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// BonAcademy — Cloud Storage kuralları
+// Capella Academy — Cloud Storage kuralları
 // SCORM paket içeriği kurs materyalidir (gizli değil) → giriş yapmış kullanıcı
 // okuyabilir. Yükleme/değişiklik yalnızca staff (upload Function/akışı) üzerinden.
 // Sertifika PDF'leri kişiseldir → sahibi + staff okur.

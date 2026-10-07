@@ -29,7 +29,7 @@ type Source = "BONACADEMY" | "EXTERNAL" | "PAPER";
 type Record_ = {
   id: string;
   source: Source;
-  /** Kaynağın kendi etiketi: sağlayıcı adı ya da "BonAcademy". */
+  /** Kaynağın kendi etiketi: sağlayıcı adı ya da "Capella Academy". */
   label: string;
   date: Date | null;
   expiry: Date | null;
@@ -51,7 +51,7 @@ type Group = {
 };
 
 const SOURCE_LABEL: Record<Source, string> = {
-  BONACADEMY: "BonAcademy",
+  BONACADEMY: "Capella Academy",
   EXTERNAL: "External",
   PAPER: "On paper",
 };
@@ -143,7 +143,7 @@ export function Certificates() {
       push(c.courseId || `t:${c.courseTitle}`, course?.title || c.courseTitle || "", {
         id: c.id,
         source: "BONACADEMY",
-        label: "BonAcademy",
+        label: "Capella Academy",
         date,
         expiry: date ? addValidity(date, course?.every ?? null, course?.unit ?? "NONE") : null,
         serialNo: c.serialNo ?? null,

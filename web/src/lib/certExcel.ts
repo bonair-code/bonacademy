@@ -2,7 +2,7 @@ import * as XLSX from "xlsx";
 
 /**
  * Geçmiş sertifikaların Excel şablonu ve okuyucusu.
- * Sütun adları BonAir'in kâğıt sicilindekiyle birebir aynı — mevcut dosyadan
+ * Sütun adları devralınan kâğıt sicil şablonundakiyle birebir aynı — mevcut dosyadan
  * kopyala-yapıştır yapılabilsin diye.
  */
 
@@ -86,8 +86,8 @@ export function downloadCertTemplate(courseTitles: string[]) {
     HEADERS as unknown as string[],
     [
       "26-001",
-      "OĞUZ KAAN ALPAYDIN",
-      "oalpaydin@bonair.com.tr",
+      "ALİ KAYA",
+      "akaya@capella.aero",
       "İSTANBUL",
       "23.10.2007",
       courseTitles[0] ?? "Fuel Tank Safety Training (Phase 2) | Initial Training",
@@ -135,7 +135,7 @@ export function downloadCertTemplate(courseTitles: string[]) {
   lws["!cols"] = [{ wch: 60 }];
   XLSX.utils.book_append_sheet(wb, lws, "Valid Trainings");
 
-  XLSX.writeFile(wb, "bonacademy-certificates-template.xlsx");
+  XLSX.writeFile(wb, "capella-academy-certificates-template.xlsx");
 }
 
 export async function parseCertWorkbook(file: File): Promise<CertParseResult> {

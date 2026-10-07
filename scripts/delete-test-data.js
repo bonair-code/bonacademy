@@ -36,7 +36,7 @@ if (!fromArg || !/^\d{2}-\d+$/.test(fromArg)) {
   process.exit(1);
 }
 
-initializeApp({ projectId: "bonair-academy" });
+initializeApp({ projectId: "capella-academy-v2" });
 const db = getFirestore();
 
 /** Seri numarasını sıralanabilir sayıya çevirir: yıl * 1e6 + numara. */

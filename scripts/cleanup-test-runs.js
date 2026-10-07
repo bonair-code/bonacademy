@@ -29,7 +29,7 @@ const ASSIGNMENTS = [
 ];
 
 async function main() {
-  initializeApp({ projectId: "bonair-academy" });
+  initializeApp({ projectId: "capella-academy-v2" });
   const db = getFirestore();
 
   for (const sid of SESSIONS) {

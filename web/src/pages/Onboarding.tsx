@@ -75,12 +75,12 @@ export function Onboarding() {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(160deg,#8b1013 0%,#5c0a0d 100%)" }}
+      style={{ background: "linear-gradient(160deg,var(--sidebar-top) 0%,var(--sidebar-bot) 100%)" }}
     >
       <div className="w-full max-w-[440px]">
         <div className="flex flex-col items-center mb-5">
           <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-11 w-auto" />
+            <img src="/Logo.png" alt="Capella Aviation Solutions" className="h-12 w-auto" />
           </div>
           <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-4">
             Welcome, {profile?.name}
@@ -90,7 +90,7 @@ export function Onboarding() {
         <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
           <span
             className="block h-1"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
+            style={{ background: "linear-gradient(90deg,#2b4685,#6688c0 60%,transparent)" }}
           />
 
           {/* Adım göstergesi */}
@@ -210,7 +210,7 @@ function Dot({ on, label }: { on: boolean; label: string }) {
 
 function ErrorBox({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs text-brand-700 mb-3 rounded-md bg-brand-50 border border-brand-100 px-2.5 py-2">
+    <p className="text-xs text-red-700 mb-3 rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
       {children}
     </p>
   );

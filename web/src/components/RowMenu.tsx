@@ -101,7 +101,7 @@ export function RowMenu({ items, label = "Row actions" }: { items: MenuItem[]; l
           >
             {items.map((it, i) => {
               const cls = `w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition ${
-                it.danger ? "text-brand-700 hover:bg-brand-50" : "text-slate-700 hover:bg-slate-50"
+                it.danger ? "text-red-700 hover:bg-red-50" : "text-slate-700 hover:bg-slate-50"
               }`;
               const body = (
                 <>

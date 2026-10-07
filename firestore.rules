@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// BonAcademy (Firebase-native) — Firestore Security Rules
+// Capella Academy (Firebase-native) — Firestore Security Rules
 // Roller: ADMIN, MANAGER (Müdür), INSTRUCTOR (Eğitmen), USER (Çalışan),
 // CUSTOMER (dışarıdan eğitim alan müşteri — yalnızca kendi kaydına erişir).
 // Rol, kullanıcının users/{uid} dokümanından okunur (Spark uyumlu — Cloud
@@ -116,7 +116,7 @@ service cloud.firestore {
     }
 
     // ---- EXTERNAL TRAINING (dışarıdan alınan eğitim kayıtları) ----
-    // BonAir'in vermediği eğitimler. Sertifika ÜRETİLMEZ; personelin getirdiği
+    // Kurumun vermediği eğitimler. Sertifika ÜRETİLMEZ; personelin getirdiği
     // belge Storage'a iliştirilir. Admin herkese, müdür yalnızca kendi
     // departmanındaki personele kayıt girebilir.
     match /externalTrainings/{id} {

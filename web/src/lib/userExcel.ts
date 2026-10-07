@@ -73,19 +73,19 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
   const example = XLSX.utils.aoa_to_sheet([
     HEADERS,
     [
-      "Birol TUNÇ",
-      "btunc@bonair.com.tr",
+      "Mehmet DEMİR",
+      "mdemir@capella.aero",
       "Manager",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles.slice(0, 2).map((j) => j.name).join(", ") ||
         "Certifying Staff, Mechanic Technician",
       "İstanbul",
       "1985-04-12",
-      "Bonair2026!",
+      "Capella2026!",
     ],
     [
       "Ayşe YILMAZ",
-      "ayilmaz@bonair.com.tr",
+      "ayilmaz@capella.aero",
       "Employee",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles[0]?.name ?? "Technician",
@@ -127,7 +127,7 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
   help["!cols"] = [{ wch: 95 }];
   XLSX.utils.book_append_sheet(wb, help, SHEET_HELP);
 
-  XLSX.writeFile(wb, "bonacademy-users-template.xlsx");
+  XLSX.writeFile(wb, "capella-academy-users-template.xlsx");
 }
 
 /** Excel'in tarih hücresi Date, metin hücresi string gelir; ikisini de kabul et. */
@@ -149,7 +149,7 @@ function toISODate(v: unknown): string | null {
 function randomPassword() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   const body = Array.from(bytes, (b) => b.toString(36)).join("");
-  return `Bon${body}!9`;
+  return `Cap${body}!9`;
 }
 
 export async function parseUserWorkbook(

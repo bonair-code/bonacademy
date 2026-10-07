@@ -170,7 +170,7 @@ function LearnerDashboard() {
           title="No training assigned yet"
           line={
             role === "CUSTOMER"
-              ? "Once BonAir Academy assigns you a course it will appear here."
+              ? "Once Capella Academy assigns you a course it will appear here."
               : "Nothing is waiting on you right now."
           }
         />

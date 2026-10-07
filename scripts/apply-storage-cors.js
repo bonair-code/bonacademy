@@ -19,9 +19,9 @@ const { initializeApp } = fnRequire("firebase-admin/app");
 const { getStorage } = fnRequire("firebase-admin/storage");
 
 const APPLY = process.argv.includes("--apply");
-const BUCKET = "bonair-academy.firebasestorage.app";
+const BUCKET = "capella-academy-v2.firebasestorage.app";
 
-initializeApp({ projectId: "bonair-academy", storageBucket: BUCKET });
+initializeApp({ projectId: "capella-academy-v2", storageBucket: BUCKET });
 
 (async () => {
   const bucket = getStorage().bucket();

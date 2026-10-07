@@ -12,6 +12,7 @@ import type { Role } from "../../lib/auth";
 import { MultiSelect } from "../MultiSelect";
 import { assignCourses, skipNote } from "../../lib/assign";
 import { subScopesOf, type SubScope } from "../../lib/requirements";
+import { ORG } from "../../lib/org";
 
 export type UserRow = {
   id: string;
@@ -134,7 +135,7 @@ export function PasswordReset({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -249,7 +250,7 @@ export function UserForm({
             value={email}
             disabled={editing}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="first.last@bonair.com.tr"
+            placeholder={`first.last@${ORG.emailDomain}`}
           />
           {editing && (
             <p className="text-[10px] text-slate-400 mt-1">Email cannot be changed here.</p>
@@ -265,7 +266,7 @@ export function UserForm({
               placeholder="At least 6 characters"
             />
             {password.length > 0 && password.length < 6 && (
-              <p className="text-[10px] text-brand-700 mt-1">Must be at least 6 characters.</p>
+              <p className="text-[10px] text-red-700 mt-1">Must be at least 6 characters.</p>
             )}
           </div>
         )}
@@ -422,7 +423,7 @@ export function UserForm({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -502,7 +503,7 @@ export function AssignPanel({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -550,7 +551,7 @@ export function DeleteConfirm({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );

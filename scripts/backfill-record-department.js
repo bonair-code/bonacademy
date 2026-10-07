@@ -30,7 +30,7 @@ const { getFirestore } = fnRequire("firebase-admin/firestore");
 
 const APPLY = process.argv.includes("--apply");
 
-initializeApp({ projectId: "bonair-academy" });
+initializeApp({ projectId: "capella-academy-v2" });
 const db = getFirestore();
 
 (async () => {

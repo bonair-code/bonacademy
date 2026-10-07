@@ -28,7 +28,7 @@ const DROP = ["English Exam"];
 const ADD = ["NDT training on the related testing type"];
 
 async function main() {
-  initializeApp({ projectId: "bonair-academy" });
+  initializeApp({ projectId: "capella-academy-v2" });
   const db = getFirestore();
 
   const courses = new Map(

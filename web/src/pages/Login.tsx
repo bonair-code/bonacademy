@@ -8,6 +8,7 @@ import {
   pubInput,
   pubLabel,
 } from "../components/PublicShell";
+import { ORG } from "../lib/org";
 
 export function Login() {
   const [mode, setMode] = useState<"signin" | "reset">("signin");
@@ -84,7 +85,7 @@ export function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="ad.soyad@bonair.com.tr"
+              placeholder={`ad.soyad@${ORG.emailDomain}`}
               autoComplete="username"
               autoFocus
             />
@@ -115,7 +116,7 @@ export function Login() {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="ad.soyad@bonair.com.tr"
+          placeholder={`ad.soyad@${ORG.emailDomain}`}
           autoComplete="username"
         />
 
@@ -127,7 +128,7 @@ export function Login() {
               setMode("reset");
               setErr(null);
             }}
-            className="text-[10.5px] font-semibold text-brand-500 hover:text-brand-400 mb-1.5"
+            className="text-[10.5px] font-semibold text-brand-300 hover:text-brand-200 mb-1.5"
           >
             Forgot password?
           </button>

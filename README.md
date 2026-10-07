@@ -1,12 +1,13 @@
-# BonAcademy — Firebase-native (yeniden inşa)
+# Capella Academy — Firebase-native
 
-Bon Air eğitim yönetim sistemi (LMS), **sıfırdan Firebase-native**. Eski sürüm
-(Next.js + Vercel + Postgres, `Desktop/bonacademy`) canlıda kalır; bu proje hazır
-olunca geçiş yapılır. Eskisinden **kurallar/varlıklar hasat edilir**, kod yenidir.
+Capella Aviation Solutions eğitim yönetim sistemi (LMS). BonAcademy'nin ayrı
+kurulum (fork) kopyasıdır: ayrı Firebase projesi, ayrı veri, ayrı sertifika
+serisi. Marka (logo, lacivert palet, kurum künyesi) CAPELLA'ya göre ayarlandı;
+kurulum adımları ve açık kalan değerler için bkz. `docs/CAPELLA-KOPYASI.md`.
 
 ## Stack
 - **Arayüz:** React SPA (Vite) — Firebase Hosting'de statik, tarayıcı Firestore'u
-  doğrudan okur (SMS-stili → cold start yok). Kırmızı SMS house-style taşınır.
+  doğrudan okur (SMS-stili → cold start yok). SMS house-style, CAPELLA lacivertiyle.
 - **Veri:** Firestore  ·  **Auth:** Firebase Auth (Microsoft SSO + rol claim'leri)
 - **Dosya:** Cloud Storage (SCORM paketleri + sertifika PDF'leri)
 - **Sunucu mantığı:** Cloud Functions (sınav puanlama, sertifika, cron, rapor)

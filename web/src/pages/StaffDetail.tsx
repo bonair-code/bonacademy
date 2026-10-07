@@ -440,7 +440,7 @@ export function StaffDetail() {
                     {l.course.title}
                   </span>
                   {l.required && (
-                    <span className="shrink-0 text-[10px] font-bold uppercase text-brand-700">
+                    <span className="shrink-0 text-[10px] font-bold uppercase text-red-700">
                       Required
                     </span>
                   )}
@@ -474,7 +474,7 @@ export function StaffDetail() {
                     </span>
                     <span
                       className={`shrink-0 text-[11.5px] font-semibold tabular-nums ${
-                        l.days! < 0 ? "text-brand-700" : "text-amber-700"
+                        l.days! < 0 ? "text-red-700" : "text-amber-700"
                       }`}
                     >
                       {l.days! < 0 ? `${-l.days!}d overdue` : `${l.days}d left`}
@@ -491,14 +491,14 @@ export function StaffDetail() {
       <div className={`card ${panel("TRAINING")}`}>
         <div
           className="px-5 py-3 relative"
-          style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
+          style={{ background: "linear-gradient(180deg,#233a6f 0%,#18284b 100%)" }}
         >
           <div className="text-[13px] font-bold text-white">
             Training <span className="text-white/60 font-normal">({lines.length})</span>
           </div>
           <span
             className="absolute bottom-0 left-0 right-0 h-0.5"
-            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
+            style={{ background: "linear-gradient(90deg,#2b4685,#6688c0 60%,transparent)" }}
           />
         </div>
 
@@ -544,7 +544,7 @@ export function StaffDetail() {
                     <td className="td tabular-nums text-slate-500">{fmt(l.date)}</td>
                     <td className="td tabular-nums">
                       {l.expires ? (
-                        <span className={isExpired ? "text-brand-700 font-semibold" : "text-slate-600"}>
+                        <span className={isExpired ? "text-red-700 font-semibold" : "text-slate-600"}>
                           {fmt(l.expires)}
                           <span className="block text-[10px] text-slate-400">
                             {l.days! < 0 ? `${-l.days!}d overdue` : `${l.days}d left`}
@@ -586,10 +586,10 @@ export function StaffDetail() {
                           to={`/certificate/${l.certificateId}`}
                           className="text-brand-700 hover:underline text-[12px] font-medium"
                         >
-                          BonAir · view certificate
+                          Capella · view certificate
                         </Link>
                       ) : l.state === "DONE" ? (
-                        <span className="text-[12px] text-slate-500">BonAir</span>
+                        <span className="text-[12px] text-slate-500">Capella</span>
                       ) : (
                         <span className="text-slate-300">—</span>
                       )}
@@ -651,7 +651,7 @@ export function StaffDetail() {
             </tbody>
           </table>
         </div>
-        {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+        {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
       </div>
 
       {/* TÜM dış kayıtlar. Eğitim tablosu kurs başına yalnızca kazanan kaydı
@@ -725,11 +725,11 @@ export function StaffDetail() {
                           {fmt(e.completedAt?.toDate?.())}
                         </td>
                         <td className="td tabular-nums">
-                          <span className={expired ? "text-brand-700 font-semibold" : "text-slate-700"}>
+                          <span className={expired ? "text-red-700 font-semibold" : "text-slate-700"}>
                             {exp ? fmt(exp) : "—"}
                           </span>
                           {expired && (
-                            <span className="ml-2 text-[10px] font-semibold text-brand-700">
+                            <span className="ml-2 text-[10px] font-semibold text-red-700">
                               EXPIRED
                             </span>
                           )}
@@ -783,19 +783,19 @@ export function StaffDetail() {
         )}
       </div>
 
-      {/* Sertifikalar — bu kişiye sistemden verilen BonAir sertifikaları.
+      {/* Sertifikalar — bu kişiye sistemden verilen Capella sertifikaları.
           Eskiden yalnızca kişinin kendi "My Certificates" sayfasında
           görünüyordu; müdür bir personelin sertifikasını göremiyordu. */}
       <div className={`card mt-4 ${panel("CERTIFICATES")}`}>
         <div className="px-5 py-3 border-b border-slate-100">
           <span className="text-[13px] font-bold text-slate-800">
-            BonAir Certificates{" "}
+            Capella Certificates{" "}
             <span className="text-slate-400 font-normal">({certs.length})</span>
           </span>
         </div>
         {certs.length === 0 ? (
           <p className="px-5 py-6 text-center text-[13px] text-slate-400">
-            No certificate issued by BonAir yet.
+            No certificate issued by Capella yet.
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -909,7 +909,7 @@ export function StaffDetail() {
                           </span>
                         </td>
                         <td className="td tabular-nums">
-                          <span className={overdue ? "text-brand-700 font-semibold" : "text-slate-600"}>
+                          <span className={overdue ? "text-red-700 font-semibold" : "text-slate-600"}>
                             {fmt(a.dueDate?.toDate?.())}
                           </span>
                           {overdue && dueMs !== null && (
@@ -1169,7 +1169,7 @@ function ForceCompleteForm({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );

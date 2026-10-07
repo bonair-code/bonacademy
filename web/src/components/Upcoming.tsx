@@ -139,7 +139,7 @@ export function Upcoming() {
           ))}
         </ul>
       )}
-      {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+      {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
     </div>
   );
 }

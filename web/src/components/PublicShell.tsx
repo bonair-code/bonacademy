@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ORG } from "../lib/org";
 
 /**
  * Herkese açık ekranların ortak kabuğu: giriş, sertifika doğrulama ve QR
@@ -28,17 +29,17 @@ export function PublicShell({
       className="min-h-screen flex items-center justify-center px-4 py-10"
       style={{
         background:
-          "radial-gradient(60% 45% at 50% 6%, rgba(227,30,36,.20), transparent 70%), linear-gradient(180deg,#232327 0%,#141416 100%)",
+          "radial-gradient(60% 45% at 50% 6%, rgba(68,105,170,.32), transparent 70%), linear-gradient(180deg,#1a2540 0%,#0f1628 100%)",
       }}
     >
       <div className={`w-full ${width}`}>
         <div className="flex flex-col items-center mb-6">
           {/* Logo koyu metinli; beyaz bir zemine oturmak zorunda. */}
           <span className="bg-white rounded-xl px-4 py-2.5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-8 w-auto block" />
+            <img src="/Logo.png" alt="Capella Aviation Solutions" className="h-12 w-auto block" />
           </span>
           <h1 className="text-white text-[19px] font-semibold tracking-[-0.018em] mt-4">
-            BonAcademy
+            {ORG.productName}
           </h1>
           <p
             className="text-[9px] font-semibold uppercase mt-1.5"
@@ -70,7 +71,7 @@ export function PublicShell({
         </div>
 
         <p className="text-center text-[10.5px] mt-5" style={{ color: "#6e6e73" }}>
-          BonAir Aviation · Turkish DGCA SHT-145 · TR.145.118
+          {ORG.publicFooter}
         </p>
       </div>
     </div>
@@ -100,7 +101,7 @@ export function PublicError({ children }: { children: ReactNode }) {
   );
 }
 
-/** Koyu zeminde birincil düğme — tek kırmızı öğe. */
+/** Koyu zeminde birincil düğme — tek marka renkli öğe. */
 export const pubButton =
-  "w-full rounded-[10px] py-2.5 text-[13px] font-semibold text-white bg-brand-600 " +
-  "hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition";
+  "w-full rounded-[10px] py-2.5 text-[13px] font-semibold text-white bg-brand-500 " +
+  "hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed transition";

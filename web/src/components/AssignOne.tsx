@@ -89,7 +89,7 @@ export function AssignOne({
 
       <div className="-mx-[18px] -mb-[18px] mt-5 px-[18px] py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
         {err ? (
-          <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>
+          <span className="text-[11.5px] text-red-700 mr-auto">{err}</span>
         ) : (
           <span className="text-[11.5px] text-slate-400 mr-auto">
             {courseIds.length} training{courseIds.length === 1 ? "" : "s"}

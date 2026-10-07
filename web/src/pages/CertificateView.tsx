@@ -80,7 +80,7 @@ function ImportedRecord({ cert }: { cert: Cert }) {
   return (
     <div className="max-w-3xl">
       <p className="text-[12px] text-slate-700 rounded-md bg-amber-50 border border-amber-200 px-3 py-2.5 mb-3">
-        <b>Register record only.</b> This training was certified on paper before BonAcademy. The
+        <b>Register record only.</b> This training was certified on paper before Capella Academy. The
         original certificate is held by the organisation — the system does not reproduce it.
       </p>
       <div className="card">

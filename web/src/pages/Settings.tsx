@@ -73,7 +73,7 @@ const TILES: {
     icon: "📋",
     bg: "rgba(138,90,18,.12)",
     title: "Tracked Trainings",
-    desc: "Mandatory training BonAir does not deliver. No content, no certificate — tracked only.",
+    desc: "Mandatory training Capella does not deliver. No content, no certificate — tracked only.",
   },
 ];
 
@@ -934,7 +934,7 @@ function TrackedTrainings({ onToast }: { onToast: (m: string) => void }) {
     <SectionCard
       title="Tracked Trainings"
       count={rows.length}
-      desc="Mandatory training BonAir does not deliver — staff obtain it elsewhere. No content, no certificate; these only appear in Training Follow-Up."
+      desc="Mandatory training Capella does not deliver — staff obtain it elsewhere. No content, no certificate; these only appear in Training Follow-Up."
       action={
         <button
           onClick={() => setDialog({ kind: "create" })}
@@ -1162,7 +1162,7 @@ function TrackedForm({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -1366,7 +1366,7 @@ function AddTrainingPicker({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -1419,7 +1419,7 @@ function NameForm({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -1463,7 +1463,7 @@ function ConfirmDelete({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -1473,7 +1473,7 @@ function ConfirmDelete({
 
 /**
  * Sertifikaya basılan kurum bilgileri. İmza hanesi sınıf eğitiminde eğitmenin
- * adını taşır; online eğitimde "BonAir Academy" yazar. Kalite müdürü hanesi
+ * adını taşır; online eğitimde "Capella Academy" yazar. Kalite müdürü hanesi
  * kaldırıldı — onay artık sağdaki doğrulama QRıyla yapılıyor.
  *
  * Değerler sertifika üretilirken DONDURULUR — burayı sonradan değiştirmek
@@ -1537,7 +1537,7 @@ function OrgSettings({ onToast }: { onToast: (m: string) => void }) {
           <button onClick={save} disabled={busy || !loaded} className="btn-primary text-xs py-2">
             {busy ? "Saving…" : "Save"}
           </button>
-          {err && <span className="text-xs text-brand-700">{err}</span>}
+          {err && <span className="text-xs text-red-700">{err}</span>}
         </div>
       </div>
     </SectionCard>

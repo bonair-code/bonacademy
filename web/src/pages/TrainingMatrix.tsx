@@ -635,7 +635,7 @@ export function TrainingMatrix() {
         {filteredGroups.length === 0 && (
           <p className="card p-8 text-center text-slate-400 text-sm">No staff yet.</p>
         )}
-        {err && <p className="text-xs text-brand-700">{err}</p>}
+        {err && <p className="text-xs text-red-700">{err}</p>}
       </div>
 
       <div className="card hidden lg:block">
@@ -781,7 +781,7 @@ export function TrainingMatrix() {
             </tbody>
           </table>
         </div>
-        {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+        {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
       </div>
 
       {hover.at && (
@@ -1256,7 +1256,7 @@ function CellDetail({
           {state.serialNo ? row("Certificate No", state.serialNo) : null}
           {state.durationHours != null ? row("Duration", `${state.durationHours} hours`) : null}
           {state.instructor ? row("Instructor", state.instructor) : null}
-          {row("Source", state.external ? `External — ${state.external}` : "BonAcademy")}
+          {row("Source", state.external ? `External — ${state.external}` : "Capella Academy")}
 
           {/* Dolu hücrede kaydı düzeltmenin yolu yoktu: tarih yanlış
               girildiyse ya da yeni belge geldiyse kişi sayfasına gitmek

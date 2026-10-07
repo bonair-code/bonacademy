@@ -277,7 +277,7 @@ export function Learn() {
         }
       />
       <div className="mb-4" />
-      {err && <p className="text-xs text-brand-700 mb-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mb-3">{err}</p>}
 
       {/* DİL KAPISI — eğitimin birden fazla dili yayınlanmışsa, içeriğe
           geçmeden önce tek soru. Seçim atama kaydına yazılıyor; bir daha
@@ -733,7 +733,7 @@ function ProgressRail({
         <div className="h-[5px] rounded-full bg-slate-100 overflow-hidden mt-1.5">
           <div
             className="h-full rounded-full transition-[width] duration-300"
-            style={{ width: `${pct}%`, background: pct === 100 ? "#30b15a" : "#e31e24" }}
+            style={{ width: `${pct}%`, background: pct === 100 ? "#30b15a" : "#2b4685" }}
           />
         </div>
       </div>

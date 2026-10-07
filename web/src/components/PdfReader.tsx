@@ -281,10 +281,10 @@ export function PdfReader({
     // sebebi ve ne yapması gerektiği yazılı olmalı.
     const f = fileLoadError(new Error(err));
     return (
-      <div className="rounded-lg border border-brand-200 bg-brand-50/60 p-4">
-        <p className="text-[13px] text-brand-800 font-semibold">{f.title}</p>
-        {f.hint && <p className="text-[12px] text-brand-800/90 mt-1 max-w-[62ch]">{f.hint}</p>}
-        <p className="text-[11px] text-brand-700/70 mt-2 font-mono break-all">{f.detail}</p>
+      <div className="rounded-lg border border-red-200 bg-red-50/60 p-4">
+        <p className="text-[13px] text-red-800 font-semibold">{f.title}</p>
+        {f.hint && <p className="text-[12px] text-red-800/90 mt-1 max-w-[62ch]">{f.hint}</p>}
+        <p className="text-[11px] text-red-700/70 mt-2 font-mono break-all">{f.detail}</p>
         <a
           href={url}
           target="_blank"
@@ -361,7 +361,7 @@ export function PdfReader({
         <div className="h-1 w-full rounded-full bg-slate-100 overflow-hidden mb-2 shrink-0">
           <div
             className="h-full rounded-full transition-[width] duration-200"
-            style={{ width: `${pct}%`, background: pct === 100 ? "#10b981" : "#e8630a" }}
+            style={{ width: `${pct}%`, background: pct === 100 ? "#10b981" : "#2b4685" }}
           />
         </div>
       )}

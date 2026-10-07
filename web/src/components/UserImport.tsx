@@ -111,7 +111,7 @@ export function UserImport({
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div
               className="h-full rounded-full transition-[width] duration-200"
-              style={{ width: `${pct}%`, background: busy ? "#e8630a" : "#10b981" }}
+              style={{ width: `${pct}%`, background: busy ? "#2b4685" : "#10b981" }}
             />
           </div>
 
@@ -122,7 +122,7 @@ export function UserImport({
             {failed.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">{failed.length} failed</span>
+                <span className="text-red-700 font-semibold">{failed.length} failed</span>
               </>
             )}
             {busy && total - progress > 0 && (
@@ -134,9 +134,9 @@ export function UserImport({
         {failed.length > 0 && (
           <div className="mb-3">
             <div className="label">Failed rows</div>
-            <ul className="max-h-32 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5">
+            <ul className="max-h-32 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5">
               {failed.map((r) => (
-                <li key={r.user.email} className="text-[11px] text-brand-700">
+                <li key={r.user.email} className="text-[11px] text-red-700">
                   {r.user.email}: {r.error}
                 </li>
               ))}
@@ -234,7 +234,7 @@ export function UserImport({
             {parsed.errors.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">
+                <span className="text-red-700 font-semibold">
                   {parsed.errors.length} skipped
                 </span>
               </>
@@ -242,9 +242,9 @@ export function UserImport({
           </div>
 
           {parsed.errors.length > 0 && (
-            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5">
+            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5">
               {parsed.errors.map((e) => (
-                <li key={e.row} className="text-[11px] text-brand-700">
+                <li key={e.row} className="text-[11px] text-red-700">
                   Row {e.row}: {e.message}
                 </li>
               ))}
@@ -314,7 +314,7 @@ export function UserImport({
         </div>
       )}
 
-      {err && <p className="mt-2 text-xs text-brand-700">{err}</p>}
+      {err && <p className="mt-2 text-xs text-red-700">{err}</p>}
     </div>
   );
 }

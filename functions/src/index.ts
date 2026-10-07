@@ -4,7 +4,6 @@ import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
-import { makeSsoHandler } from "./sso";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -564,7 +563,7 @@ export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) =
  * Dışarıdan alınan eğitim, aynı kursun açık atamasını kapatır — kişi o eğitimi
  * zaten aldıysa sistemde tekrar yapmasına gerek yok.
  *
- * BonAir sertifikası ÜRETİLMEZ: eğitimi biz vermedik, elimizde onların belgesi
+ * Kurum sertifikası ÜRETİLMEZ: eğitimi biz vermedik, elimizde onların belgesi
  * var. Durum COMPLETED ama completedVia = EXTERNAL olarak işaretlenir.
  */
 export const closeAssignmentExternally = onCall({ region: "europe-west3" }, async (req) => {
@@ -765,8 +764,9 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     examScore: exam?.score ?? null,
     examPassingScore: exam?.passingScore ?? null,
     heldIn: org.trainingLocation ?? "ONLINE",
-    organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
-    approvalNo: org.approvalNo ?? "TR.145.118",
+    organisationName: org.organisationName ?? "CAPELLA AVIATION SOLUTIONS",
+    // CAPELLA SHT-145 onaylı değil — belgede onay numarası yok.
+    approvalNo: null,
     verifyToken,
   });
   await db.doc(`certVerify/${verifyToken}`).set({
@@ -1079,8 +1079,9 @@ export const finishClassSession = onCall({ region: "europe-west3" }, async (req)
       // Sınıf eğitiminde imza hanesi EĞİTMENİN. Bu alan yazılmadığı için
       // sınıf sertifikaları da "Online Training" olarak çıkıyordu.
       instructorName: ses.instructorName ?? null,
-      organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
-      approvalNo: org.approvalNo ?? "TR.145.118",
+      organisationName: org.organisationName ?? "CAPELLA AVIATION SOLUTIONS",
+      // CAPELLA SHT-145 onaylı değil — belgede onay numarası yok.
+      approvalNo: null,
       examRequired: false,
       examScore: null,
       examPassingScore: null,
@@ -1523,43 +1524,10 @@ export const undoCertificateImport = onCall({ region: "europe-west3" }, async (r
   return { deleted, nextNo: resetNextTo };
 });
 
-// ── Tek şifre devri (SSO) ─────────────────────────────────────────
-// Uygulama Merkezi (bonair-launcher) üzerinden BonAir Technic şifresiyle
-// giriş yapan kullanıcı, burada hesabı varsa şifre sorulmadan giriyor.
-//
-// onCall değil onRequest ve App Check zorlanmıyor: bu ucu launcher (başka
-// bir origin) ve henüz giriş yapmamış bir sekme çağırıyor, ikisinde de bu
-// projenin App Check token'ı yok. Kapı, BonAir Technic'in imzalı ID
-// token'ı ve tek kullanımlık bilet. Ayrıntı: src/sso.js
-export const sso = onRequest(
-  { region: "europe-west3", timeoutSeconds: 30, maxInstances: 20 },
-  makeSsoHandler({
-    appId: "academy",
-    idpProjectId: "bonappetit-c2db2",
-    // Bilet İSTEYEBİLEN adresler. İki istemci var: Uygulama Merkezi ve
-    // BonAir Technic portalı (ana sayfadaki Academy kartı). Mobil uygulama
-    // bu listede YOK — Origin başlığı göndermiyor, sso.js onu ayrıca
-    // ele alıyor.
-    launcherOrigins: [
-      "https://bonair-launcher.web.app",
-      "https://bonair-launcher.firebaseapp.com",
-      "https://portal.bonair.com.tr",
-      "https://bonappetit-c2db2.web.app",
-      "https://bonappetit-c2db2.firebaseapp.com",
-    ],
-    // Bileti KULLANABİLEN adresler — bu uygulamanın kendi adresleri.
-    // Yeni bir alan adı bağlanırsa buraya eklenmeli.
-    appOrigins: [
-      "https://academy.bonair.com.tr",
-      "https://bonair-academy.web.app",
-      "https://bonair-academy.firebaseapp.com",
-    ],
-    // HERKESE AÇIK: BonAcademy'de hesabı olan herkes girebilir, kişiye özel
-    // yetki aranmaz. Ayrı bir yetki listesi tutmak, "hesabı var ama yetkisi
-    // verilmemiş" gibi çalışmayan bir ara durum üretirdi.
-    requireEntitlement: false,
-    // Tek kapı bu: Auth hesabı VE users/{uid} profili. Profili olmayan
-    // kullanıcı uygulamada zaten hiçbir şey göremiyor.
-    requireProfile: { collection: "users" },
-  })
-);
+// ── Tek şifre devri (SSO) — CAPELLA'da KAPALI ─────────────────────
+// BonAcademy'de bu uç, BonAir Uygulama Merkezi'nden (BonAir Technic şifresi)
+// gelen kullanıcıya oturum devrediyordu. CAPELLA ayrı bir kurum: BonAir'in
+// kimlik kaynağına güvenmesi, başka bir şirketin kullanıcılarına bu sisteme
+// kapı açmak olurdu. CAPELLA'nın kendi launcher'ı kurulursa src/sso.js
+// olduğu gibi kullanılabilir — makeSsoHandler'a CAPELLA'nın IdP proje
+// kimliği ve adresleri verilerek burada yeniden export edilir.

@@ -95,7 +95,7 @@ export function CertImport({
           {result.failed.length > 0 && (
             <>
               {" · "}
-              <span className="text-brand-700 font-semibold">{result.failed.length} failed</span>
+              <span className="text-red-700 font-semibold">{result.failed.length} failed</span>
             </>
           )}
         </div>
@@ -178,7 +178,7 @@ export function CertImport({
         />
       </div>
 
-      {err && <p className="text-xs text-brand-700 mt-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mt-3">{err}</p>}
 
       {parsed && (
         <div className="mt-4 border-t border-slate-100 pt-3">
@@ -188,7 +188,7 @@ export function CertImport({
             {parsed.errors.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">
+                <span className="text-red-700 font-semibold">
                   {parsed.errors.length} skipped
                 </span>
               </>
@@ -196,9 +196,9 @@ export function CertImport({
           </div>
 
           {parsed.errors.length > 0 && (
-            <ul className="max-h-28 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5 mb-3">
+            <ul className="max-h-28 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5 mb-3">
               {parsed.errors.map((e, i) => (
-                <li key={i} className="text-[11px] text-brand-700">
+                <li key={i} className="text-[11px] text-red-700">
                   Row {e.row}: {e.message}
                 </li>
               ))}
@@ -270,11 +270,11 @@ function Bucket({
       <p className="text-[10px] text-slate-500 mb-1">{note}</p>
       <ul
         className={`max-h-28 overflow-auto rounded-md border p-2 space-y-0.5 ${
-          danger ? "bg-brand-50/60 border-brand-100" : "bg-amber-50/60 border-amber-200"
+          danger ? "bg-red-50/60 border-red-100" : "bg-amber-50/60 border-amber-200"
         }`}
       >
         {items.map((s, i) => (
-          <li key={i} className={`text-[11px] ${danger ? "text-brand-700" : "text-amber-800"}`}>
+          <li key={i} className={`text-[11px] ${danger ? "text-red-700" : "text-amber-800"}`}>
             {s}
           </li>
         ))}

@@ -234,7 +234,7 @@ export function ClassSessions() {
         </div>
       )}
 
-      {err && <p className="text-xs text-brand-700 mt-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mt-3">{err}</p>}
 
       {open && (
         <Modal title="New Classroom Session" onClose={() => setOpen(false)}>
@@ -304,7 +304,7 @@ function DeleteSession({ row, onClose }: { row: Session; onClose: () => void }) 
         <button onClick={onClose} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -486,7 +486,7 @@ function SessionForm({
         <button type="button" onClick={onClose} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -799,7 +799,7 @@ export function ClassSessionDetail() {
               </tbody>
             </table>
           </div>
-          {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+          {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
         </div>
       </div>
 

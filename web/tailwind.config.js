@@ -4,10 +4,11 @@ export default {
   theme: {
     extend: {
       colors: {
+        // CAPELLA lacivert — 600 logonun kendi rengi (#2b4685).
         brand: {
-          50: "#fef2f2", 100: "#fee2e2", 200: "#fecaca", 300: "#fca5a5",
-          400: "#f87171", 500: "#ef4444", 600: "#e31e24", 700: "#b91c1c",
-          800: "#991b1b", 900: "#7f1d1d",
+          50: "#f0f4fa", 100: "#dde5f2", 200: "#c0cfe7", 300: "#96afd6",
+          400: "#6688c0", 500: "#4469aa", 600: "#2b4685", 700: "#233a6f",
+          800: "#1d305b", 900: "#18284b",
         },
       },
       fontFamily: {

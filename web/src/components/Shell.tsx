@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAuth, type Role } from "../lib/auth";
 import { PageHeadProvider, usePageHead } from "./PageHead";
 import { ReportFootnote, ReportLetterhead } from "./ReportSheet";
+import { ORG } from "../lib/org";
 
 /**
  * Menü ikonları. Tek çizgi kalınlığı (1.8) ve aynı 24'lük kutu — SF Symbols
@@ -204,20 +205,20 @@ function ShellLayout({ children }: { children: ReactNode }) {
 
       {/* Uzun listelerde menü yukarıda kalmasın — ekranda sabit durur, yalnızca
           içerik kayar. Menünün kendisi taşarsa kendi içinde kayar. */}
-      {/* Nötr grafit zemin. Marka kırmızısı menünün tamamını kaplamak yerine
-          yalnızca aktif maddeyi işaretliyor; böylece tablolardaki kırmızı
-          uyarılarla yarışmıyor. */}
+      {/* Koyu lacivert zemin (logonun rengi). Aktif madde koyu zeminde okunan
+          açık bir lacivertle işaretleniyor; kırmızı yalnızca tablolardaki
+          uyarılara kalıyor. */}
       <aside
         className={`w-[232px] shrink-0 flex flex-col h-screen z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,.07)" }}
+        style={{ background: "var(--sidebar-bg)", borderRight: "1px solid rgba(255,255,255,.07)" }}
       >
         {/* Antet bandı: logo koyu metinli olduğu için beyaz zemine oturmak
             zorunda. Kart yerine tam genişlikte bir bant — basılı evraktaki
             antet mantığı, logo da en büyük burada duruyor. */}
         <div className="bg-white px-3.5 py-4 flex items-center justify-center">
-          <img src="/Logo.png" alt="Bon Air" className="h-[38px] w-auto" />
+          <img src="/Logo.png" alt="Capella Aviation Solutions" className="h-[46px] w-auto" />
         </div>
 
         <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
@@ -226,7 +227,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
             className="text-[8.5px] font-bold whitespace-nowrap"
             style={{ color: "#98989d", letterSpacing: "0.15em" }}
           >
-            BONACADEMY
+            {ORG.productName.toUpperCase()}
           </span>
           <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
         </div>
@@ -265,7 +266,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-[9px] px-2 py-1.5 rounded-[10px]">
             <div
               className="h-[26px] w-[26px] rounded-full grid place-items-center text-[10.5px] font-bold shrink-0"
-              style={{ background: "rgba(227,30,36,.22)", color: "#ff6b6f" }}
+              style={{ background: "rgba(126,162,230,.22)", color: "#a9c1ef" }}
             >
               {initials || "?"}
             </div>
