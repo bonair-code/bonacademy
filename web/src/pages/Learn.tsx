@@ -13,6 +13,7 @@ import { db, functions } from "../lib/firebase";
 import { PdfReader } from "../components/PdfReader";
 import { ScormPlayer } from "../components/ScormPlayer";
 import { ExamRunner, type ExamQ } from "../components/ExamRunner";
+import { ExamIntro } from "../components/ExamIntro";
 
 // Aynı origin'den servis edilir (hosting rewrite / vite proxy) — SCORM paketi
 // LMS API'sini window.parent üzerinde arıyor, çapraz origin'de erişemez.
@@ -60,8 +61,22 @@ export function Learn() {
   const [err, setErr] = useState<string | null>(null);
 
   // Sınav durumu
-  const [exam, setExam] = useState<{ attemptNo: number; passingScore: number; questions: ExamQ[] } | null>(null);
-  const [result, setResult] = useState<{ passed: boolean; score: number; status: string } | null>(null);
+  const [exam, setExam] = useState<{
+    attemptNo: number;
+    passingScore: number;
+    questions: ExamQ[];
+    language: Lang;
+    deadlineMs: number | null;
+    /** Sunucu saati − istemci saati; geri sayım sunucuya göre işler. */
+    clockOffsetMs: number;
+  } | null>(null);
+  const [result, setResult] = useState<{
+    passed: boolean;
+    score: number;
+    status: string;
+    /** Süre dolduktan sonra kapanan deneme — cevaplar sayılmadı. */
+    expired?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -252,13 +267,27 @@ export function Learn() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, busy, currentIndex, sections, consumed, a?.status]);
 
-  async function beginExam() {
+  async function beginExam(language?: Lang) {
     if (!id) return;
     setBusy(true);
     setErr(null);
     try {
-      const res = await httpsCallable(functions, "startExam")({ assignmentId: id });
-      setExam(res.data as any);
+      const res = await httpsCallable(functions, "startExam")({ assignmentId: id, language });
+      const d = res.data as any;
+      // Yarım kalan denemenin süresi çoktan dolmuşsa sunucu onu kapatıp
+      // sonucu döndürüyor.
+      if (d?.expired) {
+        setResult(d.result);
+        return;
+      }
+      setExam({
+        attemptNo: d.attemptNo,
+        passingScore: d.passingScore,
+        questions: d.questions,
+        language: asLang(d.language),
+        deadlineMs: d.deadlineMs ?? null,
+        clockOffsetMs: d.serverNow ? d.serverNow - Date.now() : 0,
+      });
       setResult(null);
     } catch (e) {
       setErr((e as Error).message);
@@ -278,6 +307,11 @@ export function Learn() {
         answers,
       });
       setResult(res.data as any);
+      try {
+        localStorage.removeItem(`exam:${id}:${exam.attemptNo}`);
+      } catch {
+        /* yok say */
+      }
       // 2. başarısızlıkta sunucu bölümleri sıfırladı: bu oturumdaki okuma
       // sayılmamalı, yoksa otomatik tamamlama bölümleri hemen geri işaretler.
       if ((res.data as any)?.status === "RETAKE_REQUIRED") {
@@ -445,6 +479,12 @@ export function Learn() {
             {result.passed ? "Congratulations, you passed! 🎉" : "You did not pass the exam."}
           </div>
           <p className="text-sm text-slate-600 mt-1">Your score: {result.score}%</p>
+          {result.expired && (
+            <p className="text-sm text-red-800 mt-2">
+              The time limit had passed before the exam was submitted, so this attempt was closed
+              without counting the answers.
+            </p>
+          )}
           {result.passed ? (
             <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
               View My Certificate
@@ -454,7 +494,7 @@ export function Learn() {
               You failed twice — you must retake the training from the beginning.
             </p>
           ) : (
-            <button onClick={beginExam} disabled={busy} className="btn-primary mt-4">
+            <button onClick={() => setResult(null)} disabled={busy} className="btn-primary mt-4">
               Try Again
             </button>
           )}
@@ -478,21 +518,17 @@ export function Learn() {
           passingScore={exam.passingScore}
           attemptNo={exam.attemptNo}
           busy={busy}
+          lang={exam.language}
+          deadlineMs={exam.deadlineMs}
+          clockOffsetMs={exam.clockOffsetMs}
+          storageKey={`exam:${id}:${exam.attemptNo}`}
           onSubmit={submit}
         />
       )}
 
-      {/* SINAVA HAZIR */}
-      {!result && !exam && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
-        <div className="card p-5 sm:p-6 text-center">
-          <div className="text-[15px] font-semibold text-slate-900 mb-1">
-            All sections completed 🎯
-          </div>
-          <p className="text-sm text-slate-500 mb-4">You can now take the exam.</p>
-          <button onClick={beginExam} disabled={busy} className="btn-primary">
-            {busy ? "Preparing…" : "Start Exam"}
-          </button>
-        </div>
+      {/* SINAVA HAZIR — giriş ekranı: bilgiler, dil seçimi, kurallar */}
+      {!result && !exam && id && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
+        <ExamIntro assignmentId={id} busy={busy} onStart={(l) => void beginExam(l)} />
       )}
 
       {/* BÖLÜMLER */}

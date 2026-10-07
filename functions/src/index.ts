@@ -1,6 +1,6 @@
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
 import { initializeApp } from "firebase-admin/app";
-import { FieldValue, Timestamp, getFirestore } from "firebase-admin/firestore";
+import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
@@ -836,10 +836,99 @@ export const completeSection = onCall({ region: REGION, invoker: "public" }, asy
 });
 
 /** Sınavı başlatır: soruları seçer, snapshot yazar, CEVAPSIZ döndürür. */
-export const startExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
+/** Sınav kuralları — giriş ekranı, başlatma ve gönderim aynı değerleri kullanır. */
+const EXAM_MAX_ATTEMPTS = 2; // 2. başarısızlıkta bölümler sıfırlanır (submitExam)
+/**
+ * Süre dolduktan sonra gönderime tanınan pay. İstemci süre bitince cevapları
+ * kendisi gönderiyor; bu pay yalnızca ağ gecikmesi için. Payı aşan gönderim
+ * süre dışı sayılır (bkz. finalizeAttempt).
+ */
+const EXAM_GRACE_MS = 60 * 1000;
+
+/** Sınavın alınabileceği diller: sorusu olan ve yayınlanmış (ya da eğitimin dili olan). */
+async function examLanguages(courseId: string, course: any, contentLang: Lang) {
+  const snap = await getFirestore().collection(`courses/${courseId}/questions`).get();
+  const counts: Record<Lang, number> = { TR: 0, EN: 0 };
+  for (const d of snap.docs) counts[asLang((d.data() as any).lang)]++;
+  const published = new Set(
+    (Array.isArray(course?.publishedLangs) ? course.publishedLangs : []).map(asLang)
+  );
+  return (["TR", "EN"] as Lang[]).map((lang) => ({
+    lang,
+    questions: counts[lang],
+    available: counts[lang] > 0 && (published.has(lang) || lang === contentLang),
+  }));
+}
+
+function examConfig(course: any) {
+  const exam = course?.exam || { questionCount: 10, shuffle: true };
+  const limit = Number(exam.timeLimitMin);
+  return {
+    required: exam.required !== false,
+    questionCount: Number(exam.questionCount) || 10,
+    shuffle: exam.shuffle !== false,
+    passingScore: exam.passingScore || course?.passingScore || 70,
+    timeLimitMin: Number.isFinite(limit) && limit > 0 ? limit : null,
+  };
+}
+
+/** Oturumdaki soruları cevapsız biçimde döndürür (sıra korunur). */
+async function sessionQuestions(courseId: string, lang: Lang, ids: string[]) {
+  const byId = new Map((await courseQuestions(courseId, lang)).map((q) => [q.id, q]));
+  return ids
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((q: any) => ({
+      id: q.id,
+      text: q.text,
+      options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text })),
+    }));
+}
+
+/**
+ * Sınav giriş ekranının bilgileri. Sorular istemciye okunamadığı için soru
+ * sayıları ve dil seçenekleri buradan geliyor. Yarım kalmış bir deneme varsa
+ * kalan süresiyle birlikte bildirilir.
+ */
+export const examInfo = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId } = req.data || {};
   const { a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  const db = getFirestore();
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
+  const cfg = examConfig(course);
+  const contentLang = asLang(a.contentLanguage);
+  const languages = await examLanguages(a.courseId, course, contentLang);
+
+  const attemptNo = ((a.examAttemptCount as number) || 0) + 1;
+  const sess = (await db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`).get()).data() as any;
+  const resume =
+    sess && !sess.submittedAt
+      ? {
+          attemptNo,
+          lang: asLang(sess.lang ?? contentLang),
+          remainingSec: sess.deadlineMs ? Math.max(0, Math.round((sess.deadlineMs - Date.now()) / 1000)) : null,
+        }
+      : null;
+
+  return {
+    courseTitle: a.courseTitle ?? course?.title ?? "",
+    questionCount: cfg.questionCount,
+    timeLimitMin: cfg.timeLimitMin,
+    passingScore: cfg.passingScore,
+    shuffle: cfg.shuffle,
+    attemptNo,
+    maxAttempts: EXAM_MAX_ATTEMPTS,
+    defaultLang: contentLang,
+    languages,
+    resume,
+  };
+});
+
+export const startExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const { assignmentId, language } = req.data || {};
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
   if (a.status === "CANCELLED")
     throw new HttpsError("failed-precondition", "This assignment has been withdrawn.");
   if (a.status !== "SECTIONS_DONE" && a.status !== "EXAM_FAILED")
@@ -847,29 +936,68 @@ export const startExam = onCall({ region: REGION, invoker: "public" }, async (re
 
   const db = getFirestore();
   const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
-  const exam = course?.exam || { questionCount: 10, shuffle: true };
-  if (exam.required === false)
-    throw new HttpsError("failed-precondition", "This course has no exam.");
-  // Sınav, kişinin eğitimi aldığı dilin bankasından. Her dil sürümünün kendi
-  // soruları var; dil ATAMADAN okunuyor, istemciden değil.
-  const lang = asLang(a.contentLanguage);
+  const cfg = examConfig(course);
+  if (!cfg.required) throw new HttpsError("failed-precondition", "This course has no exam.");
+
+  const attemptNo = ((a.examAttemptCount as number) || 0) + 1;
+  const sessRef = db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
+  const existing = (await sessRef.get()).data() as any;
+
+  /* Yarım kalan deneme KALDIĞI YERDEN sürer: aynı sorular, aynı bitiş saati.
+     Eskiden her çağrı yeni rastgele soru çekiyordu — sayfayı yenileyen kişi
+     hem soruları değiştirebiliyor hem de (süre olsaydı) süreyi sıfırlardı.
+     Süresi geçmişse deneme süre dışı olarak kapatılır. */
+  if (existing && !existing.submittedAt) {
+    const lang = asLang(existing.lang ?? a.contentLanguage);
+    if (existing.deadlineMs && Date.now() > existing.deadlineMs + EXAM_GRACE_MS) {
+      const result = await finalizeAttempt(String(assignmentId), a, ref, sessRef, existing, {}, true);
+      return { expired: true, result };
+    }
+    return {
+      attemptNo,
+      language: lang,
+      passingScore: cfg.passingScore,
+      timeLimitMin: existing.timeLimitMin ?? null,
+      deadlineMs: existing.deadlineMs ?? null,
+      serverNow: Date.now(),
+      resumed: true,
+      questions: await sessionQuestions(a.courseId, lang, existing.questionIds || []),
+    };
+  }
+
+  // Dil öğrencinin seçimi; yalnızca sorusu olan ve açık olan diller kabul.
+  const contentLang = asLang(a.contentLanguage);
+  const languages = await examLanguages(a.courseId, course, contentLang);
+  const wanted = language ? asLang(language) : contentLang;
+  const lang = languages.find((l) => l.lang === wanted && l.available)
+    ? wanted
+    : contentLang;
   let qs = await courseQuestions(a.courseId, lang);
   if (qs.length === 0)
     throw new HttpsError("failed-precondition", "This language has no exam questions.");
-  if (exam.shuffle) qs = qs.sort(() => Math.random() - 0.5);
-  qs = qs.slice(0, Math.min(exam.questionCount || 10, qs.length));
+  if (cfg.shuffle) qs = qs.sort(() => Math.random() - 0.5);
+  qs = qs.slice(0, Math.min(cfg.questionCount, qs.length));
 
-  const attemptNo = ((a.examAttemptCount as number) || 0) + 1;
-  await db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`).set({
+  const now = Date.now();
+  const deadlineMs = cfg.timeLimitMin ? now + cfg.timeLimitMin * 60 * 1000 : null;
+  await sessRef.set({
     attemptNo,
+    lang,
     questionIds: qs.map((q) => q.id),
+    timeLimitMin: cfg.timeLimitMin,
+    startedAtMs: now,
+    deadlineMs,
     createdAt: FieldValue.serverTimestamp(),
   });
   // Cevapları çıkararak döndür.
   return {
     attemptNo,
     language: lang,
-    passingScore: exam.passingScore || course?.passingScore || 70,
+    passingScore: cfg.passingScore,
+    timeLimitMin: cfg.timeLimitMin,
+    deadlineMs,
+    serverNow: now,
+    resumed: false,
     questions: qs.map((q) => ({
       id: q.id,
       text: q.text,
@@ -879,96 +1007,41 @@ export const startExam = onCall({ region: REGION, invoker: "public" }, async (re
 });
 
 /**
- * Öğrencinin eğitimi hangi dilde aldığını kaydeder.
- *
- * Atama dokümanına istemci yazamıyor (güvenlik kuralı `allow write: if false`)
- * — durum geçişleri yalnızca Function'dan geçsin diye. Dil seçimi de buradan
- * geçiyor; tek yazdığı alan bu, ilerlemeye ya da duruma dokunmuyor.
- *
- * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
- * eğitimi hangi dilde aldı" sorusunun cevabı.
+ * Denemeyi puanlar ve kapatır. `expired`: süre (+ pay) geçtikten sonra
+ * gelen ya da hiç gönderilmeden süresi dolan deneme — cevaplar SAYILMAZ,
+ * puan 0. İstemci süre bitince kendisi gönderdiği için buraya normalde
+ * yalnızca sınavı yarıda bırakıp süre bittikten sonra dönen kişi düşer.
  */
-export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
-  const assignmentId = String(req.data?.assignmentId || "");
-  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
-  const lang = asLang(req.data?.language);
-  const { ref, a } = await loadOwnedAssignment(req.auth.uid, assignmentId);
-  if (asLang(a.contentLanguage) === lang) {
-    // Aynı dili seçmek de bir seçimdir: kapı bir daha çıkmamalı.
-    if (!a.languageChosen) await ref.update({ languageChosen: true });
-    return { language: lang };
-  }
-
-  // Tamamlanmış eğitimin dili değişmez: sertifika verildi, kayıt kapandı.
-  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
-    throw new HttpsError("failed-precondition", "The language of a completed training cannot be changed.");
-
+async function finalizeAttempt(
+  assignmentId: string,
+  a: any,
+  ref: DocumentReference,
+  sessRef: DocumentReference,
+  sess: any,
+  answers: Record<string, string>,
+  expired: boolean
+) {
   const db = getFirestore();
-  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
-  if (!publishedLangsOf(course).includes(lang))
-    throw new HttpsError("failed-precondition", "This training is not published in that language.");
-
-  // Durum YENİ dilin bölümlerine göre baştan hesaplanıyor. Diller ayrı sürüm
-  // olduğu için Türkçeyi bitirip "SECTIONS_DONE" olan biri dili İngilizceye
-  // çevirince, İngilizce bölümleri hiç açmadan sınava girebilirdi.
-  //
-  // İlerleme kaybolmuyor: sectionsDone bölüm id'si tutuyor ve id'ler dile göre
-  // ayrı, yani eski dile dönünce kaldığı yerden devam ediyor.
-  const sections = (await courseSections(a.courseId, lang)).map((d) => d.id);
-  const done: string[] = Array.isArray(a.sectionsDone) ? a.sectionsDone : [];
-  const doneHere = sections.filter((id) => done.includes(id));
-  const examRequired = course?.exam?.required ?? true;
-  const qs = examRequired ? await courseQuestions(a.courseId, lang) : [];
-
-  let status: string;
-  if (sections.length > 0 && doneHere.length === sections.length) {
-    status = qs.length > 0 ? "SECTIONS_DONE" : "COMPLETED";
-  } else {
-    status = doneHere.length > 0 ? "IN_PROGRESS" : "PENDING";
-  }
-
-  await ref.update({
-    contentLanguage: lang,
-    languageChosen: true,
-    status,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
-  // Bu dilde zaten her bölüm bitmiş ve sınav yoksa eğitim burada kapanır.
-  if (status === "COMPLETED")
-    await issueCertificateFor(assignmentId, { ...a, contentLanguage: lang }, { required: false });
-  return { language: lang, status };
-});
-
-/** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */
-export const submitExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
-  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
-  const { assignmentId, attemptNo, answers } = req.data || {};
-  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
-  const db = getFirestore();
-
-  const sessRef = db.doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
-  const sess = (await sessRef.get()).data() as any;
-  if (!sess) throw new HttpsError("not-found", "No exam session found.");
-  if (sess.submittedAt) throw new HttpsError("failed-precondition", "This attempt has already been submitted.");
-
-  const allQs = await courseQuestions(a.courseId, asLang(a.contentLanguage));
+  const attemptNo = sess.attemptNo as number;
+  const lang = asLang(sess.lang ?? a.contentLanguage);
+  const allQs = await courseQuestions(a.courseId, lang);
   const byId = new Map(allQs.map((q) => [q.id, q]));
-  const answerMap: Record<string, string> = answers || {};
   let correct = 0;
   const picked: string[] = sess.questionIds || [];
-  for (const qid of picked) {
-    const q = byId.get(qid);
-    if (!q) continue;
-    const correctOpt = (q.options || []).find((o: any) => o.isCorrect);
-    if (correctOpt && answerMap[qid] === correctOpt.id) correct++;
+  if (!expired) {
+    for (const qid of picked) {
+      const q = byId.get(qid);
+      if (!q) continue;
+      const correctOpt = (q.options || []).find((o: any) => o.isCorrect);
+      if (correctOpt && answers[qid] === correctOpt.id) correct++;
+    }
   }
   const score = picked.length ? Math.round((correct / picked.length) * 100) : 0;
   const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
-  const passingScore = course?.exam?.passingScore || course?.passingScore || 70;
-  const passed = score >= passingScore;
+  const passingScore = examConfig(course).passingScore;
+  const passed = !expired && score >= passingScore;
 
-  await sessRef.update({ submittedAt: FieldValue.serverTimestamp() });
+  await sessRef.update({ submittedAt: FieldValue.serverTimestamp(), expired });
   await db.doc(`assignments/${assignmentId}/examAttempts/${attemptNo}`).set({
     // userId olmadan güvenlik kuralı (isSelf(resource.data.userId)) sahibi bile
     // reddediyordu.
@@ -976,6 +1049,8 @@ export const submitExam = onCall({ region: REGION, invoker: "public" }, async (r
     attemptNo,
     score,
     passed,
+    lang,
+    expired,
     createdAt: FieldValue.serverTimestamp(),
   });
 
@@ -985,20 +1060,31 @@ export const submitExam = onCall({ region: REGION, invoker: "public" }, async (r
       examAttemptCount: attemptNo,
       completedAt: FieldValue.serverTimestamp(),
     });
-    await issueCertificateFor(String(assignmentId), a, {
-      required: true,
-      score,
-      passingScore,
-    });
-    return { passed, score, status: "COMPLETED" };
+    await issueCertificateFor(assignmentId, a, { required: true, score, passingScore });
+    return { passed, score, expired, status: "COMPLETED" };
   }
-  // Başarısız: 2. denemede baştan (bölümleri sıfırla), yoksa tekrar sınav.
-  if (attemptNo >= 2) {
+  // Başarısız: son hakta baştan (bölümleri sıfırla), yoksa tekrar sınav.
+  if (attemptNo >= EXAM_MAX_ATTEMPTS) {
     await ref.update({ status: "IN_PROGRESS", sectionsDone: [], examAttemptCount: attemptNo });
-    return { passed, score, status: "RETAKE_REQUIRED" };
+    return { passed, score, expired, status: "RETAKE_REQUIRED" };
   }
   await ref.update({ status: "EXAM_FAILED", examAttemptCount: attemptNo });
-  return { passed, score, status: "EXAM_FAILED" };
+  return { passed, score, expired, status: "EXAM_FAILED" };
+}
+
+export const submitExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const { assignmentId, attemptNo, answers } = req.data || {};
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  const sessRef = getFirestore().doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
+  const sess = (await sessRef.get()).data() as any;
+  if (!sess) throw new HttpsError("not-found", "No exam session found.");
+  if (sess.submittedAt) throw new HttpsError("failed-precondition", "This attempt has already been submitted.");
+  if (!sess.attemptNo) sess.attemptNo = Number(attemptNo);
+
+  // Süre sunucu saatine göre: istemcinin sayacına güvenilmez.
+  const expired = !!sess.deadlineMs && Date.now() > sess.deadlineMs + EXAM_GRACE_MS;
+  return finalizeAttempt(String(assignmentId), a, ref, sessRef, sess, answers || {}, expired);
 });
 
 /**
