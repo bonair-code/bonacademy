@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { isStaffRole, useAuth } from "../lib/auth";
+import { useAuth } from "../lib/auth";
 import { assignCourses, skipNote } from "../lib/assign";
 import { asLang } from "../lib/lang";
 import { httpsCallable } from "firebase/functions";
@@ -45,7 +45,15 @@ type UserRow = {
   jobTitleIds?: string[];
   isActive?: boolean;
   role?: string;
+  /** Yalnızca CUSTOMER: bağlı olduğu kurum. */
+  company?: string | null;
 };
+
+/** Kişinin altında görünen satır: personelde departman, müşteride kurum. */
+function whereOf(u: UserRow | undefined, departments: Map<string, string>): string {
+  if (u?.role === "CUSTOMER") return `Customer · ${u.company || "—"}`;
+  return departments.get(u?.departmentId ?? "") ?? "—";
+}
 type CourseRow = { id: string; title: string; delivery?: string; isActive?: boolean };
 
 const DAY = 86400000;
@@ -334,7 +342,7 @@ export function Assignments() {
                         <span className="text-slate-400">Unknown user</span>
                       )}
                       <span className="block text-[11px] font-normal text-slate-400">
-                        {departments.get(u?.departmentId ?? "") ?? "—"}
+                        {whereOf(u, departments)}
                       </span>
                     </td>
                     <td className="td text-slate-700">{a.courseTitle}</td>
@@ -440,7 +448,9 @@ export function Assignments() {
       {open && (
         <Modal title="Assign Training" onClose={() => setOpen(false)} width="max-w-3xl">
           <AssignForm
-            users={users.filter((u) => u.isActive !== false && isStaffRole(u.role))}
+            // CAPELLA: müşteriler de buradan atanır (BonAcademy'de yalnızca
+            // Users → Assign Training yolu vardı).
+            users={users.filter((u) => u.isActive !== false)}
             courses={assignable}
             departments={departments}
             existing={rows}
@@ -657,7 +667,7 @@ function AssignForm({
         .map((u) => ({
           id: u.id,
           label: u.name,
-          note: departments.get(u.departmentId ?? "") ?? "—",
+          note: whereOf(u, departments),
         }))
         .sort((a, b) => a.label.localeCompare(b.label, "tr"));
     }
@@ -762,7 +772,11 @@ function AssignForm({
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
-                    {u.departmentId ? ` — ${departments.get(u.departmentId) ?? ""}` : ""}
+                    {u.role === "CUSTOMER"
+                      ? ` — ${whereOf(u, departments)}`
+                      : u.departmentId
+                      ? ` — ${departments.get(u.departmentId) ?? ""}`
+                      : ""}
                   </option>
                 ))}
         </select>
