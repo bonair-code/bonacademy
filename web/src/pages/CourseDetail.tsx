@@ -7,6 +7,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -49,6 +50,12 @@ type Course = {
   coverUrl: string | null;
   coverPath: string | null;
   durationHours: number | null;
+  /**
+   * Eğitmenin ad-soyadı — elle yazılır ya da listeden seçilir. Kursun sahibi
+   * (ownerInstructorId, düzenleme yetkisi) DEĞİŞMEZ; bu yalnızca öğrenci
+   * kartında görünen ad. Firestore'da `ownerInstructorName` alanında durur.
+   */
+  instructorName: string;
   delivery: Delivery;
   /** Revizyon elle girilir — havacılık dokümanlarında numarayı kurum belirler. */
   revisionNo: string;
@@ -148,6 +155,23 @@ export function CourseDetail() {
   const [coverBusy, setCoverBusy] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
 
+  // Eğitmen alanının öneri listesi: Instructor ve Admin rolündeki kişiler.
+  // Okuma yetkisi yoksa liste boş kalır, alan yine elle yazılabilir.
+  const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, "users"))
+      .then((s) =>
+        setInstructorOptions(
+          s.docs
+            .map((d) => d.data() as { name?: string; role?: string; isActive?: boolean })
+            .filter((u) => u.name && u.isActive !== false && (u.role === "INSTRUCTOR" || u.role === "ADMIN"))
+            .map((u) => u.name as string)
+            .sort((a, b) => a.localeCompare(b, "tr"))
+        )
+      )
+      .catch(() => setInstructorOptions([]));
+  }, []);
+
   useEffect(() => {
     if (!id) return;
     const unC = onSnapshot(doc(db, "courses", id), (d) => {
@@ -159,6 +183,7 @@ export function CourseDetail() {
         coverUrl: data.coverUrl ?? null,
         coverPath: data.coverPath ?? null,
         durationHours: data.durationHours ?? null,
+        instructorName: (data as { ownerInstructorName?: string | null }).ownerInstructorName ?? "",
         delivery: data.delivery ?? "ONLINE",
         revisionNo: data.revisionNo ?? "",
         revisionDate: data.revisionDate ?? null,
@@ -274,6 +299,7 @@ export function CourseDetail() {
         title: c.title.trim(),
         category: c.category?.trim() || null,
         durationHours: c.durationHours ?? null,
+        ownerInstructorName: c.instructorName.trim() || null,
         delivery: c.delivery,
         revisionNo: c.revisionNo.trim(),
         revisionDate: c.revisionDate || null,
@@ -569,6 +595,20 @@ export function CourseDetail() {
               placeholder="e.g. Safety / Quality"
             />
           </Field>
+          <Field label="Instructor">
+            <input
+              className="input"
+              list="course-instructors"
+              value={c.instructorName}
+              onChange={(e) => set("instructorName", e.target.value)}
+              placeholder="Name Surname — pick from the list or type"
+            />
+            <datalist id="course-instructors">
+              {instructorOptions.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </Field>
           <Field label="Revision No">
             <input
               className="input"
@@ -750,6 +790,7 @@ export function CourseDetail() {
             }
           />
           <SummaryRow label="Category" value={c.category || "—"} />
+          <SummaryRow label="Instructor" value={c.instructorName.trim() || "—"} />
           <SummaryRow
             label="Validity Period"
             value={recurText(c.recurrenceEvery, c.recurrenceUnit)}
