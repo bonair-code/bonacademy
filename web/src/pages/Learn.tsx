@@ -106,7 +106,10 @@ export function Learn() {
   const done = useMemo(() => new Set(a?.sectionsDone || []), [a?.sectionsDone]);
   const currentIndex = sections.findIndex((s) => !done.has(s.id));
 
-  // Bu oturumda hangi içerikler gerçekten tüketildi (id -> true).
+  // Bu oturumda hangi içerikler gerçekten tüketildi (id -> true). Tarayıcıda
+  // SAKLANMIYOR: 2. başarısız sınavda bölümler sıfırlanıyor ve kişinin
+  // yeniden okuması isteniyor; saklansaydı eski okuma sayılıp bölümler
+  // kendiliğinden yeniden tamamlanırdı.
   const [consumed, setConsumed] = useState<Record<string, boolean>>({});
   const markConsumed = useCallback(
     (contentId: string) => setConsumed((p) => (p[contentId] ? p : { ...p, [contentId]: true })),
@@ -227,6 +230,28 @@ export function Learn() {
     }
   }
 
+  /**
+   * Bölüm, materyali bitince KENDİLİĞİNDEN tamamlanır. Eskiden kişi PDF'i
+   * okuyup "I completed this section"a basmadan sonraki bölüme geçince ilk
+   * bölüm tamamlanmamış kalıyor, ikinci bölümü okuması da sayılmıyordu
+   * (sunucu sırayı zorunlu tutuyor). Şimdi: tamamlanmamış ilk bölümün bütün
+   * materyali tüketildiyse kaydedilir; ardından sıradaki bölüm de önceden
+   * okunduysa o da hemen kaydedilir. Düğme hata durumunda elle yedek.
+   */
+  const autoDone = useRef<string | null>(null);
+  useEffect(() => {
+    if (!id || busy || currentIndex < 0) return;
+    if (a?.status === "COMPLETED" || a?.status === "CANCELLED") return;
+    const sec = sections[currentIndex];
+    const items = contentsOf(sec);
+    if (items.length === 0 || items.some((c) => !consumed[c.id])) return;
+    if (autoDone.current === sec.id) return;
+    autoDone.current = sec.id;
+    void completeCurrent();
+    // completeCurrent her render'da yeniden oluşuyor; tetikleyici yukarıdakiler.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, busy, currentIndex, sections, consumed, a?.status]);
+
   async function beginExam() {
     if (!id) return;
     setBusy(true);
@@ -253,6 +278,12 @@ export function Learn() {
         answers,
       });
       setResult(res.data as any);
+      // 2. başarısızlıkta sunucu bölümleri sıfırladı: bu oturumdaki okuma
+      // sayılmamalı, yoksa otomatik tamamlama bölümleri hemen geri işaretler.
+      if ((res.data as any)?.status === "RETAKE_REQUIRED") {
+        setConsumed({});
+        autoDone.current = null;
+      }
       setExam(null);
     } catch (e) {
       setErr((e as Error).message);
@@ -551,7 +582,7 @@ export function Learn() {
                     {!canComplete && viewContents.length > 0 && (
                       <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
                         <p className="text-[13px] font-semibold text-amber-900">
-                          Go through the material before you finish this section.
+                          Go through the material — the section completes automatically.
                         </p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
                           {remaining.length} of {viewContents.length} item(s) still open — read
