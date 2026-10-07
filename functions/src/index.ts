@@ -9,6 +9,14 @@ import { randomBytes } from "crypto";
 // giriş noktaları kullanılıyor.
 initializeApp();
 
+/* Tüm uçlar tarayıcıdan çağrılıyor; kimlik ve yetki kontrolü her fonksiyonun
+ * İÇİNDE yapılıyor (req.auth + users/{uid}.role), bu yüzden Cloud Run kapısı
+ * herkese açık: invoker "public". Açıkça yazılıyor çünkü fonksiyon ilk
+ * oluşturulurken başarısız olup sonra güncellenirse deploy bu izni
+ * kendiliğinden vermiyor ve tarayıcı 403/CORS hatası alıyor (CAPELLA
+ * kurulumunda yaşandı). */
+const REGION = "europe-west3";
+
 // CUSTOMER: dışarıdan eğitim alan müşteri. Personel değil — yetki kapsamı
 // taşımaz, kurum uyum raporlarına girmez, yalnızca kendi eğitimine erişir.
 const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
@@ -17,7 +25,7 @@ const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
  * Admin, yeni bir kullanıcı (Auth hesabı + users/{uid} profili) oluşturur.
  * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
  */
-export const createUser = onCall({ region: "europe-west3" }, async (req) => {
+export const createUser = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   if (caller.data()?.role !== "ADMIN")
@@ -98,7 +106,7 @@ async function assertAdmin(uid: string | undefined) {
  * yeniler — aksi halde token eski rolü taşımaya devam eder (Storage kuralları
  * ve arayüz claim'e bakıyor).
  */
-export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
+export const updateUser = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertAdmin(req.auth?.uid);
 
   const uid = String(req.data?.uid || "");
@@ -162,7 +170,7 @@ export const updateUser = onCall({ region: "europe-west3" }, async (req) => {
  * (assignments/certificates) BİLEREK silinmez — havacılık eğitim kayıtları
  * saklanmak zorunda; kayıt silmek gerekirse ayrı ve bilinçli bir iş olmalı.
  */
-export const deleteUser = onCall({ region: "europe-west3" }, async (req) => {
+export const deleteUser = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertAdmin(req.auth?.uid);
 
   const uid = String(req.data?.uid || "");
@@ -239,7 +247,7 @@ function publishedLangsOf(c: any): Lang[] {
  * `isActive` SADECE buradan yazılır; güvenlik kuralı istemcinin bu alana
  * dokunmasını engelliyor.
  */
-export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
+export const publishCourse = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -351,7 +359,7 @@ export const publishCourse = onCall({ region: "europe-west3" }, async (req) => {
  * yalnızca Function tarafından yazılır. Deterministik id ({userId}_{courseId})
  * → aynı eğitim ikinci kez atanmaz (idempotent).
  */
-export const assignCourses = onCall({ region: "europe-west3" }, async (req) => {
+export const assignCourses = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   const callerRole = caller.data()?.role;
@@ -482,7 +490,7 @@ async function assertCanManageAssignments(uid?: string) {
  * Tamamlanmış bir eğitimi tekrar atamak da buradan geçiyor: "zaten atanmış"
  * diye engellemek yerine, istenirse yeni döngü açılıyor.
  */
-export const resetAssignment = onCall({ region: "europe-west3" }, async (req) => {
+export const resetAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = String(req.data?.assignmentId || "");
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
@@ -524,7 +532,7 @@ export const resetAssignment = onCall({ region: "europe-west3" }, async (req) =>
  * Tamamlanmış eğitim silinemez: sertifika verildi, belge kaydın parçası.
  * Tekrar aldırmak gerekiyorsa resetAssignment kullanılır.
  */
-export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) => {
+export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = String(req.data?.assignmentId || "");
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
@@ -566,7 +574,7 @@ export const cancelAssignment = onCall({ region: "europe-west3" }, async (req) =
  * Kurum sertifikası ÜRETİLMEZ: eğitimi biz vermedik, elimizde onların belgesi
  * var. Durum COMPLETED ama completedVia = EXTERNAL olarak işaretlenir.
  */
-export const closeAssignmentExternally = onCall({ region: "europe-west3" }, async (req) => {
+export const closeAssignmentExternally = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -779,7 +787,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
 
 /** Bir bölümü tamamlar (sıralı zorunluluk kontrolüyle). Hepsi bitince sınav
  *  varsa SECTIONS_DONE, yoksa COMPLETED + sertifika. */
-export const completeSection = onCall({ region: "europe-west3" }, async (req) => {
+export const completeSection = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, sectionId } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -828,7 +836,7 @@ export const completeSection = onCall({ region: "europe-west3" }, async (req) =>
 });
 
 /** Sınavı başlatır: soruları seçer, snapshot yazar, CEVAPSIZ döndürür. */
-export const startExam = onCall({ region: "europe-west3" }, async (req) => {
+export const startExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId } = req.data || {};
   const { a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -880,7 +888,7 @@ export const startExam = onCall({ region: "europe-west3" }, async (req) => {
  * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
  * eğitimi hangi dilde aldı" sorusunun cevabı.
  */
-export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (req) => {
+export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const assignmentId = String(req.data?.assignmentId || "");
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
@@ -933,7 +941,7 @@ export const setAssignmentLanguage = onCall({ region: "europe-west3" }, async (r
 });
 
 /** Sınavı sunucu tarafında puanlar; geçerse sertifika, 2 başarısızlıkta baştan. */
-export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
+export const submitExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, attemptNo, answers } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -1000,7 +1008,7 @@ export const submitExam = onCall({ region: "europe-west3" }, async (req) => {
  * (ör. 25-131, 25-132 …) — kağıt kayıtlarının devamı getirilebilsin diye.
  * Katılımcı sistemde kayıtlıysa aynı kursun açık ataması da kapatılır.
  */
-export const finishClassSession = onCall({ region: "europe-west3" }, async (req) => {
+export const finishClassSession = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -1168,7 +1176,7 @@ function typeFor(name: string): string {
  */
 export const serveScormContent = onRequest(
   {
-    region: "europe-west3",
+    region: REGION,
     memory: "256MiB",
     timeoutSeconds: 60,
     cors: true,
@@ -1227,7 +1235,7 @@ export const serveScormContent = onRequest(
  * Denetim izi zorunlu: kim, ne zaman, hangi gerekçeyle kapattı hem atamaya
  * hem sertifikaya yazılır.
  */
-export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async (req) => {
+export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -1301,7 +1309,7 @@ export const forceCompleteAssignment = onCall({ region: "europe-west3" }, async 
  *
  * Kim, kime, ne zaman sıfırladı kullanıcı kaydına yazılır.
  */
-export const setUserPassword = onCall({ region: "europe-west3" }, async (req) => {
+export const setUserPassword = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -1346,7 +1354,7 @@ export const setUserPassword = onCall({ region: "europe-west3" }, async (req) =>
  * `userId`/`courseId` boş kalır ve sonuçta ayrıca raporlanır — o satırlar
  * kimsenin eğitim açığını kapatmaz.
  */
-export const importCertificates = onCall({ region: "europe-west3" }, async (req) => {
+export const importCertificates = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertAdmin(req.auth?.uid);
   const db = getFirestore();
 
@@ -1495,7 +1503,7 @@ export const importCertificates = onCall({ region: "europe-west3" }, async (req)
  *
  * `dryRun` ile önce ne silineceği raporlanır. Silme geri alınamaz.
  */
-export const undoCertificateImport = onCall({ region: "europe-west3" }, async (req) => {
+export const undoCertificateImport = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertAdmin(req.auth?.uid);
   const db = getFirestore();
   const dryRun = req.data?.dryRun !== false;

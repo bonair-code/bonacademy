@@ -127,12 +127,12 @@ Proje `capella-academy-v2` (Blaze). Site: https://capella-academy-v2.web.app
 - [x] İlk ADMIN: Zeynep SİLO (talhastaj@gmail.com), şifresiz oluşturuldu —
       ilk şifre giriş ekranındaki "Forgot password?" ile belirlenir
 - [x] `orgSettings/singleton` → `trainingLocation: "Online"`
-- [ ] **Cloud Functions** — derleme servis hesabına
-      (`495818254874-compute@developer.gserviceaccount.com`)
+- [x] **Cloud Functions** — 18 fonksiyon europe-west3'te. Derleme servis
+      hesabına (`495818254874-compute@developer.gserviceaccount.com`)
       `roles/cloudbuild.builds.builder` (konsolda "Cloud Build Service Account")
-      verilince: `firebase deploy --only functions,hosting --force`.
-      Bu bitene kadar site, `serveScormContent` yönlendirmesi çıkarılmış
-      geçici bir hosting yapılandırmasıyla yayında.
+      gerekti. İlk deneme yarım kaldığı için fonksiyonlar `invoker: public`
+      almadı (tarayıcıda 403/CORS); silinip yeniden oluşturuldu ve invoker
+      artık kodda açıkça yazılı.
 
 Windows'ta deploy "fetch failed" ile düşerse:
 `NODE_OPTIONS=--dns-result-order=ipv4first firebase deploy ...`
