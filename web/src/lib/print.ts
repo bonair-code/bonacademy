@@ -77,13 +77,19 @@ export function printCertificate(cert?: Parameters<typeof certificateFileName>[0
  * görünmüyor ama yer kaplıyordu, belge bir sayfadan uzun olunca PDF 2 sayfa
  * çıkıyordu. Artık sertifikanın dışındaki her şey düzenden çıkarılıyor
  * (display: none), sertifikayı saran kutular da sıfırlanıyor; geriye
- * yalnızca 297×210 mm'lik belge kalıyor. Yükseklik 210 mm'nin bir tık altında:
- * yuvarlama payı boş bir ikinci sayfa açmasın.
+ * yalnızca 297×210 mm'lik belge kalıyor.
+ *
+ * Bu da yetmedi: içerik 209.5 mm olduğu hâlde Chrome sona boş bir ikinci
+ * sayfa ekliyordu (başsız Chrome'da PDF'e basılarak denendi; 195 mm'de tek,
+ * 200 mm'de iki sayfa). Sayfa tam bir sayfa boyunda kırpılınca tek sayfa.
  */
 const CERT_PRINT_CSS = `
 @page { size: A4 landscape; margin: 0; }
 @media print {
-  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  html, body {
+    margin: 0 !important; padding: 0 !important; background: #fff !important;
+    height: 210mm !important; overflow: hidden !important;
+  }
   .print-hide { display: none !important; }
   .print-chain {
     position: static !important; display: block !important; transform: none !important;
