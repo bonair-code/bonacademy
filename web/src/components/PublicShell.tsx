@@ -1,9 +1,21 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType, type InputHTMLAttributes, type ReactNode } from "react";
 import { ORG } from "../lib/org";
 import { useLoginFlight } from "../lib/loginFlight";
 
-/* 3D uçak tembel yükleniyor: three.js yalnızca herkese açık ekranlarda iner. */
-const PlaneScene = lazy(() => import("./PlaneScene"));
+/* 3D uçak tembel yükleniyor: three.js yalnızca herkese açık ekranlarda iner.
+   Parça inemezse (ağ hatası) uygulama çökmesin: hemen "başarısız" bildiren
+   boş bir bileşene düşer, yedek çizim görünür. */
+type SceneProps = { onReady: () => void; onFail: () => void };
+function SceneFailed({ onFail }: SceneProps) {
+  useEffect(() => onFail(), [onFail]);
+  return null;
+}
+const PlaneScene = lazy(
+  (): Promise<{ default: ComponentType<SceneProps> }> =>
+    import("./PlaneScene").catch(() => ({ default: SceneFailed }))
+);
+/** 3D bu süre içinde gelmezse (çok yavaş bağlantı) yedek çizim gösterilir. */
+const FALLBACK_AFTER_MS = 8000;
 
 /**
  * Herkese açık ekranların ortak kabuğu: giriş, şifre sıfırlama, sertifika
@@ -52,7 +64,27 @@ export function PublicShell({
 }) {
   const flight = useLoginFlight();
   const [plane3d, setPlane3d] = useState(false);
+  // Yedek çizim başta GÖRÜNMEZ: eskiden 3D yüklenene kadar çizim görünüyor,
+  // sonra 3D'ye dönüyordu (iki farklı uçak). Artık yalnızca 3D başarısız
+  // olursa ya da çok geç kalırsa çıkar.
+  const [fallback, setFallback] = useState(false);
   const onReady = useCallback(() => setPlane3d(true), []);
+  const onFail = useCallback(() => setFallback(true), []);
+  useEffect(() => {
+    const h = setTimeout(() => setFallback(true), FALLBACK_AFTER_MS);
+    // Model indirmesi hemen başlasın: 3D kodu inene kadar beklemesin.
+    // GLTFLoader aynı adresi istediğinde tarayıcı önbellekten verir.
+    if (!document.querySelector("link[data-plane-model]")) {
+      const l = document.createElement("link");
+      l.rel = "preload";
+      l.as = "fetch";
+      l.href = "/models/cessna.glb";
+      l.crossOrigin = "anonymous";
+      l.dataset.planeModel = "1";
+      document.head.appendChild(l);
+    }
+    return () => clearTimeout(h);
+  }, []);
   return (
     <div
       className="relative min-h-screen overflow-hidden flex flex-col transition-opacity duration-[450ms] ease-out"
@@ -69,7 +101,7 @@ export function PublicShell({
         src="/cert-watermark.jpg"
         alt=""
         aria-hidden
-        className={`pointer-events-none select-none absolute transition-opacity duration-700 ${plane3d ? "!opacity-0" : ""} left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]`}
+        className={`pointer-events-none select-none absolute transition-opacity duration-700 ${plane3d || !fallback ? "!opacity-0" : ""} left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]`}
         style={{
           // Kâğıt zemini ters çevrilince tam siyah olmuyor, kutu gibi
           // seçiliyordu: kontrast zemini siyaha çekiyor (screen'de görünmez),
@@ -84,7 +116,7 @@ export function PublicShell({
 
       <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${plane3d ? "opacity-100" : "opacity-0"}`}>
         <Suspense fallback={null}>
-          <PlaneScene onReady={onReady} />
+          <PlaneScene onReady={onReady} onFail={onFail} />
         </Suspense>
       </div>
 

@@ -19,14 +19,14 @@ import { registerFlyHandler } from "../lib/loginFlight";
  *
  * Bu bileşen tembel yükleniyor (PublicShell'de React.lazy): three.js yalnızca
  * herkese açık ekranlarda indiriliyor, uygulamanın geri kalanını büyütmüyor.
- * Model hazır olunca `onReady` çağrılır; o ana kadar (ve hata olursa) altta
- * duran uçak çizimi görünür.
+ * Model hazır olunca `onReady`, WebGL yoksa ya da model inemezse `onFail`
+ * çağrılır; PublicShell ikincisinde sertifikadaki uçak çizimini gösterir.
  */
 
 /** Modelde burun −X yönünde; dış grup "burun +X" kabul ettiği için çevrilir. */
 const NOSE_FLIP = true;
 
-export default function PlaneScene({ onReady }: { onReady: () => void }) {
+export default function PlaneScene({ onReady, onFail }: { onReady: () => void; onFail: () => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -38,7 +38,8 @@ export default function PlaneScene({ onReady }: { onReady: () => void }) {
     try {
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
     } catch {
-      return; // WebGL yok: çizim kalır
+      onFail(); // WebGL yok: yedek çizim
+      return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -94,7 +95,7 @@ export default function PlaneScene({ onReady }: { onReady: () => void }) {
       },
       undefined,
       () => {
-        /* model yüklenemedi: çizim kalır */
+        if (!disposed) onFail(); // model yüklenemedi: yedek çizim
       }
     );
 
@@ -255,7 +256,7 @@ export default function PlaneScene({ onReady }: { onReady: () => void }) {
       draco.dispose();
       renderer.dispose();
     };
-  }, [onReady]);
+  }, [onReady, onFail]);
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
 }
