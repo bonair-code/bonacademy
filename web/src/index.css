@@ -14,6 +14,12 @@
 }
 
 @layer base {
+  /* Telefonda sayfa yana kaymasın: ekrandan taşan bir öğe olsa bile yatay
+     kaydırma açılmaz (clip, sticky başlığı bozmaz; hidden bozardı). */
+  html,
+  body {
+    overflow-x: clip;
+  }
   body {
     @apply antialiased text-slate-800;
     background: #f4f6f9;
@@ -150,11 +156,11 @@
   }
 }
 
-/* Girişte uçak uçtuktan sonra panel ekranının belirişi */
+/* Girişte uçak uçtuktan sonra panel ekranının belirişi (hafifçe aşağıdan yukarı) */
 @keyframes app-land {
   from {
     opacity: 0;
-    transform: scale(1.015);
+    transform: translateY(14px);
   }
   to {
     opacity: 1;

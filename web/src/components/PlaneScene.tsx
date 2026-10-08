@@ -26,8 +26,25 @@ import { registerFlyHandler } from "../lib/loginFlight";
 /** Modelde burun −X yönünde; dış grup "burun +X" kabul ettiği için çevrilir. */
 const NOSE_FLIP = true;
 
-export default function PlaneScene({ onReady, onFail }: { onReady: () => void; onFail: () => void }) {
+/**
+ * Telefonda uçuş sırasında giriş ekranının aşağıdan yukarı silinmesi:
+ * `cut` giriş ekranının görünür kalan alt sınırı (kapsayıcının üstünden px),
+ * `h` kapsayıcı yüksekliği. Kenar uçağın hemen altından onu izler.
+ */
+export type WipeFn = (cut: number, h: number) => void;
+
+export default function PlaneScene({
+  onReady,
+  onFail,
+  onWipe,
+}: {
+  onReady: () => void;
+  onFail: () => void;
+  onWipe?: WipeFn;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const wipeRef = useRef(onWipe);
+  wipeRef.current = onWipe;
 
   useEffect(() => {
     const canvas = ref.current;
@@ -129,9 +146,23 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
       puffs.push(s);
     };
 
-    // ── Yerleşim: geniş ekranda uçak solda, dar ekranda üstte ──
+    // ── Yerleşim: geniş ekranda uçak solda, dar ekranda panelin altında ──
     const base = new THREE.Vector3();
     let narrow = false;
+    // Dar ekranda uçağın duracağı yükseklik: panelin altı ile alt bilgi
+    // arasındaki boşluğun ortası (panel uzayıp kısalabildiği için ölçülür).
+    // Ekrandaki o noktadan geçen ışının z=0 düzlemini kestiği yer.
+    const ray = new THREE.Vector3();
+    const narrowY = () => {
+      const cr = canvas.getBoundingClientRect();
+      const pr = document.querySelector("[data-login-panel]")?.getBoundingClientRect();
+      const h = cr.height || window.innerHeight;
+      let fy = 0.8;
+      if (pr) fy = Math.max(0.68, Math.min(0.86, (pr.bottom - cr.top + h - 40) / 2 / h));
+      camera.updateMatrixWorld();
+      ray.set(0, 1 - 2 * fy, 0.5).unproject(camera).sub(camera.position).normalize();
+      return camera.position.y + ray.y * (-camera.position.z / ray.z);
+    };
     const layout = () => {
       const w = canvas.clientWidth || window.innerWidth;
       const h = canvas.clientHeight || window.innerHeight;
@@ -139,9 +170,7 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
       narrow = w < 1024;
-      // Telefonda uçak logo ile panel arasındaki boşluğun ortasında
-      // (eskiden 2.7 idi, logonun üstüne biniyordu).
-      base.set(narrow ? 0 : -2.2, narrow ? 1.95 : 0, 0);
+      base.set(narrow ? 0 : -2.2, narrow ? narrowY() : 0, 0);
       jet.scale.setScalar(narrow ? 0.46 : 1);
     };
     window.addEventListener("resize", layout);
@@ -167,6 +196,10 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
     const ease = (p: number) => Math.pow(p, 2.2);
     const smooth = (p: number) => p * p * (3 - 2 * p);
     const FLIGHT = 1.7;
+    const FLIGHT_NARROW = 2.0;
+    const WIPE_SOFT = 170; // silinen kenarın altındaki yumuşak geçiş (PublicShell ile aynı)
+    const sp = new THREE.Vector3();
+    let slotTick = 0;
 
     registerFlyHandler((onFade) => {
       if (reduce || !prop) {
@@ -189,6 +222,8 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
       if (done) {
         // uçak ekran dışında kalır
       } else if (!flying) {
+        // Panel boyu değişebilir (hata mesajı, yazı tipi): yeri ara ara güncelle
+        if (narrow && ++slotTick % 30 === 0) base.y += (narrowY() - base.y) * 0.5;
         const bob = reduce ? 0 : 1;
         jet.position.set(base.x, base.y + Math.sin(t * 1.1) * 0.12 * bob, base.z);
         jet.rotation.set(
@@ -197,15 +232,25 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
           (Math.sin(t * 0.9) * 0.025 - my * 0.05) * bob
         );
       } else {
-        const p = Math.min(1, (t - t0) / FLIGHT);
+        const p = Math.min(1, (t - t0) / (narrow ? FLIGHT_NARROW : FLIGHT));
         const e = ease(p);
         const s = smooth(Math.min(1, p * 1.6));
         if (narrow) {
-          // Telefon: burnunu kaldırıp tırmanarak ekranın üstünden, uzaklaşarak
-          // çıkar (sağa uçsa dar ekranda hemen kayboluyordu; aşağı dalış da
-          // "düşüyor" gibi yanlış anlaşılıyordu).
-          jet.position.set(start.x + e * 0.8, start.y + e * 11 + s * 0.15, start.z - e * 6);
-          jet.rotation.set(0.1 + 0.2 * s, -0.55 - 0.35 * s, 0.85 * s);
+          // Telefon: panelin altından burnunu kaldırıp tırmanır, uzaklaşarak
+          // ekranın üstünden çıkar. Giriş ekranı uçağın arkasından aşağıdan
+          // yukarı silinir, altından panel ekranı açılır.
+          const en = Math.pow(p, 1.45);
+          jet.position.set(start.x + en * 0.8, start.y + en * 12 + s * 0.2, start.z - en * 6);
+          jet.rotation.set(0.1 + 0.25 * s, -0.55 - 0.35 * s, 0.7 * s);
+          const wipe = wipeRef.current;
+          if (wipe) {
+            const h = canvas.clientHeight;
+            sp.copy(jet.position).project(camera);
+            const follow = (-sp.y * 0.5 + 0.5) * h + 75; // uçağın hemen altı
+            const k = smooth(Math.min(1, p / 0.25)); // kenar ekranın dibinden kalkar
+            const cut = Math.min(h + (follow - h) * k, (h + WIPE_SOFT) * (1 - smooth(p)) - WIPE_SOFT);
+            wipe(cut, h);
+          }
         } else {
           jet.position.set(start.x + e * 19, start.y + e * 2.6 + s * 0.2, start.z + e * 3);
           jet.rotation.set(0.1 + 0.32 * s, -0.55 + 0.25 * s, 0.14 * s);

@@ -195,7 +195,16 @@ function ShellLayout({ children }: { children: ReactNode }) {
       if (e.key === "Escape") setNavOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Menü açıkken arkadaki sayfa kaymasın: telefonda parmak menüde ya da
+    // karartmada gezinirken sayfa kayıyor, Safari çubukları da onunla birlikte
+    // açılıp kapanıp menüyü oynatıyordu.
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      html.style.overflow = prev;
+    };
   }, [navOpen]);
 
   return (
@@ -205,7 +214,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           sayfa kullanılabilir değildi. */}
       {navOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden no-print"
+          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden no-print touch-none"
           onClick={() => setNavOpen(false)}
           aria-hidden
         />
@@ -228,7 +237,9 @@ function ShellLayout({ children }: { children: ReactNode }) {
         {/* Logo giriş ekranındaki gibi: beyaz, kutusuz, ortalı. Altında iki ucu
             eriyen ince çizgi (eski "CAPELLA ACADEMY / TRAINING MANAGEMENT
             SYSTEM" yazılarının yerine). */}
-        <div className="flex flex-col items-center px-4 pt-6 pb-3">
+        {/* Telefonda sayfa durum çubuğunun altına kadar uzanıyor (viewport-fit=cover):
+            logo onun altında kalmasın. */}
+        <div className="flex flex-col items-center px-4 pt-6 max-lg:pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-3">
           <img
             src="/Logo.png"
             alt={ORG.name}
@@ -245,7 +256,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           />
         </div>
 
-        <nav className="flex-1 pb-3 overflow-y-auto sidebar-scroll">
+        <nav className="flex-1 min-h-0 pb-3 overflow-y-auto overscroll-contain sidebar-scroll">
           {GROUP_ORDER.map((g) => {
             const inGroup = items.filter((n) => n.group === g);
             if (inGroup.length === 0) return null;
@@ -327,7 +338,8 @@ function ShellLayout({ children }: { children: ReactNode }) {
  * yanlışlıkla çıkış yapılmasın. Esc ya da Cancel onayı kapatır.
  *
  * Telefonda tarayıcının alttaki (yüzen) araç çubuğu bu bölümün üstüne
- * biniyordu; güvenli alan + çubuk payı bırakılıyor.
+ * biniyordu; güvenli alan + çubuk payı bırakılıyor (iOS 26 Safari'nin yüzen
+ * çubuğu ~90 pt — 4.5rem yetmiyordu, satır çubuğun arkasında kalıyordu).
  */
 function AccountRow({
   name,
@@ -348,7 +360,7 @@ function AccountRow({
     return () => window.removeEventListener("keydown", onKey);
   }, [ask]);
   return (
-    <div className="px-2 pt-1.5 pb-2.5 max-lg:pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
+    <div className="px-2 pt-1.5 pb-2.5 max-lg:pb-[calc(env(safe-area-inset-bottom)+6.5rem)]">
       <div
         className="relative flex items-center gap-2 px-2 py-2"
         style={{ borderTop: "1px solid rgba(255,255,255,.07)" }}

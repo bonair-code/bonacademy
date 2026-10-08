@@ -1,13 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType, type InputHTMLAttributes, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ComponentType, type InputHTMLAttributes, type ReactNode } from "react";
 import { ORG } from "../lib/org";
 import { useLoginFlight } from "../lib/loginFlight";
 import { reloadOnceForStaleChunk } from "../lib/staleChunk";
+import type { WipeFn } from "./PlaneScene";
 
 /* 3D uçak tembel yükleniyor: three.js yalnızca herkese açık ekranlarda iner.
    Parça inemezse uygulama çökmesin: önce sayfa bir kez yenilenir (yayından
    önce açılmış sekme), yine olmazsa "başarısız" bildiren boş bir bileşene
    düşer, yedek çizim görünür. */
-type SceneProps = { onReady: () => void; onFail: () => void };
+type SceneProps = { onReady: () => void; onFail: () => void; onWipe?: WipeFn };
 function SceneFailed({ onFail }: SceneProps) {
   useEffect(() => onFail(), [onFail]);
   return null;
@@ -22,6 +23,9 @@ const PlaneScene = lazy(
     })
 );
 /** 3D bu süre içinde gelmezse (çok yavaş bağlantı) yedek çizim gösterilir. */
+const SKY = "radial-gradient(120% 90% at 70% 10%, #1d3260 0%, #0d1730 55%, #070d1d 100%)";
+/** Telefon uçuşunda silinen kenarın altındaki yumuşak geçiş, px (PlaneScene ile aynı). */
+const WIPE_SOFT = 170;
 const FALLBACK_AFTER_MS = 8000;
 
 /**
@@ -30,7 +34,9 @@ const FALLBACK_AFTER_MS = 8000;
  *
  * Tasarım "gece uçuşu" (C2): yıldızlı lacivert gökyüzü, 3D uçak (Cessna 172,
  * bkz. PlaneScene) ve sağda buzlu cam panel. Giriş başarılı olunca uçak sağa
- * uçar, panel kaybolur, ekran kararır (lib/loginFlight). 3D hazır olana kadar
+ * uçar, panel kaybolur, ekran kararır (lib/loginFlight). Telefonda panel üstte,
+ * uçak altta: uçak yukarı tırmanır, giriş ekranı onun arkasından aşağıdan
+ * yukarı silinir (yalnızca transform — her karede boyama yok). 3D hazır olana kadar
  * — ya da WebGL yoksa — sertifikadaki uçak çizimi görünür. Logo kutusuz, beyaz — koyu zemine
  * doğrudan oturuyor. Telefonda panel ortalanır, uçak küçülür.
  *
@@ -106,87 +112,134 @@ export function PublicShell({
     }
     return () => clearTimeout(h);
   }, []);
+
+  // Telefon uçuşu: dış kutu yukarı, iç kutu aynı miktar aşağı kayar — içerik
+  // yerinde durur, alttan kesilir. Kesimin altında gökyüzü rengi yumuşakça
+  // eriyen bir şerit var (aynı gradyan, aynı hizada; sınır görünmesin).
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const stripSkyRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelBox = useRef<{ top: number; h: number } | null>(null);
+  const onWipe = useCallback<WipeFn>((cut, h) => {
+    const o = outerRef.current, i = innerRef.current, st = stripRef.current, sk = stripSkyRef.current;
+    const pn = panelRef.current;
+    if (!o || !i || !st || !sk || !pn) return;
+    // Panel, kenar üstüne gelirken söner: yarısı kesik, net bir panel görünmesin.
+    // Konumu bir kez ölçülür (her karede ölçüm, düzeni yeniden hesaplatırdı).
+    if (!panelBox.current) {
+      const r = pn.getBoundingClientRect();
+      panelBox.current = { top: r.top - o.getBoundingClientRect().top, h: r.height };
+    }
+    const fade = (cut + WIPE_SOFT * 0.4 - panelBox.current.top) / panelBox.current.h;
+    pn.style.opacity = String(Math.max(0, Math.min(1, fade)));
+    const c = Math.max(0, Math.min(h, cut));
+    o.style.transform = `translate3d(0,${c - h}px,0)`;
+    i.style.transform = `translate3d(0,${h - c}px,0)`;
+    st.style.display = "block";
+    st.style.transform = `translate3d(0,${cut}px,0)`;
+    sk.style.height = `${h}px`;
+    sk.style.transform = `translate3d(0,${-cut}px,0)`;
+  }, []);
+
   return (
     <div
-      className="relative min-h-screen overflow-hidden flex flex-col transition-opacity duration-[450ms] ease-out"
-      style={{
-        opacity: flight.fading ? 0 : 1,
-        background:
-          "radial-gradient(120% 90% at 70% 10%, #1d3260 0%, #0d1730 55%, #070d1d 100%)",
-      }}
+      className="relative min-h-screen overflow-hidden transition-opacity duration-[450ms] ease-out"
+      style={{ opacity: flight.fading ? 0 : 1 }}
     >
-      <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: STARS }} aria-hidden />
-      <div
-        className="pointer-events-none absolute inset-0 motion-safe:animate-[twinkle_5s_ease-in-out_infinite]"
-        style={{ backgroundImage: STARS_BRIGHT }}
-        aria-hidden
-      />
-      {/* Sertifikadaki kurşun kalem uçak çizimi, ters çevrilip ışıklı siluete
-          dönüştürülmüş. Dekor — ekran okuyucudan gizli. */}
-      <img
-        src="/cert-watermark.jpg"
-        alt=""
-        aria-hidden
-        className={`pointer-events-none select-none absolute transition-opacity duration-700 ${plane3d || !fallback ? "!opacity-0" : ""} left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]`}
-        style={{
-          // Kâğıt zemini ters çevrilince tam siyah olmuyor, kutu gibi
-          // seçiliyordu: kontrast zemini siyaha çekiyor (screen'de görünmez),
-          // maske de kenarları eritiyor.
-          filter: "invert(1) contrast(1.8) brightness(1.15)",
-          mixBlendMode: "screen",
-          opacity: 0.3,
-          maskImage: "radial-gradient(ellipse 60% 55% at 55% 50%, #000 55%, transparent 100%)",
-          WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 55% 50%, #000 55%, transparent 100%)",
-        }}
-      />
+      <div ref={outerRef} className="relative min-h-screen overflow-hidden">
+        <div ref={innerRef} className="relative min-h-screen overflow-hidden flex flex-col" style={{ background: SKY }}>
+          <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: STARS }} aria-hidden />
+          <div
+            className="pointer-events-none absolute inset-0 motion-safe:animate-[twinkle_5s_ease-in-out_infinite]"
+            style={{ backgroundImage: STARS_BRIGHT }}
+            aria-hidden
+          />
+          {/* Sertifikadaki kurşun kalem uçak çizimi, ters çevrilip ışıklı siluete
+              dönüştürülmüş. Dekor — ekran okuyucudan gizli. */}
+          <img
+            src="/cert-watermark.jpg"
+            alt=""
+            aria-hidden
+            className={`pointer-events-none select-none absolute transition-opacity duration-700 ${plane3d || !fallback ? "!opacity-0" : ""} left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]`}
+            style={{
+              // Kâğıt zemini ters çevrilince tam siyah olmuyor, kutu gibi
+              // seçiliyordu: kontrast zemini siyaha çekiyor (screen'de görünmez),
+              // maske de kenarları eritiyor.
+              filter: "invert(1) contrast(1.8) brightness(1.15)",
+              mixBlendMode: "screen",
+              opacity: 0.3,
+              maskImage: "radial-gradient(ellipse 60% 55% at 55% 50%, #000 55%, transparent 100%)",
+              WebkitMaskImage: "radial-gradient(ellipse 60% 55% at 55% 50%, #000 55%, transparent 100%)",
+            }}
+          />
 
-      <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${plane3d ? "opacity-100" : "opacity-0"}`}>
-        <Suspense fallback={null}>
-          <PlaneScene onReady={onReady} onFail={onFail} />
-        </Suspense>
-      </div>
+          <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${plane3d ? "opacity-100" : "opacity-0"}`}>
+            <Suspense fallback={null}>
+              <PlaneScene onReady={onReady} onFail={onFail} onWipe={onWipe} />
+            </Suspense>
+          </div>
 
-      {/* Üst şerit: kutusuz beyaz logo, sağda saat */}
-      <header className="relative z-10 flex items-center justify-between px-5 sm:px-7 pt-5">
-        <img
-          src="/Logo.png"
-          alt={ORG.name}
-          className="h-9 sm:h-10 w-auto"
-          style={{ filter: "brightness(0) invert(1)" }}
-        />
-        <Clock />
-      </header>
+          {/* Üst şerit: kutusuz beyaz logo, sağda saat */}
+          <header className="relative z-10 flex items-center justify-between px-5 sm:px-7 pt-5">
+            <img
+              src="/Logo.png"
+              alt={ORG.name}
+              className="h-9 sm:h-10 w-auto"
+              style={{ filter: "brightness(0) invert(1)" }}
+            />
+            <Clock />
+          </header>
 
-      {/* Telefonda panel aşağıda: üstteki gökyüzü uçağa kalır */}
-      <main className="relative z-10 flex-1 flex items-end lg:items-center justify-center lg:justify-end px-4 sm:px-8 lg:pr-[7vw] pt-[30vh] pb-6 lg:py-10">
-        <div
-          className={`w-full ${width} rounded-3xl px-7 sm:px-8 py-8 sm:py-9 text-white transition-[opacity,transform] duration-500 ${
-            flight.flying ? "opacity-0 translate-x-[60px] scale-[.96]" : ""
-          }`}
-          style={{
-            background: "rgba(255,255,255,.10)",
-            border: "1px solid rgba(255,255,255,.20)",
-            backdropFilter: "blur(40px)",
-            WebkitBackdropFilter: "blur(40px)",
-            boxShadow: "0 30px 60px rgba(0,0,0,.35)",
-          }}
-        >
-          <div className="text-[13px] font-semibold text-[#a9c1ef] mb-1">{ORG.productName}</div>
-          {title && (
-            <>
-              <h2 className="text-[28px] sm:text-[30px] font-semibold tracking-[-0.025em] leading-tight">{title}</h2>
-              {subtitle && <p className="text-[15px] text-white/70 mt-1.5 mb-5">{subtitle}</p>}
-              {!subtitle && <div className="mb-5" />}
-            </>
-          )}
-          {children}
+          {/* Telefonda panel üstte: alttaki boşluk uçağa kalır (PlaneScene ölçer) */}
+          <main className="relative z-10 flex-1 flex items-start lg:items-center justify-center lg:justify-end px-4 sm:px-8 lg:pr-[7vw] pt-5 pb-[28vh] lg:py-10">
+            <div
+              ref={panelRef}
+          data-login-panel
+              className={`w-full ${width} rounded-3xl px-7 sm:px-8 py-8 sm:py-9 text-white transition-[opacity,transform] duration-500 ${
+                flight.flying
+                  ? "lg:opacity-0 lg:translate-x-[60px] lg:scale-[.96] max-lg:-translate-y-5 max-lg:duration-1000"
+                  : ""
+              }`}
+              style={{
+                background: "rgba(255,255,255,.10)",
+                border: "1px solid rgba(255,255,255,.20)",
+                backdropFilter: "blur(40px)",
+                WebkitBackdropFilter: "blur(40px)",
+                boxShadow: "0 30px 60px rgba(0,0,0,.35)",
+              }}
+            >
+              <div className="text-[13px] font-semibold text-[#a9c1ef] mb-1">{ORG.productName}</div>
+              {title && (
+                <>
+                  <h2 className="text-[28px] sm:text-[30px] font-semibold tracking-[-0.025em] leading-tight">{title}</h2>
+                  {subtitle && <p className="text-[15px] text-white/70 mt-1.5 mb-5">{subtitle}</p>}
+                  {!subtitle && <div className="mb-5" />}
+                </>
+              )}
+              {children}
+            </div>
+          </main>
+
+          <footer className="relative z-10 px-5 sm:px-7 pb-5 flex items-center justify-between gap-4 text-[12px] text-white/50">
+            <span>{ORG.publicFooter}</span>
+            {plane3d && <ModelCredit />}
+          </footer>
         </div>
-      </main>
-
-      <footer className="relative z-10 px-5 sm:px-7 pb-5 flex items-center justify-between gap-4 text-[12px] text-white/50">
-        <span>{ORG.publicFooter}</span>
-        {plane3d && <ModelCredit />}
-      </footer>
+      </div>
+      <div
+        ref={stripRef}
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 hidden overflow-hidden"
+        style={{
+          height: WIPE_SOFT,
+          maskImage: "linear-gradient(#000, transparent)",
+          WebkitMaskImage: "linear-gradient(#000, transparent)",
+        }}
+      >
+        <div ref={stripSkyRef} style={{ background: SKY }} />
+      </div>
     </div>
   );
 }
