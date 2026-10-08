@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ComponentType, type InputHTMLAttributes, type ReactNode } from "react";
 import { ORG } from "../lib/org";
 import { useLoginFlight } from "../lib/loginFlight";
+import { reloadOnceForStaleChunk } from "../lib/staleChunk";
 
 /* 3D uçak tembel yükleniyor: three.js yalnızca herkese açık ekranlarda iner.
-   Parça inemezse (ağ hatası) uygulama çökmesin: hemen "başarısız" bildiren
-   boş bir bileşene düşer, yedek çizim görünür. */
+   Parça inemezse uygulama çökmesin: önce sayfa bir kez yenilenir (yayından
+   önce açılmış sekme), yine olmazsa "başarısız" bildiren boş bir bileşene
+   düşer, yedek çizim görünür. */
 type SceneProps = { onReady: () => void; onFail: () => void };
 function SceneFailed({ onFail }: SceneProps) {
   useEffect(() => onFail(), [onFail]);
@@ -12,7 +14,12 @@ function SceneFailed({ onFail }: SceneProps) {
 }
 const PlaneScene = lazy(
   (): Promise<{ default: ComponentType<SceneProps> }> =>
-    import("./PlaneScene").catch(() => ({ default: SceneFailed }))
+    import("./PlaneScene").catch(() => {
+      // Büyük ihtimalle yayından önce açılmış sekme: eski parça silinmiş.
+      // Bir kez yenileyip güncel sürümü al; olmazsa yedek çizim.
+      if (reloadOnceForStaleChunk()) return new Promise<never>(() => {});
+      return { default: SceneFailed };
+    })
 );
 /** 3D bu süre içinde gelmezse (çok yavaş bağlantı) yedek çizim gösterilir. */
 const FALLBACK_AFTER_MS = 8000;
