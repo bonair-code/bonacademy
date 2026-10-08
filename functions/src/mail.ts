@@ -1,12 +1,16 @@
 /**
  * E-posta gönderimi — CAPELLA'nın kendi posta sunucusu üzerinden (SMTP).
  *
- * Neden kendi sunucuları: capella.aero'nun SPF kaydı yalnızca kendi IP
- * bloklarına izin veriyor (`-all`). Mail o sunucudan çıkınca SPF'ten geçer,
- * spam'e düşmez; ayrı bir gönderim servisi ve DNS değişikliği gerekmez.
+ * Sağlayıcı: Brevo SMTP relay (smtp-relay.brevo.com:587, STARTTLS).
+ * capella.aero'nun kendi posta sağlayıcısı (isimtescil / mailmatik) şifreli
+ * gönderim sunmuyor — 465 kapalı, 587'de STARTTLS yok; o yoldan kutu şifresi
+ * ve mail içeriği açık metin giderdi (08.10.2026'da denendi). Brevo için
+ * capella.aero'ya SPF/DKIM kayıtları eklenir; gönderen yine
+ * noreply@capella.aero görünür. Kod sağlayıcıdan bağımsız: yalnız ayar değişir.
  *
- * Ayarlar (gizli olmayan): functions/.env → SMTP_HOST, SMTP_PORT, SMTP_USER,
- * APP_URL. Şifre Secret Manager'da: SMTP_PASSWORD
+ * Ayarlar (gizli olmayan): functions/.env → SMTP_HOST, SMTP_PORT, SMTP_USER
+ * (sağlayıcının giriş adı), MAIL_FROM (görünen gönderen), APP_URL.
+ * Şifre / SMTP anahtarı Secret Manager'da: SMTP_PASSWORD
  *   npx firebase functions:secrets:set SMTP_PASSWORD --project capella-academy-v2
  * Mail gönderen her fonksiyon `secrets: [SMTP_PASSWORD]` taşımalı.
  *
@@ -21,7 +25,8 @@ export const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
 
 const env = (k: string, d: string) => (process.env[k] || d).trim();
 export const appUrl = () => env("APP_URL", "https://academy.capella.aero").replace(/\/+$/, "");
-const fromAddress = () => env("SMTP_USER", "noreply@capella.aero");
+/** Görünen gönderen. Brevo gibi sağlayıcılarda giriş adı (SMTP_USER) farklıdır. */
+const fromAddress = () => env("MAIL_FROM", "noreply@capella.aero");
 const REPLY_TO = "info@capella.aero";
 
 let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
@@ -29,10 +34,12 @@ function getTransport() {
   if (transport) return transport;
   const port = Number(env("SMTP_PORT", "465"));
   transport = nodemailer.createTransport({
-    host: env("SMTP_HOST", "mx01.capella.aero"),
+    host: env("SMTP_HOST", "smtp-relay.brevo.com"),
     port,
     secure: port === 465, // 465: doğrudan TLS; 587: STARTTLS
-    auth: { user: fromAddress(), pass: SMTP_PASSWORD.value() },
+    // Şifresiz bağlantıya asla düşme: şifre ve içerik açık metin gitmesin.
+    requireTLS: port !== 465,
+    auth: { user: env("SMTP_USER", ""), pass: SMTP_PASSWORD.value() },
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
   });
