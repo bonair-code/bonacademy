@@ -2,6 +2,7 @@ import { useState } from "react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import {
+  PasswordInput,
   PublicError,
   PublicShell,
   pubButton,
@@ -108,7 +109,7 @@ export function Login() {
   }
 
   return (
-    <PublicShell title="Sign in" subtitle="Compliance in aviation starts with training.">
+    <PublicShell title="Welcome back" subtitle="Sign in to continue your training.">
       <form onSubmit={emailLogin}>
         <label className={pubLabel}>Email</label>
         <input
@@ -120,7 +121,7 @@ export function Login() {
           autoComplete="username"
         />
 
-        <div className="flex items-baseline justify-between mt-3.5">
+        <div className="flex items-baseline justify-between mt-4">
           <label className={pubLabel}>Password</label>
           <button
             type="button"
@@ -128,20 +129,18 @@ export function Login() {
               setMode("reset");
               setErr(null);
             }}
-            className="text-[10.5px] font-semibold text-brand-300 hover:text-brand-200 mb-1.5"
+            className="text-[12.5px] font-medium text-[#a9c1ef] hover:text-white mb-1.5"
           >
-            Forgot password?
+            Forgot?
           </button>
         </div>
-        <input
-          className={pubInput}
-          type="password"
+        <PasswordInput
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
         />
 
-        <div className="mt-3.5" />
+        <div className="mt-6" />
         {err && <PublicError>{err}</PublicError>}
 
         <button type="submit" disabled={busy} className={pubButton}>
