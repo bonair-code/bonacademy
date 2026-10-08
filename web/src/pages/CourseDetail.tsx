@@ -1,4 +1,5 @@
 import { PageHead } from "../components/PageHead";
+import { safeFileUrl } from "../lib/safeUrl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -1558,17 +1559,17 @@ function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => 
         </div>
         <div className="p-4">
           {item.type === "VIDEO" && (
-            <video controls autoPlay src={item.url} className="w-full rounded bg-black" />
+            <video controls autoPlay src={safeFileUrl(item.url) ?? undefined} className="w-full rounded bg-black" />
           )}
           {item.type === "PDF" && (
             <div>
               <iframe
-                src={item.url}
+                src={safeFileUrl(item.url) ?? undefined}
                 className="w-full h-[68vh] rounded border border-slate-200"
                 title={item.fileName}
               />
               <a
-                href={item.url}
+                href={safeFileUrl(item.url) ?? "#"}
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] text-sky-700 hover:underline mt-1 inline-block"

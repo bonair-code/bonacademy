@@ -19,6 +19,18 @@ service firebase.storage {
         && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
              in ['ADMIN', 'INSTRUCTOR'];
     }
+    function fsRole() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role;
+    }
+    // Kursu yükleyebilen: admin ya da kursun sahibi eğitmen (eskiden HER eğitmen
+    // HER kursun içeriğine dosya yazabiliyordu).
+    function canEditCourse(courseId) {
+      return signedIn()
+        && (fsRole() == 'ADMIN'
+            || (fsRole() == 'INSTRUCTOR'
+                && firestore.get(/databases/(default)/documents/courses/$(courseId)).data.get('ownerInstructorId', null)
+                     == request.auth.uid));
+    }
     // Kişiye atanmış ve erişimi engellenmemiş eğitim (atama id'si `${uid}_${courseId}`).
     function hasCourseAccess(courseId) {
       return signedIn()
@@ -32,13 +44,17 @@ service firebase.storage {
     // görür. Yükleme yalnızca eğitimi hazırlayan roller.
     match /covers/{courseId}/{allPaths=**} {
       allow read: if signedIn();
-      allow write: if isAdmin() || isInstructor() || isManager();
+      allow create: if canEditCourse(courseId)
+                    && request.resource.size < 5 * 1024 * 1024
+                    && request.resource.contentType.matches('image/(png|jpeg|webp|gif)');
+      allow update, delete: if signedIn() && fsRole() == 'ADMIN';
     }
 
     // SCORM paket içeriği: scorm/{courseId}/{revision}/...
+    // Eski yol — artık hiçbir yer yazmıyor (SCORM content/ altında).
     match /scorm/{courseId}/{allPaths=**} {
       allow read: if isContentStaff() || hasCourseAccess(courseId);
-      allow write: if isAdmin() || isManager();
+      allow write: if false;
     }
 
     // Bölüm içerikleri (PDF / video / SCORM dosyaları): content/{courseId}/{sectionId}/...
@@ -46,19 +62,33 @@ service firebase.storage {
     // içeriği hazırlayan roller (CourseDetail).
     // NOT: getDownloadURL'nin jetonlu adresleri kuralları atlar; o adresler
     // sections dokümanında durduğu için Firestore kuralıyla korunuyor.
+    // Yükleme: admin ya da kursun sahibi eğitmen; üzerine yazma/silme yalnız
+    // admin (istemci her yüklemede yeni bir yol kullanıyor). Video için 2 GB üst sınır.
     match /content/{courseId}/{allPaths=**} {
       allow read: if isContentStaff() || hasCourseAccess(courseId);
-      allow write: if isContentStaff();
+      allow create: if canEditCourse(courseId)
+                    && request.resource.size < 2 * 1024 * 1024 * 1024;
+      allow update, delete: if signedIn() && fsRole() == 'ADMIN';
     }
 
     // Dışarıdan alınan eğitim belgeleri: externalCertificates/{userId}/...
     // Rol ve departman custom claim'den okunur (Storage kuralları Firestore'a
     // bakamaz) — createUser/updateUser bu claim'leri yazıyor.
+    // Müdür yalnızca KENDİ departmanındaki kişinin belgesine erişir (eskiden
+    // herkesinkini okuyup silebiliyordu). Yalnızca PDF/görsel, 20 MB.
     match /externalCertificates/{userId}/{allPaths=**} {
+      function sameDept() {
+        return request.auth.token.departmentId != null
+          && firestore.get(/databases/(default)/documents/users/$(userId)).data.departmentId
+               == request.auth.token.departmentId;
+      }
       allow read: if isAdmin()
                   || (signedIn() && request.auth.uid == userId)
-                  || isManager();
-      allow write: if isAdmin() || isManager();
+                  || (isManager() && sameDept());
+      allow create: if (isAdmin() || (isManager() && sameDept()))
+                    && request.resource.size < 20 * 1024 * 1024
+                    && request.resource.contentType.matches('application/pdf|image/(png|jpeg|webp)');
+      allow update, delete: if isAdmin();
     }
 
     // Sertifika PDF'leri: certificates/{userId}/{certId}.pdf

@@ -84,6 +84,7 @@ export const createUser = onCall({ region: REGION, invoker: "public", secrets: [
   // rastgele şifre kimsenin bilmediği bir yer tutucu.
   const invite = d.invite === true;
   const password = !invite && d.password ? String(d.password) : randomBytes(9).toString("base64") + "Aa1!";
+  if (password.length < 8) throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
 
   let userRecord;
   try {
@@ -181,7 +182,7 @@ export const inviteInfo = onCall({ region: REGION, invoker: "public" }, async (r
   const s = await db.doc(`invites/${token}`).get();
   if (!s.exists) return { valid: false, reason: "invalid" };
   const v = s.data() as any;
-  if (v.status === "USED") return { valid: false, reason: "used", email: v.email };
+  if (v.status === "USED") return { valid: false, reason: "used" };
   if (v.status !== "OPEN") return { valid: false, reason: "replaced" };
   if (v.expiresAt?.toMillis?.() < Date.now()) return { valid: false, reason: "expired" };
   const u = (await db.doc(`users/${v.uid}`).get()).data();
@@ -242,9 +243,22 @@ function sanitizeCourseMethods(v: unknown): Record<string, string[]> {
 /** Çağıranın ADMIN olduğunu doğrular, değilse hata fırlatır. */
 async function assertAdmin(uid: string | undefined) {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
-  const caller = await getFirestore().doc(`users/${uid}`).get();
-  if (caller.data()?.role !== "ADMIN")
+  const caller = (await getFirestore().doc(`users/${uid}`).get()).data();
+  // Pasifleştirilmiş admin'in elindeki oturum (≤1 saat) da işe yaramasın.
+  if (caller?.role !== "ADMIN" || caller?.isActive === false)
     throw new HttpsError("permission-denied", "This action is for admins only.");
+}
+
+/**
+ * Belge kimliği biçimi. Kimlik doğrudan yola konduğu için "/" içermemeli:
+ * eskiden "x/scorm/f1" gibi bir kimlikle istemcinin yazabildiği bir alt
+ * belge "atama" diye yüklenip herhangi bir kursun sınavına sınırsız
+ * girilebiliyordu (güvenlik incelemesi, 08.10.2026). Geçersizse "".
+ */
+const ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
+function cleanId(v: unknown): string {
+  const s = String(v ?? "");
+  return ID_RE.test(s) ? s : "";
 }
 
 /**
@@ -334,6 +348,11 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   // Pasifleştirilen kullanıcı Auth tarafında da giriş yapamasın.
   if (typeof d.isActive === "boolean") {
     await getAuth().updateUser(uid, { disabled: !d.isActive });
+  }
+  // Pasifleştirme ya da rol değişikliği HEMEN geçerli olsun: açık oturumlar
+  // eski yetkiyle bir saate kadar çalışmaya devam ediyordu.
+  if (d.isActive === false || (patch.role !== undefined && patch.role !== snap.data()?.role)) {
+    await getAuth().revokeRefreshTokens(uid);
   }
   return { ok: true };
 });
@@ -433,8 +452,8 @@ export const publishCourse = onCall({ region: REGION, invoker: "public" }, async
   const c = snap.data() as any;
 
   // Admin her kursu, eğitmen yalnızca sahibi olduğu kursu yayınlayabilir.
-  const isOwner = c.ownerInstructorId === req.auth.uid;
-  if (caller?.role !== "ADMIN" && !isOwner)
+  const isOwner = c.ownerInstructorId === req.auth.uid && caller?.role === "INSTRUCTOR";
+  if ((caller?.role !== "ADMIN" && !isOwner) || caller?.isActive === false)
     throw new HttpsError("permission-denied", "You are not allowed to publish this course.");
 
   // Yayın DİL BAŞINA. Türkçeyi bitirip yayınlamak, İngilizceyi sonra ayrıca
@@ -618,6 +637,7 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
       // Engellemek yerine YENİ BİR DÖNGÜ açılıyor — ilerleme sıfırlanıyor,
       // önceki sertifika yerinde kalıyor (certIdFor döngüyü taşıyor).
       if (finished) {
+        await clearExamSessions(id);
         await ref.update({
           status: "PENDING",
           cycleNumber: (Number(prev.cycleNumber) || 1) + 1,
@@ -702,7 +722,7 @@ export const sendAssignmentReminder = onCall(
   { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] },
   async (req) => {
     await assertCanManageAssignments(req.auth?.uid);
-    const assignmentId = String(req.data?.assignmentId || "");
+    const assignmentId = cleanId(req.data?.assignmentId);
     if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
     const db = getFirestore();
     const ref = db.doc(`assignments/${assignmentId}`);
@@ -783,6 +803,11 @@ export const completeProfile = onCall({ region: REGION, invoker: "public" }, asy
   if (!snap.exists) throw new HttpsError("not-found", "Profile not found.");
   const u = snap.data() as any;
 
+  // Profil bir kez tamamlandı mı, kişi artık ad/doğum bilgisini değiştiremez
+  // (sertifikaya basılan kimlik bilgileri) — sonrası yöneticide (updateUser).
+  if (u.profileCompletedAt)
+    throw new HttpsError("permission-denied", "Your details are already saved. Please ask an administrator to change them.");
+
   const birthPlace = placeCase(req.data?.birthPlace);
   const birthDate = String(req.data?.birthDate || "").trim();
   if (!birthPlace) throw new HttpsError("invalid-argument", "Place of birth is required.");
@@ -822,10 +847,38 @@ export const completeProfile = onCall({ region: REGION, invoker: "public" }, asy
   return { ok: true };
 });
 
+/**
+ * İlk girişte geçici şifreyi kişinin kendi şifresiyle değiştirir.
+ *
+ * "Şifre değiştirmeli" işareti istemciden kapatılamaz: eskiden kural kişiye
+ * mustChangePassword alanını yazdırıyordu, kişi şifreyi hiç değiştirmeden
+ * işareti kapatıp yöneticinin (e-postayla gönderilen) geçici şifresini kalıcı
+ * yapabiliyordu. Artık şifre ve işaret birlikte, sunucuda değişir. Şifre Admin
+ * SDK ile yazıldığı için oturum yenilenir — istemci yeni şifreyle tekrar girer.
+ */
+export const changeTempPassword = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const uid = req.auth.uid;
+  const password = String(req.data?.password || "");
+  if (password.length < 8) throw new HttpsError("invalid-argument", "The password must be at least 8 characters.");
+  const ref = getFirestore().doc(`users/${uid}`);
+  const u = (await ref.get()).data();
+  if (!u) throw new HttpsError("not-found", "Profile not found.");
+  if (u.mustChangePassword !== true)
+    throw new HttpsError("failed-precondition", "There is no temporary password to change.");
+  await getAuth().updateUser(uid, { password });
+  await ref.update({
+    mustChangePassword: false,
+    passwordChangedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { ok: true, email: u.email ?? null };
+});
+
 /** Atamanın son tarihini değiştirir ya da kaldırır (dueDate: null). */
 export const setAssignmentDueDate = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
-  const assignmentId = String(req.data?.assignmentId || "");
+  const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   const ref = getFirestore().doc(`assignments/${assignmentId}`);
   if (!(await ref.get()).exists) throw new HttpsError("not-found", "Assignment not found.");
@@ -835,10 +888,21 @@ export const setAssignmentDueDate = onCall({ region: REGION, invoker: "public" }
   return { ok: true, dueDate: dueDate ? dueDate.toMillis() : null };
 });
 
+/** Atamanın sınav oturumlarını siler — yeni döngüde eski oturum kullanılamasın. */
+async function clearExamSessions(assignmentId: string) {
+  const snap = await getFirestore().collection(`assignments/${assignmentId}/examSessions`).get();
+  for (let i = 0; i < snap.docs.length; i += 400) {
+    const b = getFirestore().batch();
+    for (const d of snap.docs.slice(i, i + 400)) b.delete(d.ref);
+    await b.commit();
+  }
+}
+
 /** Atama işlemleri admin ve eğitmenin: eğitimi veren yönetir. */
 async function assertCanManageAssignments(uid?: string) {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
-  const r = (await getFirestore().doc(`users/${uid}`).get()).data()?.role;
+  const caller = (await getFirestore().doc(`users/${uid}`).get()).data();
+  const r = caller?.isActive === false ? null : caller?.role;
   if (r !== "ADMIN" && r !== "INSTRUCTOR")
     throw new HttpsError("permission-denied", "This action is for admins and instructors.");
   return r as string;
@@ -857,7 +921,7 @@ async function assertCanManageAssignments(uid?: string) {
  */
 export const resetAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
-  const assignmentId = String(req.data?.assignmentId || "");
+  const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   const reason = String(req.data?.reason ?? "").trim();
 
@@ -869,6 +933,7 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
 
   const cycle = (Number(a.cycleNumber) || 1) + 1;
 
+  await clearExamSessions(assignmentId);
   await ref.update({
     status: "PENDING",
     cycleNumber: cycle,
@@ -907,7 +972,7 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
  */
 export const setAssignmentAccess = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
-  const assignmentId = String(req.data?.assignmentId || "");
+  const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   const blocked = req.data?.blocked === true;
   const reason = String(req.data?.reason ?? "").trim().slice(0, 500);
@@ -943,7 +1008,7 @@ export const setAssignmentAccess = onCall({ region: REGION, invoker: "public" },
 
 export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
-  const assignmentId = String(req.data?.assignmentId || "");
+  const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   const reason = String(req.data?.reason ?? "").trim();
 
@@ -970,6 +1035,7 @@ export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, as
     removedById: req.auth!.uid,
     reason: reason || null,
   });
+  await clearExamSessions(assignmentId);
   await ref.delete();
   return { ok: true, deleted: true };
 });
@@ -997,10 +1063,21 @@ export const closeAssignmentExternally = onCall({ region: REGION, invoker: "publ
   if (!userId || !courseId)
     throw new HttpsError("invalid-argument", "userId and courseId are required.");
 
-  // Müdür yalnızca kendi departmanındaki personel için.
+  if (!ID_RE.test(userId) || !ID_RE.test(courseId) || (externalTrainingId && !ID_RE.test(externalTrainingId)))
+    throw new HttpsError("invalid-argument", "Invalid id.");
+  // Müdür yalnızca kendi departmanındaki personel için. Departmansız müdür
+  // hiç kimse için (null == null eşleşmesi bütün müşterileri açıyordu).
   const target = (await db.doc(`users/${userId}`).get()).data();
-  if (role === "MANAGER" && target?.departmentId !== caller?.departmentId)
+  if (role === "MANAGER" && (!caller?.departmentId || target?.departmentId !== caller.departmentId))
     throw new HttpsError("permission-denied", "That person is not in your department.");
+  // Kanıt: dış eğitim kaydı bu kişiye ve bu eğitime ait olmalı (müdür için şart).
+  if (role === "MANAGER" && !externalTrainingId)
+    throw new HttpsError("invalid-argument", "An external training record is required.");
+  if (externalTrainingId) {
+    const ext = (await db.doc(`externalTrainings/${externalTrainingId}`).get()).data();
+    if (!ext || ext.userId !== userId || (ext.courseId && ext.courseId !== courseId))
+      throw new HttpsError("failed-precondition", "The external training record does not match.");
+  }
 
   const ref = db.doc(`assignments/${userId}_${courseId}`);
   const snap = await ref.get();
@@ -1009,6 +1086,7 @@ export const closeAssignmentExternally = onCall({ region: REGION, invoker: "publ
   const a = snap.data() as any;
   if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
     return { closed: false, reason: "already-complete" };
+  if (a.status === "CANCELLED" || a.accessBlocked) return { closed: false, reason: "not-open" };
 
   await ref.update({
     status: "COMPLETED",
@@ -1024,6 +1102,7 @@ export const closeAssignmentExternally = onCall({ region: REGION, invoker: "publ
 // ─────────────────────────────────────────────────────────────
 
 async function loadOwnedAssignment(uid: string, assignmentId: string) {
+  if (!ID_RE.test(assignmentId)) throw new HttpsError("invalid-argument", "Invalid assignment.");
   const db = getFirestore();
   const snap = await db.doc(`assignments/${assignmentId}`).get();
   if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
@@ -1098,24 +1177,26 @@ function serialYear(): string {
  * Ön ek elle girilmiyor — yılı yanlış yazmak sicili sessizce bozardı ve
  * numara bir kez verildikten sonra geri alınamaz.
  */
+/** Sayaç belgesinden sıradaki numaralar + sayacın yeni hali (işlem içinde kullanılır). */
+function allocSerials(d: any, count: number) {
+  const year = serialYear();
+  const pad = Number(d?.pad) || 3;
+  // Yıl değiştiyse seri sıfırlanır; aynı yıl içinde kaldığı yerden sürer.
+  // Eski sayaç yalnızca `value` tutuyordu; ilk geçişte ondan devam et.
+  const sameYear = String(d?.year ?? "") === year;
+  const start = sameYear ? Number(d?.next ?? (d?.value ?? 0) + 1) || 1 : 1;
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) out.push(`${year}-${String(start + i).padStart(pad, "0")}`);
+  return { serials: out, counter: { year, prefix: year, pad, next: start + count } };
+}
+
 async function nextSerialNo(count = 1): Promise<string[]> {
   const db = getFirestore();
   const ref = db.doc("counters/certificates");
-  const year = serialYear();
   return db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const d = (snap.data() as any) || {};
-    const pad = Number(d.pad) || 3;
-    // Yıl değiştiyse seri sıfırlanır; aynı yıl içinde kaldığı yerden sürer.
-    // Eski sayaç yalnızca `value` tutuyordu; ilk geçişte ondan devam et.
-    const sameYear = String(d.year ?? "") === year;
-    const start = sameYear ? Number(d.next ?? (d.value ?? 0) + 1) || 1 : 1;
-    const out: string[] = [];
-    for (let i = 0; i < count; i++) {
-      out.push(`${year}-${String(start + i).padStart(pad, "0")}`);
-    }
-    tx.set(ref, { year, prefix: year, pad, next: start + count }, { merge: true });
-    return out;
+    const { serials, counter } = allocSerials((await tx.get(ref)).data(), count);
+    tx.set(ref, counter, { merge: true });
+    return serials;
   });
 }
 
@@ -1155,10 +1236,20 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
   // basılıyordu). Belge verildiği anki adla dondurulur.
   const courseTitle = String(course.title || a.courseTitle || "");
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
-  const [serialNo] = await nextSerialNo();
   const verifyToken = newVerifyToken();
   const now = FieldValue.serverTimestamp();
-  await certRef.set({
+  // Numara alma ve belgeyi yazma TEK işlemde: aynı anda iki tamamlama gelirse
+  // ikincisi belgeyi var bulup çıkar. Eskiden iki numara harcanıyor, ikinci
+  // belge birincinin üzerine yazılıyor, ilk QR kaydı sahipsiz kalıyordu.
+  const counterRef = db.doc("counters/certificates");
+  await db.runTransaction(async (tx) => {
+    const [existing, counterSnap] = await Promise.all([tx.get(certRef), tx.get(counterRef)]);
+    if (existing.exists) return;
+    const { serials, counter } = allocSerials(counterSnap.data(), 1);
+    const serialNo = serials[0];
+    tx.set(counterRef, counter, { merge: true });
+    tx.create(db.doc(`certVerify/${verifyToken}`), { serialNo, name: userName, courseTitle, issuedAt: now });
+    tx.create(certRef, {
     assignmentId,
     /** Kaçıncı kez alındığı — aynı eğitimin önceki belgeleri duruyor. */
     cycleNumber: cycle,
@@ -1195,12 +1286,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     // Kişi kendi sertifikasını yalnızca blocked == false iken okur (kural +
     // sorgu). Alan HER sertifikada olmalı: eksikse kişi belgesini göremez.
     blocked: !!a.accessBlocked,
-  });
-  await db.doc(`certVerify/${verifyToken}`).set({
-    serialNo,
-    name: userName,
-    courseTitle,
-    issuedAt: now,
+    });
   });
 }
 
@@ -1366,10 +1452,13 @@ export const startExam = onCall({ region: REGION, invoker: "public" }, async (re
      Eskiden her çağrı yeni rastgele soru çekiyordu — sayfayı yenileyen kişi
      hem soruları değiştirebiliyor hem de (süre olsaydı) süreyi sıfırlardı.
      Süresi geçmişse deneme süre dışı olarak kapatılır. */
-  if (existing && !existing.submittedAt) {
+  // Önceki döngüden kalmış oturum yok sayılır (yeni oturum açılır).
+  const staleSession = existing && (Number(existing.cycleNumber) || 1) !== (Number(a.cycleNumber) || 1);
+  if (existing && !existing.submittedAt && !staleSession) {
     const lang = asLang(existing.lang ?? a.contentLanguage);
     if (existing.deadlineMs && Date.now() > existing.deadlineMs + EXAM_GRACE_MS) {
-      const result = await finalizeAttempt(String(assignmentId), a, ref, sessRef, existing, {}, true);
+      const claimed = await claimAttempt(ref, sessRef);
+      const result = await finalizeAttempt(String(assignmentId), claimed.a, ref, sessRef, claimed.sess, {}, true);
       return { expired: true, result };
     }
     return {
@@ -1401,6 +1490,9 @@ export const startExam = onCall({ region: REGION, invoker: "public" }, async (re
   const deadlineMs = cfg.timeLimitMin ? now + cfg.timeLimitMin * 60 * 1000 : null;
   await sessRef.set({
     attemptNo,
+    // Hangi döngünün sınavı: sıfırlama/yenilemeden kalan eski oturum yeni
+    // döngüde gönderilemesin.
+    cycleNumber: Number(a.cycleNumber) || 1,
     lang,
     questionIds: qs.map((q) => q.id),
     timeLimitMin: cfg.timeLimitMin,
@@ -1460,7 +1552,7 @@ async function finalizeAttempt(
   const passingScore = examConfig(course).passingScore;
   const passed = !expired && score >= passingScore;
 
-  await sessRef.update({ submittedAt: FieldValue.serverTimestamp(), expired });
+  await sessRef.update({ expired });
   await db.doc(`assignments/${assignmentId}/examAttempts/${attemptNo}`).set({
     // userId olmadan güvenlik kuralı (isSelf(resource.data.userId)) sahibi bile
     // reddediyordu.
@@ -1506,19 +1598,107 @@ async function finalizeAttempt(
   return { passed, score, expired, status: "EXAM_FAILED" };
 }
 
+/**
+ * Öğrencinin eğitimi hangi dilde aldığını kaydeder.
+ *
+ * Atama dokümanına istemci yazamıyor (güvenlik kuralı `allow write: if false`)
+ * — durum geçişleri yalnızca Function'dan geçsin diye. Dil seçimi de buradan
+ * geçiyor; tek yazdığı alan bu, ilerlemeye ya da duruma dokunmuyor.
+ *
+ * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
+ * eğitimi hangi dilde aldı" sorusunun cevabı.
+ */
+export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  const lang = asLang(req.data?.language);
+  const { ref, a } = await loadOwnedAssignment(req.auth.uid, assignmentId);
+  if (asLang(a.contentLanguage) === lang) {
+    // Aynı dili seçmek de bir seçimdir: kapı bir daha çıkmamalı.
+    if (!a.languageChosen) await ref.update({ languageChosen: true });
+    return { language: lang };
+  }
+
+  // Tamamlanmış eğitimin dili değişmez: sertifika verildi, kayıt kapandı.
+  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+    throw new HttpsError("failed-precondition", "The language of a completed training cannot be changed.");
+
+  const db = getFirestore();
+  const course = (await db.doc(`courses/${a.courseId}`).get()).data() as any;
+  if (!publishedLangsOf(course).includes(lang))
+    throw new HttpsError("failed-precondition", "This training is not published in that language.");
+
+  // Durum YENİ dilin bölümlerine göre baştan hesaplanıyor. Diller ayrı sürüm
+  // olduğu için Türkçeyi bitirip "SECTIONS_DONE" olan biri dili İngilizceye
+  // çevirince, İngilizce bölümleri hiç açmadan sınava girebilirdi.
+  //
+  // İlerleme kaybolmuyor: sectionsDone bölüm id'si tutuyor ve id'ler dile göre
+  // ayrı, yani eski dile dönünce kaldığı yerden devam ediyor.
+  const sections = (await courseSections(a.courseId, lang)).map((d) => d.id);
+  const done: string[] = Array.isArray(a.sectionsDone) ? a.sectionsDone : [];
+  const doneHere = sections.filter((id) => done.includes(id));
+  const examRequired = course?.exam?.required ?? true;
+  const qs = examRequired ? await courseQuestions(a.courseId, lang) : [];
+
+  let status: string;
+  if (sections.length > 0 && doneHere.length === sections.length) {
+    status = qs.length > 0 ? "SECTIONS_DONE" : "COMPLETED";
+  } else {
+    status = doneHere.length > 0 ? "IN_PROGRESS" : "PENDING";
+  }
+
+  await ref.update({
+    contentLanguage: lang,
+    languageChosen: true,
+    status,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  // Bu dilde zaten her bölüm bitmiş ve sınav yoksa eğitim burada kapanır.
+  if (status === "COMPLETED")
+    await issueCertificateFor(assignmentId, { ...a, contentLanguage: lang }, { required: false });
+  return { language: lang, status };
+});
+
+/**
+ * Denemeyi TEK SEFERLİK sahiplenir (işlem içinde): gönderilmemiş, bu döngüye
+ * ait, sıradaki deneme ve atama sınav aşamasında olmalı. Eskiden kontrol ile
+ * yazma arasında boşluk vardı: aynı denemeyi aynı anda farklı cevaplarla
+ * birkaç kez göndermek ya da sıfırlamadan kalan eski bir oturumu sonradan
+ * göndermek mümkündü (güvenlik incelemesi, 08.10.2026).
+ */
+async function claimAttempt(ref: DocumentReference, sessRef: DocumentReference) {
+  return getFirestore().runTransaction(async (tx) => {
+    const [aSnap, sSnap] = await Promise.all([tx.get(ref), tx.get(sessRef)]);
+    const a = aSnap.data() as any;
+    const sess = sSnap.data() as any;
+    if (!a || !sess) throw new HttpsError("not-found", "No exam session found.");
+    if (sess.submittedAt) throw new HttpsError("failed-precondition", "This attempt has already been submitted.");
+    if (a.status !== "SECTIONS_DONE" && a.status !== "EXAM_FAILED")
+      throw new HttpsError("failed-precondition", "This exam is not open.");
+    if ((Number(sess.cycleNumber) || 1) !== (Number(a.cycleNumber) || 1))
+      throw new HttpsError("failed-precondition", "This exam session is no longer valid.");
+    if (Number(sess.attemptNo) !== (Number(a.examAttemptCount) || 0) + 1)
+      throw new HttpsError("failed-precondition", "This exam session is no longer valid.");
+    tx.update(sessRef, { submittedAt: FieldValue.serverTimestamp() });
+    return { a, sess };
+  });
+}
+
 export const submitExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, attemptNo, answers } = req.data || {};
-  const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
-  const sessRef = getFirestore().doc(`assignments/${assignmentId}/examSessions/${attemptNo}`);
-  const sess = (await sessRef.get()).data() as any;
-  if (!sess) throw new HttpsError("not-found", "No exam session found.");
-  if (sess.submittedAt) throw new HttpsError("failed-precondition", "This attempt has already been submitted.");
-  if (!sess.attemptNo) sess.attemptNo = Number(attemptNo);
+  const n = Number(attemptNo);
+  if (!Number.isInteger(n) || n < 1 || n > 50) throw new HttpsError("invalid-argument", "Invalid attempt.");
+  const { ref } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
+  const sessRef = getFirestore().doc(`assignments/${assignmentId}/examSessions/${n}`);
+  const { a, sess } = await claimAttempt(ref, sessRef);
+  if (!sess.attemptNo) sess.attemptNo = n;
 
   // Süre sunucu saatine göre: istemcinin sayacına güvenilmez.
   const expired = !!sess.deadlineMs && Date.now() > sess.deadlineMs + EXAM_GRACE_MS;
-  return finalizeAttempt(String(assignmentId), a, ref, sessRef, sess, answers || {}, expired);
+  const ans = answers && typeof answers === "object" ? (answers as Record<string, string>) : {};
+  return finalizeAttempt(String(assignmentId), a, ref, sessRef, sess, ans, expired);
 });
 
 /**
@@ -1538,17 +1718,28 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
   const sessionId = String(req.data?.sessionId || "");
   if (!sessionId) throw new HttpsError("invalid-argument", "sessionId is required.");
 
+  if (!ID_RE.test(sessionId)) throw new HttpsError("invalid-argument", "Invalid session.");
   const sRef = db.doc(`classSessions/${sessionId}`);
-  const sSnap = await sRef.get();
-  if (!sSnap.exists) throw new HttpsError("not-found", "Session not found.");
-  const ses = sSnap.data() as any;
-  if (ses.status === "CLOSED")
-    throw new HttpsError("failed-precondition", "This session is already closed.");
+  // Kapatma TEK SEFERLİK: durum işlem içinde CLOSING'e alınır. Eskiden iki
+  // eşzamanlı çağrı (çift tıklama) sertifikaları ikinci kez numaralayıp
+  // sahipsiz QR kayıtları bırakıyordu.
+  const ses = await db.runTransaction(async (tx) => {
+    const sn = await tx.get(sRef);
+    if (!sn.exists) throw new HttpsError("not-found", "Session not found.");
+    const d = sn.data() as any;
+    if (d.status === "CLOSED" || d.status === "CLOSING")
+      throw new HttpsError("failed-precondition", "This session is already closed.");
+    tx.update(sRef, { status: "CLOSING", closingStartedAt: FieldValue.serverTimestamp(), statusBeforeClosing: d.status ?? null });
+    return d;
+  });
+  const reopen = () => sRef.update({ status: ses.status ?? "OPEN" }).catch(() => undefined);
 
   const attSnap = await db.collection(`classSessions/${sessionId}/attendees`).orderBy("signedAt").get();
   const attendees = attSnap.docs.filter((d) => (d.data() as any).rejected !== true);
-  if (attendees.length === 0)
+  if (attendees.length === 0) {
+    await reopen();
     throw new HttpsError("failed-precondition", "No attendees — no certificate can be issued.");
+  }
 
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
   // Numaralar merkezî sicilden, katılımcı sayısı kadar tek seferde alınır —
@@ -1777,11 +1968,22 @@ export const serveScormContent = onRequest(
     region: REGION,
     memory: "256MiB",
     timeoutSeconds: 60,
-    cors: true,
     invoker: "public",
   },
   async (req, res) => {
-    let p = decodeURIComponent(req.path || "");
+    // Bu yanıtlar uygulamayla AYNI kökenden sunuluyor (/scorm-content
+    // yönlendirmesi): kullanıcı girdisi asla HTML olarak geri yansımamalı.
+    res.set("X-Content-Type-Options", "nosniff");
+    const fail = (code: number, msg: string) => {
+      res.status(code).type("text/plain").send(msg);
+    };
+    let p: string;
+    try {
+      p = decodeURIComponent(req.path || "");
+    } catch {
+      fail(400, "bad request");
+      return;
+    }
     /**
      * Öncesindeki fonksiyon adı / rewrite prefixinden bağımsız: content/ ile
      * başlat. Ayraçlı aranır ("/content/"), çünkü rewrite yolu
@@ -1791,34 +1993,45 @@ export const serveScormContent = onRequest(
      */
     const idx = p.indexOf("/content/");
     if (idx < 0) {
-      res.status(400).send("path required (a/<token>/content/...)");
+      fail(400, "bad request");
       return;
     }
     // Anahtar, content/'ten hemen önceki "/a/<anahtar>" parçası.
     const token = /\/a\/([^/]+)$/.exec(p.slice(0, idx))?.[1];
     p = p.slice(idx + 1);
     // güvenlik: yalnızca content/ altını servis et, .. engelle
-    if (p.includes("..")) {
-      res.status(403).send("forbidden");
+    if (p.includes("..") || p.includes("\\")) {
+      fail(403, "forbidden");
       return;
     }
     try {
+      // Yalnızca SCORM paketi: content/<kurs>/<bölüm>/scorm/<paket>/... PDF ve
+      // video bu servisten geçmez; başka bir dosya (yüklenmiş tekil HTML/SVG)
+      // uygulamanın kökeninde çalışacak şekilde sunulmasın.
+      if (!/^content\/[A-Za-z0-9_-]+\/[A-Za-z0-9_-]+\/scorm\/[A-Za-z0-9_-]+\//.test(p)) {
+        fail(403, "forbidden");
+        return;
+      }
       const courseId = p.split("/")[1] || "";
       const grant = token ? await verifyScormToken(token) : null;
       if (!grant || grant.c !== courseId || !(await canReadCached(grant.u, courseId))) {
-        res.status(403).send("forbidden");
+        fail(403, "forbidden");
         return;
       }
       const file = getStorage().bucket().file(p);
       const [exists] = await file.exists();
       if (!exists) {
-        res.status(404).send("not found: " + p);
+        fail(404, "not found");
         return;
       }
       res.set("Content-Type", typeFor(p));
       // private: Hosting CDN'i saklayıp anahtarsız birine sunmasın.
       res.set("Cache-Control", "private, max-age=3600");
-      res.set("Access-Control-Allow-Origin", "*");
+      // Yalnızca uygulamanın kendi sayfaları çerçeveleyebilir.
+      res.set(
+        "Content-Security-Policy",
+        "frame-ancestors 'self' https://academy.capella.aero https://capella-academy-v2.web.app https://capella-academy-v2.firebaseapp.com"
+      );
       file
         .createReadStream()
         .on("error", () => {
@@ -1826,7 +2039,8 @@ export const serveScormContent = onRequest(
         })
         .pipe(res);
     } catch (e) {
-      res.status(500).send("error: " + (e as Error).message);
+      console.error("serveScormContent", (e as Error).message);
+      if (!res.headersSent) fail(500, "error");
     }
   }
 );
@@ -1849,7 +2063,7 @@ export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public
   if (caller?.role !== "ADMIN")
     throw new HttpsError("permission-denied", "This action is for admins only.");
 
-  const assignmentId = String(req.data?.assignmentId || "");
+  const assignmentId = cleanId(req.data?.assignmentId);
   const reason = String(req.data?.reason || "").trim();
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
   if (reason.length < 5)
@@ -1926,8 +2140,8 @@ export const setUserPassword = onCall({ region: REGION, invoker: "public", secre
   const uid = String(req.data?.uid || "");
   const password = String(req.data?.password || "");
   if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
-  if (password.length < 6)
-    throw new HttpsError("invalid-argument", "Password must be at least 6 characters.");
+  if (password.length < 8)
+    throw new HttpsError("invalid-argument", "Password must be at least 8 characters.");
 
   const target = await db.doc(`users/${uid}`).get();
   if (!target.exists) throw new HttpsError("not-found", "User not found.");
@@ -2093,7 +2307,9 @@ export const importCertificates = onCall({ region: REGION, invoker: "public" }, 
     const ref = db.doc("counters/certificates");
     nextNo = await db.runTransaction(async (tx) => {
       const d = (await tx.get(ref)).data() as any;
-      const cur = Number(d?.next ?? 0);
+      // Sayaç geçen yıldan kalmışsa bu yıl için 0 sayılır (eskiden geçen
+      // yılın "next"i karşılaştırılıyor, bu yılın numaraları tekrar veriliyordu).
+      const cur = String(d?.year ?? "") === serialYear() ? Number(d?.next ?? 0) : 0;
       const want = maxNo + 1;
       if (want > cur) {
         tx.set(ref, { year: serialYear(), prefix: serialYear(), next: want }, { merge: true });
@@ -2143,10 +2359,21 @@ export const undoCertificateImport = onCall({ region: REGION, invoker: "public" 
     await batch.commit();
   }
 
+  // Sayaç, sistemin VERDİĞİ bu yılın en büyük numarasının altına inemez —
+  // aksi halde verilmiş numaralar tekrar verilir.
+  let nextNo: number | null = null;
   if (resetNextTo) {
-    await db.doc("counters/certificates").set({ next: resetNextTo }, { merge: true });
+    const year = serialYear();
+    const rest = await db.collection("certificates").get();
+    let maxIssued = 0;
+    for (const d of rest.docs) {
+      const m = /^(\d{2})-(\d+)$/.exec(String((d.data() as any).serialNo ?? ""));
+      if (m && m[1] === year) maxIssued = Math.max(maxIssued, Number(m[2]));
+    }
+    nextNo = Math.max(resetNextTo, maxIssued + 1);
+    await db.doc("counters/certificates").set({ year, prefix: year, next: nextNo }, { merge: true });
   }
-  return { deleted, nextNo: resetNextTo };
+  return { deleted, nextNo };
 });
 
 // ── Tek şifre devri (SSO) — CAPELLA'da KAPALI ─────────────────────

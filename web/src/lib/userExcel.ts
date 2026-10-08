@@ -137,7 +137,7 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
     ["   Staff: leave Company empty."],
     ["7. Place of Birth and Date of Birth are printed on the training certificate."],
     ["8. Temporary Password may be left empty — one is generated and shown after import."],
-    ["9. A password you type must be at least 6 characters."],
+    ["9. A password you type must be at least 8 characters."],
     [`10. The "${SHEET_EXAMPLE}" sheet is ignored on import — it is only a reference.`],
     [""],
     ["Upload the saved file from the same place you downloaded this template."],
@@ -252,10 +252,10 @@ export async function parseUserWorkbook(
       });
 
     const pwRaw = String(raw["Temporary Password"] ?? "").trim();
-    if (pwRaw && pwRaw.length < 6)
+    if (pwRaw && pwRaw.length < 8)
       return void errors.push({
         row: rowNo,
-        message: "Temporary Password must be at least 6 characters.",
+        message: "Temporary Password must be at least 8 characters.",
       });
 
     // Müşteri personel değil: departmanı ve yetki kapsamı taşımaz.

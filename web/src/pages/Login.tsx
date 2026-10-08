@@ -163,9 +163,9 @@ export function Login() {
 function readable(e: unknown): string {
   const code = (e as { code?: string })?.code ?? "";
   if (code.includes("invalid-email")) return "That does not look like a valid email address.";
-  if (code.includes("invalid-credential") || code.includes("wrong-password"))
+  // Hesabın var olup olmadığı sızdırılmaz: "kullanıcı yok" ayrı söylenmiyor.
+  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found"))
     return "Incorrect email or password.";
-  if (code.includes("user-not-found")) return "User not found.";
   if (code.includes("too-many-requests"))
     return "Too many attempts — wait a moment and try again.";
   if (code.includes("user-disabled")) return "This account is deactivated.";

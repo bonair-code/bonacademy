@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { safeFileUrl } from "../lib/safeUrl";
 import { useFullscreen } from "../lib/fullscreen";
 import { fileLoadError } from "../lib/fileError";
 import * as pdfjs from "pdfjs-dist";
@@ -286,7 +287,7 @@ export function PdfReader({
         {f.hint && <p className="text-[12px] text-red-800/90 mt-1 max-w-[62ch]">{f.hint}</p>}
         <p className="text-[11px] text-red-700/70 mt-2 font-mono break-all">{f.detail}</p>
         <a
-          href={url}
+          href={safeFileUrl(url) ?? "#"}
           target="_blank"
           rel="noreferrer"
           className="inline-block text-[12px] underline mt-2"

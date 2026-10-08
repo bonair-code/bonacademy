@@ -81,7 +81,7 @@ export function PasswordReset({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pw.length < 6) return;
+    if (pw.length < 8) return;
     setBusy(true);
     setErr(null);
     try {
@@ -135,7 +135,7 @@ export function PasswordReset({
         </button>
       </div>
       <p className="text-[10px] text-slate-500 mt-1">
-        At least 6 characters. Copy it before saving — it is not shown again.
+        At least 8 characters. Copy it before saving — it is not shown again.
       </p>
 
       <label className="flex items-center gap-2 mt-3 text-[12.5px] text-slate-700 cursor-pointer">
@@ -148,7 +148,7 @@ export function PasswordReset({
       </p>
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-        <button type="submit" disabled={busy || pw.length < 6} className="btn-primary text-xs py-2">
+        <button type="submit" disabled={busy || pw.length < 8} className="btn-primary text-xs py-2">
           {busy ? "Saving…" : "Reset Password"}
         </button>
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
@@ -215,7 +215,7 @@ export function UserForm({
 
   const canSubmit = editing
     ? name.trim().length > 0
-    : name.trim().length > 0 && email.trim().length > 0 && (access === "invite" || password.length >= 6);
+    : name.trim().length > 0 && email.trim().length > 0 && (access === "invite" || password.length >= 8);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -322,10 +322,10 @@ export function UserForm({
                   className="input"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 characters"
                 />
-                {password.length > 0 && password.length < 6 && (
-                  <p className="text-[10px] text-red-700 mt-1">Must be at least 6 characters.</p>
+                {password.length > 0 && password.length < 8 && (
+                  <p className="text-[10px] text-red-700 mt-1">Must be at least 8 characters.</p>
                 )}
               </div>
             )}

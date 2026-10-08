@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { updatePassword } from "firebase/auth";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
-import { auth, db, functions } from "../lib/firebase";
+import { auth, functions } from "../lib/firebase";
 import { useAuth, profileIncomplete } from "../lib/auth";
 import { ORG } from "../lib/org";
 import { placeCase } from "../lib/text";
@@ -29,7 +28,7 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const pwOk = pw1.length >= 6 && pw1 === pw2;
+  const pwOk = pw1.length >= 8 && pw1 === pw2;
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -37,22 +36,16 @@ export function Onboarding() {
     setBusy(true);
     setErr(null);
     try {
-      await updatePassword(auth.currentUser, pw1);
-      await updateDoc(doc(db, "users", profile!.uid), {
-        mustChangePassword: false,
-        updatedAt: serverTimestamp(),
-      });
+      // Şifre ve "değiştirmeli" işareti SUNUCUDA birlikte değişir — işaret
+      // istemciden kapatılamaz (geçici şifre kalıcı yapılamasın).
+      const r = await httpsCallable(functions, "changeTempPassword")({ password: pw1 });
+      // Şifre sunucuda değişince oturum yenilenir: yeni şifreyle tekrar gir.
+      const email = (r.data as { email?: string }).email || auth.currentUser.email || "";
+      await signInWithEmailAndPassword(auth, email, pw1).catch(() => undefined);
       // Profil de eksikse ikinci adıma geç; değilse akış biter.
       if (profileIncomplete(profile)) setStep("profile");
     } catch (e2) {
-      const code = (e2 as { code?: string })?.code ?? "";
-      setErr(
-        code.includes("requires-recent-login")
-          ? "For security, sign in again and then set your password."
-          : code.includes("weak-password")
-          ? "Password is too weak — use at least 6 characters."
-          : "Could not set the password. Please try again."
-      );
+      setErr((e2 as Error).message.replace(/^.*?:\s*/, "") || "Could not set the password. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -135,11 +128,11 @@ export function Onboarding() {
                     autoComplete="new-password"
                   />
                   <p className="text-[10px] text-slate-400 mb-4">
-                    {pw1 && pw1.length < 6
-                      ? "At least 6 characters."
+                    {pw1 && pw1.length < 8
+                      ? "At least 8 characters."
                       : pw2 && pw1 !== pw2
                       ? "The two passwords do not match."
-                      : "At least 6 characters."}
+                      : "At least 8 characters."}
                   </p>
 
                   {err && <ErrorBox>{err}</ErrorBox>}
