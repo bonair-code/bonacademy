@@ -136,3 +136,15 @@ Proje `capella-academy-v2` (Blaze). Site: https://capella-academy-v2.web.app
 
 Windows'ta deploy "fetch failed" ile düşerse:
 `NODE_OPTIONS=--dns-result-order=ipv4first firebase deploy ...`
+
+### Giriş ekranı 3D uçak (08.10.2026)
+- Model: "Cessna-172" by Sousinho (Sketchfab), **CC BY 4.0** — kredi giriş
+  ekranının sağ altındaki küp ikonunda ("3D Model by Sousinho · CC BY 4.0").
+  Bu kredi kaldırılmamalı; lisansın şartı.
+- Dosya: `web/public/models/cessna.glb` (gltf-transform: Draco + WebP, 9.3 MB → 0.7 MB).
+  Modelin sabit pervane kanatları yüklenirken geometriden çıkarılıp yerine
+  dönen pervane diski konuyor (`web/src/components/PlaneScene.tsx`).
+- three.js yalnızca herkese açık ekranlarda tembel yükleniyor. WebGL yoksa
+  ya da cihazda hareket azaltma açıksa sertifikadaki uçak çizimi kalır.
+- Giriş → uçuş → panel sırası `web/src/lib/loginFlight.ts`te: giriş denemesi
+  süresince App /login'i bekletir, uçuş bitince panele geçer.

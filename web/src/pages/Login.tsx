@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
+import { flyAndRelease, holdLogin, releaseLogin } from "../lib/loginFlight";
 import {
   PasswordInput,
   PublicError,
@@ -23,10 +24,18 @@ export function Login() {
     e.preventDefault();
     setErr(null);
     setBusy(true);
+    // Giriş ekranı açık kalsın: başarılıysa önce uçak uçar, sonra panel gelir.
+    holdLogin();
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (e2) {
+      releaseLogin();
       setErr(readable(e2));
+      setBusy(false);
+      return;
+    }
+    try {
+      await flyAndRelease();
     } finally {
       setBusy(false);
     }

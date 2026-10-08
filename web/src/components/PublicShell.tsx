@@ -1,12 +1,18 @@
-import { useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { ORG } from "../lib/org";
+import { useLoginFlight } from "../lib/loginFlight";
+
+/* 3D uçak tembel yükleniyor: three.js yalnızca herkese açık ekranlarda iner. */
+const PlaneScene = lazy(() => import("./PlaneScene"));
 
 /**
  * Herkese açık ekranların ortak kabuğu: giriş, şifre sıfırlama, sertifika
  * doğrulama ve QR yoklama formu.
  *
- * Tasarım "gece uçuşu" (C2): yıldızlı lacivert gökyüzü, soluk ışıklı uçak
- * silueti ve sağda buzlu cam panel. Logo kutusuz, beyaz — koyu zemine
+ * Tasarım "gece uçuşu" (C2): yıldızlı lacivert gökyüzü, 3D uçak (Cessna 172,
+ * bkz. PlaneScene) ve sağda buzlu cam panel. Giriş başarılı olunca uçak sağa
+ * uçar, panel kaybolur, ekran kararır (lib/loginFlight). 3D hazır olana kadar
+ * — ya da WebGL yoksa — sertifikadaki uçak çizimi görünür. Logo kutusuz, beyaz — koyu zemine
  * doğrudan oturuyor. Telefonda panel ortalanır, uçak küçülür.
  *
  * İçerik koyu zemine oturduğu için alanlar `pub*` yardımcılarıyla
@@ -44,10 +50,14 @@ export function PublicShell({
   children: ReactNode;
   width?: string;
 }) {
+  const flight = useLoginFlight();
+  const [plane3d, setPlane3d] = useState(false);
+  const onReady = useCallback(() => setPlane3d(true), []);
   return (
     <div
-      className="relative min-h-screen overflow-hidden flex flex-col"
+      className="relative min-h-screen overflow-hidden flex flex-col transition-opacity duration-[450ms] ease-out"
       style={{
+        opacity: flight.fading ? 0 : 1,
         background:
           "radial-gradient(120% 90% at 70% 10%, #1d3260 0%, #0d1730 55%, #070d1d 100%)",
       }}
@@ -59,7 +69,7 @@ export function PublicShell({
         src="/cert-watermark.jpg"
         alt=""
         aria-hidden
-        className="pointer-events-none select-none absolute left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]"
+        className={`pointer-events-none select-none absolute transition-opacity duration-700 ${plane3d ? "!opacity-0" : ""} left-[-40px] top-[22%] w-[min(760px,70vw)] max-lg:left-1/2 max-lg:-translate-x-1/2 max-lg:top-[8%] max-lg:w-[520px] max-lg:opacity-[0.18]`}
         style={{
           // Kâğıt zemini ters çevrilince tam siyah olmuyor, kutu gibi
           // seçiliyordu: kontrast zemini siyaha çekiyor (screen'de görünmez),
@@ -72,6 +82,12 @@ export function PublicShell({
         }}
       />
 
+      <div className={`pointer-events-none absolute inset-0 transition-opacity duration-700 ${plane3d ? "opacity-100" : "opacity-0"}`}>
+        <Suspense fallback={null}>
+          <PlaneScene onReady={onReady} />
+        </Suspense>
+      </div>
+
       {/* Üst şerit: kutusuz beyaz logo, sağda saat */}
       <header className="relative z-10 flex items-center justify-between px-5 sm:px-7 pt-5">
         <img
@@ -83,9 +99,12 @@ export function PublicShell({
         <Clock />
       </header>
 
-      <main className="relative z-10 flex-1 flex items-center justify-center lg:justify-end px-4 sm:px-8 lg:pr-[7vw] py-10">
+      {/* Telefonda panel aşağıda: üstteki gökyüzü uçağa kalır */}
+      <main className="relative z-10 flex-1 flex items-end lg:items-center justify-center lg:justify-end px-4 sm:px-8 lg:pr-[7vw] pt-[30vh] pb-6 lg:py-10">
         <div
-          className={`w-full ${width} rounded-3xl px-7 sm:px-8 py-8 sm:py-9 text-white`}
+          className={`w-full ${width} rounded-3xl px-7 sm:px-8 py-8 sm:py-9 text-white transition-[opacity,transform] duration-500 ${
+            flight.flying ? "opacity-0 translate-x-[60px] scale-[.96]" : ""
+          }`}
           style={{
             background: "rgba(255,255,255,.10)",
             border: "1px solid rgba(255,255,255,.20)",
@@ -106,8 +125,46 @@ export function PublicShell({
         </div>
       </main>
 
-      <footer className="relative z-10 px-5 sm:px-7 pb-5 text-[12px] text-white/50">{ORG.publicFooter}</footer>
+      <footer className="relative z-10 px-5 sm:px-7 pb-5 flex items-center justify-between gap-4 text-[12px] text-white/50">
+        <span>{ORG.publicFooter}</span>
+        {plane3d && <ModelCredit />}
+      </footer>
     </div>
+  );
+}
+
+/**
+ * 3D modelin kredisi: küçük küp simgesi, üzerine gelince (dokunmatik ekranda
+ * dokununca) yapan kişinin adı. Link yok. Lisans (CC BY 4.0) yapan kişinin
+ * adının ve lisansın anılmasını şart koşuyor — ikisi de burada.
+ */
+function ModelCredit() {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative group">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        onBlur={() => setOpen(false)}
+        aria-label="3D Model by Sousinho, CC BY 4.0"
+        className="h-7 w-7 grid place-items-center rounded-full text-white/45 hover:text-white/80 hover:bg-white/10 focus-visible:text-white/80 transition"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden>
+          <path d="M12 2.8 20 7.4v9.2l-8 4.6-8-4.6V7.4z" />
+          <path d="M4 7.4l8 4.6 8-4.6M12 12v9.2" />
+        </svg>
+      </button>
+      <span
+        role="tooltip"
+        className={`pointer-events-none absolute bottom-full right-0 mb-2 whitespace-nowrap rounded-lg px-3 py-2 text-right transition-opacity duration-150 ${
+          open ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
+        }`}
+        style={{ background: "rgba(10,16,32,.85)", border: "1px solid rgba(255,255,255,.15)", backdropFilter: "blur(12px)" }}
+      >
+        <span className="block text-[12.5px] font-medium text-white/90">3D Model by Sousinho</span>
+        <span className="block text-[10.5px] text-white/50 mt-0.5">CC BY 4.0</span>
+      </span>
+    </span>
   );
 }
 

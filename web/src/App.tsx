@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, needsOnboarding, type Role } from "./lib/auth";
+import { useLoginFlight } from "./lib/loginFlight";
 import { Shell } from "./components/Shell";
 import { AppFlagDefs } from "./components/Flag";
 import { Login } from "./pages/Login";
@@ -155,13 +156,15 @@ function AuthedApp() {
 
 export function App() {
   const { user, profile, loading } = useAuth();
+  // Giriş denemesi/uçuş sürerken giriş ekranı açık kalır (bkz. lib/loginFlight)
+  const flight = useLoginFlight();
   if (loading) return <FullScreen>Loading…</FullScreen>;
 
   // İlk giriş: şifre ve eksik profil tamamlanmadan uygulamaya girilemez.
   // Herkese açık rotalar (doğrulama, yoklama) bundan etkilenmez.
   const path = window.location.pathname;
   const isPublic = path.startsWith("/verify") || path.startsWith("/join");
-  if (user && !isPublic && needsOnboarding(profile)) return <Onboarding />;
+  if (user && !isPublic && !flight.hold && needsOnboarding(profile)) return <Onboarding />;
 
   return (
     <Routes>
@@ -170,7 +173,7 @@ export function App() {
       <Route path="/verify" element={<Verify />} />
       {/* Yoklama formu — giriş gerektirmez, link parolanın kendisidir */}
       <Route path="/join/:sessionId" element={<JoinSession />} />
-      <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/login" element={user && !flight.hold ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route
         path="/*"
         element={user ? <AuthedApp /> : <Navigate to="/login" replace />}

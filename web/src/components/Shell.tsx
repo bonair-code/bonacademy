@@ -4,6 +4,7 @@ import { useAuth, type Role } from "../lib/auth";
 import { PageHeadProvider, usePageHead } from "./PageHead";
 import { ReportFootnote, ReportLetterhead } from "./ReportSheet";
 import { ORG } from "../lib/org";
+import { clearLanded, useLoginFlight } from "../lib/loginFlight";
 
 /**
  * Menü ikonları. Tek çizgi kalınlığı (1.8) ve aynı 24'lük kutu — SF Symbols
@@ -162,6 +163,13 @@ export function Shell({ children }: { children: ReactNode }) {
 }
 
 function ShellLayout({ children }: { children: ReactNode }) {
+  // Giriş uçuşundan gelindiyse panel yumuşak belirir; bir kez oynar.
+  const { landed } = useLoginFlight();
+  useEffect(() => {
+    if (!landed) return;
+    const h = setTimeout(clearLanded, 800);
+    return () => clearTimeout(h);
+  }, [landed]);
   const { profile, role, signOut } = useAuth();
   const head = usePageHead();
   const r = role ?? "USER";
@@ -191,7 +199,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
   }, [navOpen]);
 
   return (
-    <div className="min-h-screen flex bg-[#f4f6f9]">
+    <div className={`min-h-screen flex bg-[#f4f6f9] ${landed ? "animate-[app-land_.7s_cubic-bezier(.2,.7,.2,1)]" : ""}`}>
       {/* Telefonda menü ekranın dışında bekler. Eskiden 232px sabit ve
           shrink-0'dı: 375px genişlikte içeriğe 111px kalıyordu, yani hiçbir
           sayfa kullanılabilir değildi. */}
