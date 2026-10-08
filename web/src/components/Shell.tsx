@@ -217,7 +217,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           açık bir lacivertle işaretleniyor; kırmızı yalnızca tablolardaki
           uyarılara kalıyor. */}
       <aside
-        className={`w-[232px] shrink-0 flex flex-col h-screen z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
+        className={`w-[232px] shrink-0 flex flex-col h-screen h-[100dvh] z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{ background: "var(--sidebar-bg)", borderRight: "1px solid rgba(255,255,255,.07)" }}
@@ -270,7 +270,9 @@ function ShellLayout({ children }: { children: ReactNode }) {
 
         {/* Kimlik bloğu buraya taşındı — üst barda ikinci kez göstermek
             gereksizdi. Çıkış da kimliğin yanında duruyor. */}
-        <div className="px-2 py-2" style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
+        {/* Telefonda tarayıcının alttaki (yüzen) araç çubuğu bu bölümün üstüne
+            biniyordu; çıkış düğmesine ulaşılamıyordu. Güvenli alan + çubuk payı. */}
+        <div className="px-2 py-2 max-lg:pb-[calc(env(safe-area-inset-bottom)+4.5rem)]" style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
           <div className="flex items-center gap-[9px] px-2 py-1.5 rounded-[10px]">
             <div
               className="h-[26px] w-[26px] rounded-full grid place-items-center text-[10.5px] font-bold shrink-0"
