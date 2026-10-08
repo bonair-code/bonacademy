@@ -124,7 +124,13 @@ export function StaffDetail() {
         setJobTitles(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))),
       onSnapshot(collection(db, "departments"), (s) =>
         setDepartments(new Map(s.docs.map((d) => [d.id, (d.data() as any).name])))),
-      onSnapshot(query(collection(db, "certificates"), where("userId", "==", userId)), (s) =>
+      // Yönetici/eğitmen dışındakiler (kendi sayfasına bakan müdür) yalnızca
+      // engellenmemiş belgeleri okuyabilir — kural bu süzgeci şart koşuyor.
+      onSnapshot(
+        role === "ADMIN" || role === "INSTRUCTOR"
+          ? query(collection(db, "certificates"), where("userId", "==", userId))
+          : query(collection(db, "certificates"), where("userId", "==", userId), where("blocked", "==", false)),
+        (s) =>
         setCerts(s.docs.map((d) => ({ __id: d.id, ...(d.data() as any) }))), onErr),
       onSnapshot(query(collection(db, "assignments"), where("userId", "==", userId)), (s) =>
         setAssignments(s.docs.map((d) => d.data())), onErr),

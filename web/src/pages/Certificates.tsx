@@ -78,7 +78,12 @@ export function Certificates() {
   useEffect(() => {
     if (!profile) return;
     const u1 = onSnapshot(
-      query(collection(db, "certificates"), where("userId", "==", profile.uid)),
+      // Erişimi engellenen eğitimin belgesi görünmez; kural da bu süzgeci şart koşuyor.
+      query(
+        collection(db, "certificates"),
+        where("userId", "==", profile.uid),
+        where("blocked", "==", false)
+      ),
       (s) => setCerts(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))
     );
     const u2 = onSnapshot(

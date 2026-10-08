@@ -162,9 +162,12 @@ service cloud.firestore {
 
     // ---- CERTIFICATES ----
     match /certificates/{id} {
+      // Kişi kendi belgesini yalnızca erişimi engellenmemişken görür
+      // (setAssignmentAccess). Kendi sorgusu da where("blocked","==",false)
+      // içermeli — kural süzgeç değil, sorgu bunu garanti etmeli.
       allow read: if isAdmin()
                   || isInstructor()
-                  || isSelf(resource.data.userId)
+                  || (isSelf(resource.data.userId) && resource.data.blocked == false)
                   || (isManager() && resource.data.userDepartmentId == myDept());
       allow write: if false; // yalnızca issueCertificate Function
     }

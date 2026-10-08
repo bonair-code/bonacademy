@@ -608,6 +608,52 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
  * Tamamlanmış eğitim silinemez: sertifika verildi, belge kaydın parçası.
  * Tekrar aldırmak gerekiyorsa resetAssignment kullanılır.
  */
+/**
+ * Bir atamaya erişimi engeller ya da geri verir. Bitmiş eğitimde de çalışır.
+ *
+ * Engelliyken kişi eğitimi açamaz, ilerleyemez, sınava giremez
+ * (loadOwnedAssignment) ve o atamanın sertifikası "My Certificates"ten
+ * kalkar: sertifikada blocked = true olur, kişinin okuma kuralı yalnızca
+ * blocked == false belgelere izin veriyor. Kayıt silinmez — yönetici her şeyi
+ * görmeye devam eder, erişim geri verilince her şey eski hâline döner. QR
+ * doğrulama sayfası etkilenmez (belge geçerli; kısıtlanan platform erişimi).
+ */
+export const setAssignmentAccess = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  await assertCanManageAssignments(req.auth?.uid);
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  const blocked = req.data?.blocked === true;
+  const reason = String(req.data?.reason ?? "").trim().slice(0, 500);
+
+  const db = getFirestore();
+  const ref = db.doc(`assignments/${assignmentId}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
+
+  await ref.update(
+    blocked
+      ? {
+          accessBlocked: true,
+          accessBlockedAt: FieldValue.serverTimestamp(),
+          accessBlockedById: req.auth!.uid,
+          accessBlockReason: reason || null,
+        }
+      : {
+          accessBlocked: false,
+          accessBlockedAt: null,
+          accessBlockedById: null,
+          accessBlockReason: null,
+        }
+  );
+  const certs = await db.collection("certificates").where("assignmentId", "==", assignmentId).get();
+  if (!certs.empty) {
+    const batch = db.batch();
+    for (const c of certs.docs) batch.update(c.ref, { blocked });
+    await batch.commit();
+  }
+  return { ok: true, blocked, certificates: certs.size };
+});
+
 export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = String(req.data?.assignmentId || "");
@@ -698,6 +744,11 @@ async function loadOwnedAssignment(uid: string, assignmentId: string) {
   if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
   const a = snap.data() as any;
   if (a.userId !== uid) throw new HttpsError("permission-denied", "This assignment is not yours.");
+  if (a.accessBlocked)
+    throw new HttpsError(
+      "permission-denied",
+      "Your access to this training has been suspended. Please contact info@capella.aero."
+    );
   return { ref: snap.ref, a };
 }
 
@@ -856,6 +907,9 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     // CAPELLA SHT-145 onaylı değil — belgede onay numarası yok.
     approvalNo: null,
     verifyToken,
+    // Kişi kendi sertifikasını yalnızca blocked == false iken okur (kural +
+    // sorgu). Alan HER sertifikada olmalı: eksikse kişi belgesini göremez.
+    blocked: !!a.accessBlocked,
   });
   await db.doc(`certVerify/${verifyToken}`).set({
     serialNo,
@@ -1138,6 +1192,10 @@ async function finalizeAttempt(
     await ref.update({
       status: "COMPLETED",
       examAttemptCount: attemptNo,
+      // Not atamada da tutulur: atama listesi her satır için sertifika ya da
+      // deneme kaydı okumadan gösterebilsin.
+      examScore: score,
+      examPassingScore: passingScore,
       completedAt: FieldValue.serverTimestamp(),
     });
     await issueCertificateFor(assignmentId, a, { required: true, score, passingScore });
@@ -1145,10 +1203,21 @@ async function finalizeAttempt(
   }
   // Başarısız: son hakta baştan (bölümleri sıfırla), yoksa tekrar sınav.
   if (attemptNo >= EXAM_MAX_ATTEMPTS) {
-    await ref.update({ status: "IN_PROGRESS", sectionsDone: [], examAttemptCount: attemptNo });
+    await ref.update({
+      status: "IN_PROGRESS",
+      sectionsDone: [],
+      examAttemptCount: attemptNo,
+      lastExamScore: score,
+      examPassingScore: passingScore,
+    });
     return { passed, score, expired, status: "RETAKE_REQUIRED" };
   }
-  await ref.update({ status: "EXAM_FAILED", examAttemptCount: attemptNo });
+  await ref.update({
+    status: "EXAM_FAILED",
+    examAttemptCount: attemptNo,
+    lastExamScore: score,
+    examPassingScore: passingScore,
+  });
   return { passed, score, expired, status: "EXAM_FAILED" };
 }
 
@@ -1250,6 +1319,7 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
       trainingStartedAt: ses.startDate ?? null,
       trainingCompletedAt: ses.endDate ?? null,
       heldIn: ses.location ?? "ONLINE",
+      blocked: false,
       // Sınıf eğitiminde imza hanesi EĞİTMENİN. Bu alan yazılmadığı için
       // sınıf sertifikaları da "Online Training" olarak çıkıyordu.
       instructorName: ses.instructorName ?? null,
@@ -1600,6 +1670,7 @@ export const importCertificates = onCall({ region: REGION, invoker: "public" }, 
           issuedAt: issued,
           examRequired: false,
           examScore: null,
+          blocked: false,
           heldIn: r.location ? String(r.location).trim() : null,
           verifyToken,
         },

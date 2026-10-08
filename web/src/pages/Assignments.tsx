@@ -37,6 +37,14 @@ type Assignment = {
   sectionsDone?: string[];
   cycleNumber?: number;
   contentLanguage?: string;
+  /** Sınav notu (geçtiğinde) / son denemenin notu (kaldığında) ve geçme notu. */
+  examScore?: number | null;
+  lastExamScore?: number | null;
+  examPassingScore?: number | null;
+  examAttemptCount?: number;
+  /** Yönetici erişimi engelledi: eğitim açılmaz, sertifika kişide görünmez. */
+  accessBlocked?: boolean;
+  accessBlockReason?: string | null;
 };
 type UserRow = {
   id: string;
@@ -80,7 +88,7 @@ export function Assignments() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   /** Sıfırlama / geri alma penceresi. */
-  const [act, setAct] = useState<{ kind: "reset" | "cancel"; row: Assignment } | null>(null);
+  const [act, setAct] = useState<{ kind: ActKind; row: Assignment } | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -365,6 +373,14 @@ export function Assignments() {
                       >
                         {st.label}
                       </span>
+                      {a.accessBlocked && (
+                        <span
+                          className="block w-fit mt-1 text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded bg-red-50 text-red-700"
+                          title={a.accessBlockReason ? `Reason: ${a.accessBlockReason}` : undefined}
+                        >
+                          Access blocked
+                        </span>
+                      )}
                     </td>
                     {/* Kişi kaçıncı bölümde — "takılmış mı, ilerliyor mu"
                         sorusunun cevabı. Durum rozeti bunu söylemiyor. */}
@@ -373,7 +389,28 @@ export function Assignments() {
                         const total = secCount[`${a.courseId}|${asLang(a.contentLanguage)}`] ?? 0;
                         const done = a.sectionsDone?.length ?? 0;
                         if (isDone(a.status))
-                          return <span className="text-[11.5px] text-emerald-700">Finished</span>;
+                          return (
+                            <span className="text-[11.5px] text-emerald-700">
+                              Finished
+                              {a.examScore != null && (
+                                <span className="block text-slate-600 tabular-nums">
+                                  Exam <b className="text-slate-900">{a.examScore}%</b>
+                                  {(a.examAttemptCount ?? 1) > 1 && (
+                                    <span className="text-slate-400"> · {a.examAttemptCount} attempts</span>
+                                  )}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        if (a.lastExamScore != null && a.status === "EXAM_FAILED")
+                          return (
+                            <span className="text-[11.5px] text-red-700 tabular-nums">
+                              Last exam {a.lastExamScore}%
+                              {a.examPassingScore != null && (
+                                <span className="block text-slate-400">pass mark {a.examPassingScore}%</span>
+                              )}
+                            </span>
+                          );
                         if (a.status === "CANCELLED")
                           return <span className="text-slate-300">—</span>;
                         if (total === 0)
@@ -404,6 +441,18 @@ export function Assignments() {
                             icon: "⟲",
                             onClick: () => setAct({ kind: "reset", row: a }),
                           },
+                          a.accessBlocked
+                            ? {
+                                label: "Restore access",
+                                icon: "✓",
+                                onClick: () => setAct({ kind: "unblock", row: a }),
+                              }
+                            : {
+                                label: "Block access",
+                                icon: "⛔",
+                                danger: true,
+                                onClick: () => setAct({ kind: "block", row: a }),
+                              },
                           // Tamamlanmış eğitim geri alınmaz: sertifika verildi.
                           ...(isDone(a.status) || a.status === "CANCELLED"
                             ? []
@@ -468,7 +517,7 @@ export function Assignments() {
           dokunan her işlemin sebebi yazılı olmalı. */}
       {act && (
         <Modal
-          title={act.kind === "reset" ? "Reset training" : "Withdraw assignment"}
+          title={ACT_TITLE[act.kind]}
           subtitle={`${userById.get(act.row.userId)?.name ?? ""} · ${act.row.courseTitle}`}
           onClose={() => setAct(null)}
           width="max-w-md"
@@ -517,6 +566,20 @@ function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
  * başlanmamışsa kaydı siler; başlanmışsa iptal işaretler, çünkü kişi o
  * eğitimde zaman geçirmiş.
  */
+type ActKind = "reset" | "cancel" | "block" | "unblock";
+const ACT_TITLE: Record<ActKind, string> = {
+  reset: "Reset training",
+  cancel: "Withdraw assignment",
+  block: "Block access",
+  unblock: "Restore access",
+};
+const ACT_BUTTON: Record<ActKind, string> = {
+  reset: "Reset training",
+  cancel: "Withdraw",
+  block: "Block access",
+  unblock: "Restore access",
+};
+
 function AssignmentAction({
   row,
   kind,
@@ -524,7 +587,7 @@ function AssignmentAction({
   onCancel,
 }: {
   row: Assignment;
-  kind: "reset" | "cancel";
+  kind: ActKind;
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
@@ -537,6 +600,15 @@ function AssignmentAction({
     setBusy(true);
     setErr(null);
     try {
+      if (kind === "block" || kind === "unblock") {
+        await httpsCallable(functions, "setAssignmentAccess")({
+          assignmentId: row.id,
+          blocked: kind === "block",
+          reason,
+        });
+        onDone(kind === "block" ? `Access to ${row.courseTitle} blocked.` : `Access to ${row.courseTitle} restored.`);
+        return;
+      }
       const fn = kind === "reset" ? "resetAssignment" : "cancelAssignment";
       await httpsCallable(functions, fn)({ assignmentId: row.id, reason });
       onDone(
@@ -552,7 +624,21 @@ function AssignmentAction({
 
   return (
     <div>
-      {kind === "reset" ? (
+      {kind === "block" ? (
+        <p className="text-sm text-slate-700">
+          The person can no longer open or continue this training.
+          {isDone(row.status)
+            ? " The certificate disappears from their My Certificates."
+            : " If they finish it later while blocked, they will not see the certificate either."}{" "}
+          Nothing is deleted — you can restore access at any time. The QR verification page keeps
+          working.
+        </p>
+      ) : kind === "unblock" ? (
+        <p className="text-sm text-slate-700">
+          The person can open the training again
+          {isDone(row.status) ? " and the certificate is back in their My Certificates" : ""}.
+        </p>
+      ) : kind === "reset" ? (
         <p className="text-sm text-slate-700">
           Progress is cleared and the person takes this training from the beginning. Any
           certificate already issued stays on the record — finishing again produces a new one.
@@ -575,7 +661,7 @@ function AssignmentAction({
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
         <button onClick={go} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
-          {busy ? "Working…" : kind === "reset" ? "Reset training" : "Withdraw"}
+          {busy ? "Working…" : ACT_BUTTON[kind]}
         </button>
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel

@@ -45,6 +45,8 @@ type Assignment = {
   languageChosen?: boolean;
   /** Kaçıncı kez alınıyor — sertifika kimliği buna bağlı. */
   cycleNumber?: number;
+  /** Yönetici erişimi engelledi (setAssignmentAccess). */
+  accessBlocked?: boolean;
 };
 
 /** Bölümün ham içerik listesi (eski tek-içerik alanı dahil). */
@@ -340,6 +342,22 @@ export function Learn() {
   }
 
   if (!a) return <div className="text-sm text-slate-400 py-10">Loading…</div>;
+  if (a.accessBlocked)
+    return (
+      <div className="card max-w-lg mx-auto mt-10 px-6 py-8 text-center">
+        <div className="text-[15px] font-semibold text-slate-900">Access suspended</div>
+        <p className="text-[13px] text-slate-600 mt-2 leading-relaxed">
+          Your access to <b>{a.courseTitle}</b> has been suspended. Please contact{" "}
+          <a href="mailto:info@capella.aero" className="text-brand-700 font-semibold hover:underline">
+            info@capella.aero
+          </a>
+          .
+        </p>
+        <Link to="/dashboard" className="btn-secondary text-xs py-2 mt-5 inline-flex">
+          Back to dashboard
+        </Link>
+      </div>
+    );
 
   return (
     <div>

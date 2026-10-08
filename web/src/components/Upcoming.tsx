@@ -48,7 +48,13 @@ export function Upcoming() {
 
     const u1 = onSnapshot(
       aq,
-      (s) => setRows(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Row, "id">) }))),
+      // Erişimi engellenen eğitim için yaklaşan tarih hatırlatılmaz.
+      (s) =>
+        setRows(
+          s.docs
+            .filter((d) => !d.data().accessBlocked)
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<Row, "id">) }))
+        ),
       onErr
     );
 

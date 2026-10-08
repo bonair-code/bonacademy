@@ -70,7 +70,12 @@ function useMyAssignments(uid?: string) {
     return onSnapshot(
       query(collection(db, "assignments"), where("userId", "==", uid)),
       (snap) => {
-        setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Assignment, "id">) })));
+        // Erişimi engellenen eğitim kişinin panosunda görünmez.
+        setRows(
+          snap.docs
+            .filter((d) => !d.data().accessBlocked)
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<Assignment, "id">) }))
+        );
         setLoading(false);
       },
       () => setLoading(false)
