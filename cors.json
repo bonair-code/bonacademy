@@ -1,13 +1,22 @@
 [
   {
     "origin": [
+      "https://academy.capella.aero",
       "http://localhost:5173",
       "http://localhost:4173",
       "https://capella-academy-v2.web.app",
       "https://capella-academy-v2.firebaseapp.com"
     ],
-    "method": ["GET", "HEAD"],
-    "responseHeader": ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"],
+    "method": [
+      "GET",
+      "HEAD"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges"
+    ],
     "maxAgeSeconds": 3600
   }
 ]

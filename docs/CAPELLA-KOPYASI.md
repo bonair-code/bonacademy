@@ -111,7 +111,7 @@ yok, kurum adının altında `www.capella.aero` yazıyor; sertifikaya
 ### Açık kalan değerler (`TODO(CAPELLA)` ile işaretli)
 | Değer | Yer | Şu an |
 |---|---|---|
-| Özel alan adı (ör. academy.capella...) | `cors.json`, `storage.cors.json` | yok |
+| Özel alan adı `academy.capella.aero` | Firebase Hosting'e eklendi (08.10.2026); Cloudflare'de CNAME → `capella-academy-v2.web.app` (**DNS only**, gri bulut) bekleniyor. Auth yetkili alanlarına ve Storage CORS'una eklendi. | DNS bekleniyor |
 
 Logo 224×89 piksel — ekranda yeterli ama basılı sertifikada bulanık
 çıkabilir. Yüksek çözünürlüklü PNG ya da SVG gelirse `web/public/Logo.png`
