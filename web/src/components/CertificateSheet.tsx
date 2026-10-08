@@ -98,16 +98,8 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
       .catch(() => setQr(""));
   }, [verifyUrl]);
 
-  const examText =
-    cert.issuedVia === "IMPORT"
-      ? null
-      : cert.examRequired === false
-      ? "Exam: Not required"
-      : cert.examScore != null
-      ? `Exam Score: ${cert.examScore}%${
-          cert.examPassingScore != null ? ` (pass mark ${cert.examPassingScore}%)` : ""
-        }`
-      : null;
+  // Sınav notu sertifikaya BASILMAZ (CAPELLA kararı). Not kayıtta duruyor:
+  // examScore alanı ve doğrulama/kayıt ekranları onu göstermeye devam eder.
 
   /** Altın ince çizgi ve köşe süsleri — lacivert çerçevenin içinde. */
   const GOLD = "#b08d45";
@@ -277,14 +269,6 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
               <div className="text-slate-700" style={{ fontSize: "1.3cqw" }}>
                 By {ORG.issuedBy}
               </div>
-              {examText && (
-                <div
-                  className="font-semibold text-slate-800"
-                  style={{ fontSize: "1.3cqw", marginTop: "0.4cqw" }}
-                >
-                  {examText}
-                </div>
-              )}
             </div>
 
             {/* Alt şerit: ortada belge künyesi, sağda doğrulama QR'ı. İmza

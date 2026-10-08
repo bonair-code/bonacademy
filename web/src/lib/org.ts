@@ -13,7 +13,8 @@ export const ORG = {
   /** Belge antetinde kurum adının altındaki satır. */
   website: "www.capella.aero",
   contactEmail: "info@capella.aero",
-  issuedBy: "CAPELLA AVIATION SOLUTIONS",
+  /** Sertifikadaki "By …" satırı. */
+  issuedBy: "Capella Aviation",
   /** Eğitimler çevrimiçi veriliyor. */
   defaultLocation: "ONLINE",
   footer: {
