@@ -480,32 +480,18 @@ export function Assignments() {
                             icon: "⟲",
                             onClick: () => setAct({ kind: "reset", row: a }),
                           },
-                          // Erişimi durdurmak bitmemiş eğitim için (geri alınabilir).
-                          // Bitmiş eğitimde karşılığı "Remove assignment":
-                          // içerik kapanır, sertifika kalır.
+                          // Eski "Block access" ile engellenmiş kayıt kaldıysa geri açılabilsin.
                           ...(a.accessBlocked
-                            ? [
-                                {
-                                  label: "Restore access",
-                                  icon: "✓",
-                                  onClick: () => setAct({ kind: "unblock", row: a }),
-                                },
-                              ]
-                            : isDone(a.status) || a.status === "CANCELLED"
-                            ? []
-                            : [
-                                {
-                                  label: "Block access",
-                                  icon: "⛔",
-                                  danger: true,
-                                  onClick: () => setAct({ kind: "block", row: a }),
-                                },
-                              ]),
+                            ? [{ label: "Restore access", icon: "✓", onClick: () => setAct({ kind: "unblock", row: a }) }]
+                            : []),
+                          // Tek kaldırma düğmesi (eskiden "Block access" ve "Withdraw
+                          // assignment" ayrıydı, ikisi aynı işe çıkıyordu): kişi
+                          // eğitimi ve içeriğini açamaz; bitirdiyse sertifikası kalır.
                           ...(a.status === "CANCELLED"
                             ? []
                             : [
                                 {
-                                  label: isDone(a.status) ? "Remove assignment" : "Withdraw assignment",
+                                  label: "Remove assignment",
                                   icon: "⦸",
                                   danger: true,
                                   onClick: () => setAct({ kind: "cancel", row: a }),
@@ -582,7 +568,7 @@ export function Assignments() {
 
       {act && (
         <Modal
-          title={act.kind === "cancel" && isDone(act.row.status) ? "Remove assignment" : ACT_TITLE[act.kind]}
+          title={ACT_TITLE[act.kind]}
           subtitle={`${userById.get(act.row.userId)?.name ?? ""} · ${act.row.courseTitle}`}
           onClose={() => setAct(null)}
           width="max-w-md"
@@ -634,13 +620,13 @@ function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
 type ActKind = "reset" | "cancel" | "block" | "unblock";
 const ACT_TITLE: Record<ActKind, string> = {
   reset: "Reset training",
-  cancel: "Withdraw assignment",
+  cancel: "Remove assignment",
   block: "Block access",
   unblock: "Restore access",
 };
 const ACT_BUTTON: Record<ActKind, string> = {
   reset: "Reset training",
-  cancel: "Withdraw",
+  cancel: "Remove assignment",
   block: "Block access",
   unblock: "Restore access",
 };
@@ -736,7 +722,7 @@ function AssignmentAction({
           ? `${row.courseTitle} reset — the learner starts again.`
           : isDone(row.status)
           ? `${row.courseTitle} removed — the certificate stays.`
-          : `${row.courseTitle} withdrawn.`
+          : `${row.courseTitle} removed.`
       );
     } catch (e) {
       setErr((e as Error).message);
@@ -769,9 +755,9 @@ function AssignmentAction({
         </p>
       ) : (
         <p className="text-sm text-slate-700">
-          The assignment is removed completely and stops counting as outstanding.
-          {started ? " Any progress on it is discarded." : ""} Who removed it and why is kept
-          in the audit log.
+          The person can no longer open this training or its content, and it stops counting as
+          outstanding.{started ? " Any progress on it is discarded." : ""} Who removed it and why is
+          kept in the audit log.
         </p>
       )}
 
@@ -785,7 +771,7 @@ function AssignmentAction({
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
         <button onClick={go} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
-          {busy ? "Working…" : kind === "cancel" && isDone(row.status) ? "Remove assignment" : ACT_BUTTON[kind]}
+          {busy ? "Working…" : ACT_BUTTON[kind]}
         </button>
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
