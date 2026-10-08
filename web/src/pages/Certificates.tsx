@@ -461,7 +461,7 @@ function CertModal({ cert, onClose }: { cert: Cert; onClose: () => void }) {
           <CertificateSheet cert={cert} />
         </div>
         <div className="flex justify-center gap-3 mt-4 no-print">
-          <button onClick={printCertificate} className="btn-primary">
+          <button onClick={() => printCertificate(cert)} className="btn-primary">
             Print / PDF (landscape)
           </button>
           <button onClick={onClose} className="btn-secondary">

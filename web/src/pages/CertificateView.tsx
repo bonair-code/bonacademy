@@ -49,7 +49,7 @@ export function CertificateView() {
           </div>
           </div>
           <div className="flex gap-3 mt-4 no-print">
-            <button onClick={printCertificate} className="btn-primary text-xs py-2">
+            <button onClick={() => printCertificate(cert)} className="btn-primary text-xs py-2">
               Print / PDF (landscape)
             </button>
             <Link to={`/verify/${encodeURIComponent(cert.verifyToken ?? "")}`} className="btn-secondary text-xs py-2">

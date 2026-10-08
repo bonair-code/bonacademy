@@ -189,17 +189,29 @@ export function Learn() {
   const [certOpen, setCertOpen] = useState(false);
   const [myCert, setMyCert] = useState<Cert | null>(null);
   const [certErr, setCertErr] = useState<string | null>(null);
+  /* Pencere her açıldığında BU döngünün belgesi canlı dinlenir. Eskiden belge
+     bir kez yüklenince hafızada kalıyordu: aynı oturumda eğitim yeniden
+     alınıp yeni sertifika üretilse bile pencere eski döngünün belgesini
+     (eski kurs adıyla) göstermeye devam ediyordu. */
+  const certId = id ? certIdForCycle(id, a?.cycleNumber) : null;
   useEffect(() => {
-    if (!certOpen || !id || myCert) return;
+    setMyCert(null);
+    setCertErr(null);
+    if (!certOpen || !certId) return;
     return onSnapshot(
-      doc(db, "certificates", certIdForCycle(id, a?.cycleNumber)),
+      doc(db, "certificates", certId),
       (d) => {
-        if (d.exists()) setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
-        else setCertErr("No certificate has been issued for this training.");
+        if (d.exists()) {
+          setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
+          setCertErr(null);
+        } else {
+          setMyCert(null);
+          setCertErr("No certificate has been issued for this training.");
+        }
       },
       (e) => setCertErr(e.message)
     );
-  }, [certOpen, id, myCert, a?.cycleNumber]);
+  }, [certOpen, certId]);
 
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;
@@ -691,7 +703,7 @@ export function Learn() {
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={printCertificate}
+                  onClick={() => myCert && printCertificate(myCert)}
                   disabled={!myCert}
                   className="btn-primary text-xs py-2 disabled:opacity-40"
                 >
