@@ -441,24 +441,32 @@ export function Assignments() {
                             icon: "⟲",
                             onClick: () => setAct({ kind: "reset", row: a }),
                           },
-                          a.accessBlocked
-                            ? {
-                                label: "Restore access",
-                                icon: "✓",
-                                onClick: () => setAct({ kind: "unblock", row: a }),
-                              }
-                            : {
-                                label: "Block access",
-                                icon: "⛔",
-                                danger: true,
-                                onClick: () => setAct({ kind: "block", row: a }),
-                              },
-                          // Tamamlanmış eğitim geri alınmaz: sertifika verildi.
-                          ...(isDone(a.status) || a.status === "CANCELLED"
+                          // Erişimi durdurmak bitmemiş eğitim için (geri alınabilir).
+                          // Bitmiş eğitimde karşılığı "Remove assignment":
+                          // içerik kapanır, sertifika kalır.
+                          ...(a.accessBlocked
+                            ? [
+                                {
+                                  label: "Restore access",
+                                  icon: "✓",
+                                  onClick: () => setAct({ kind: "unblock", row: a }),
+                                },
+                              ]
+                            : isDone(a.status) || a.status === "CANCELLED"
                             ? []
                             : [
                                 {
-                                  label: "Withdraw assignment",
+                                  label: "Block access",
+                                  icon: "⛔",
+                                  danger: true,
+                                  onClick: () => setAct({ kind: "block", row: a }),
+                                },
+                              ]),
+                          ...(a.status === "CANCELLED"
+                            ? []
+                            : [
+                                {
+                                  label: isDone(a.status) ? "Remove assignment" : "Withdraw assignment",
                                   icon: "⦸",
                                   danger: true,
                                   onClick: () => setAct({ kind: "cancel", row: a }),
@@ -517,7 +525,7 @@ export function Assignments() {
           dokunan her işlemin sebebi yazılı olmalı. */}
       {act && (
         <Modal
-          title={ACT_TITLE[act.kind]}
+          title={act.kind === "cancel" && isDone(act.row.status) ? "Remove assignment" : ACT_TITLE[act.kind]}
           subtitle={`${userById.get(act.row.userId)?.name ?? ""} · ${act.row.courseTitle}`}
           onClose={() => setAct(null)}
           width="max-w-md"
@@ -614,6 +622,8 @@ function AssignmentAction({
       onDone(
         kind === "reset"
           ? `${row.courseTitle} reset — the learner starts again.`
+          : isDone(row.status)
+          ? `${row.courseTitle} removed — the certificate stays.`
           : `${row.courseTitle} withdrawn.`
       );
     } catch (e) {
@@ -626,22 +636,24 @@ function AssignmentAction({
     <div>
       {kind === "block" ? (
         <p className="text-sm text-slate-700">
-          The person can no longer open or continue this training.
-          {isDone(row.status)
-            ? " The certificate disappears from their My Certificates."
-            : " If they finish it later while blocked, they will not see the certificate either."}{" "}
-          Nothing is deleted — you can restore access at any time. The QR verification page keeps
-          working.
+          The person can no longer open or continue this training until you restore access.
+          Nothing is deleted — progress is kept.
         </p>
       ) : kind === "unblock" ? (
         <p className="text-sm text-slate-700">
-          The person can open the training again
-          {isDone(row.status) ? " and the certificate is back in their My Certificates" : ""}.
+          The person can open the training again and continue where they left off.
         </p>
       ) : kind === "reset" ? (
         <p className="text-sm text-slate-700">
           Progress is cleared and the person takes this training from the beginning. Any
           certificate already issued stays on the record — finishing again produces a new one.
+        </p>
+      ) : isDone(row.status) ? (
+        <p className="text-sm text-slate-700">
+          The person can no longer open this training or its content. <b>The certificate stays</b>{" "}
+          — in their My Certificates, the Certificate Register and on the QR verification page —
+          and Training Follow-Up keeps counting it. Who removed it and why is kept in the audit
+          log.
         </p>
       ) : (
         <p className="text-sm text-slate-700">
@@ -661,7 +673,7 @@ function AssignmentAction({
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
         <button onClick={go} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
-          {busy ? "Working…" : ACT_BUTTON[kind]}
+          {busy ? "Working…" : kind === "cancel" && isDone(row.status) ? "Remove assignment" : ACT_BUTTON[kind]}
         </button>
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel

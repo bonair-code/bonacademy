@@ -519,13 +519,19 @@ export const assignCourses = onCall({ region: REGION, invoker: "public" }, async
       skipped.push({ courseId, reason: "Already assigned and still open." });
       continue;
     }
+    // Bitirilmiş atama kaldırılmış olabilir (cancelAssignment, sertifika
+    // durur). Atama kimliği aynı olduğundan döngü 1'den başlarsa yeni
+    // sertifikanın kimliği eskisiyle çakışır ve hiç verilmez — döngü eski
+    // sertifikaların üstünden devam eder.
+    const pastCerts = await db.collection("certificates").where("assignmentId", "==", id).get();
+    const lastCycle = pastCerts.docs.reduce((m, d) => Math.max(m, Number(d.data().cycleNumber) || 1), 0);
     await ref.set({
       userId,
       userDepartmentId,
       courseId,
       courseTitle: course.title || "",
       status: "PENDING",
-      cycleNumber: 1,
+      cycleNumber: lastCycle + 1,
       sectionsDone: [],
       // Atamanın dili: kişinin profil dili yayınlanmışsa o, değilse yayınlanmış
       // ilk dil. Birden çok dil varsa öğrenci eğitime girerken kendisi seçiyor
@@ -666,11 +672,9 @@ export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, as
   if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
   const a = snap.data() as any;
 
-  if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
-    throw new HttpsError(
-      "failed-precondition",
-      "A completed training cannot be withdrawn — a certificate was issued. Reset it instead if it must be taken again."
-    );
+  // Bitmiş eğitim de kaldırılabilir: kişi eğitim içeriğine erişemez, ama
+  // SERTİFİKA DOKUNULMADAN kalır (My Certificates, sicil, QR doğrulama).
+  // Takip ekranı geçerliliği sertifikadan okuduğu için etkilenmez.
 
   // Silmeden önce iz bırak: kim, ne zaman, neden kaldırdı.
   await db.collection("assignmentRemovals").add({

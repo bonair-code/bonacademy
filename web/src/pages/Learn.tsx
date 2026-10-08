@@ -59,6 +59,7 @@ function contentsOf(s: Section): Content[] {
 export function Learn() {
   const { id } = useParams<{ id: string }>();
   const [a, setA] = useState<Assignment | null>(null);
+  const [gone, setGone] = useState(false);
   const [sections, setSections] = useState<Section[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -83,7 +84,13 @@ export function Learn() {
 
   useEffect(() => {
     if (!id) return;
-    return onSnapshot(doc(db, "assignments", id), (d) => setA(d.data() as Assignment));
+    // Atama kaldırıldıysa belge yok; kural da yok belgeyi okumaya izin
+    // vermez (hata döner). İkisinde de "Loading…" sonsuza dek kalıyordu.
+    return onSnapshot(
+      doc(db, "assignments", id),
+      (d) => (d.exists() ? setA(d.data() as Assignment) : setGone(true)),
+      () => setGone(true)
+    );
   }, [id]);
 
   /**
@@ -341,6 +348,23 @@ export function Learn() {
     }
   }
 
+  if (gone)
+    return (
+      <div className="card max-w-lg mx-auto mt-10 px-6 py-8 text-center">
+        <div className="text-[15px] font-semibold text-slate-900">Training not available</div>
+        <p className="text-[13px] text-slate-600 mt-2 leading-relaxed">
+          This training is no longer assigned to you. Any certificate you earned is in My Certificates.
+        </p>
+        <div className="flex justify-center gap-2 mt-5">
+          <Link to="/certificates" className="btn-primary text-xs py-2">
+            My Certificates
+          </Link>
+          <Link to="/dashboard" className="btn-secondary text-xs py-2">
+            Dashboard
+          </Link>
+        </div>
+      </div>
+    );
   if (!a) return <div className="text-sm text-slate-400 py-10">Loading…</div>;
   if (a.accessBlocked)
     return (
