@@ -107,6 +107,8 @@ export function Assignments() {
   }
   /** Sıfırlama / geri alma penceresi. */
   const [act, setAct] = useState<{ kind: ActKind; row: Assignment } | null>(null);
+  /** Son tarihi değiştirilen atama. */
+  const [dueEdit, setDueEdit] = useState<Assignment | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -460,6 +462,9 @@ export function Assignments() {
                         label={`Actions for ${a.courseTitle}`}
                         items={[
                           { label: "Open person", icon: "→", to: `/team/${a.userId}` },
+                          ...(!isDone(a.status) && a.status !== "CANCELLED"
+                            ? [{ label: "Change due date", icon: "📅", onClick: () => setDueEdit(a) }]
+                            : []),
                           // Bitmemiş, açık eğitim için hatırlatma e-postası.
                           ...(!isDone(a.status) && a.status !== "CANCELLED" && !a.accessBlocked
                             ? [
@@ -557,6 +562,24 @@ export function Assignments() {
 
       {/* Sıfırla / geri al. İkisi de gerekçe soruyor: eğitim kaydına
           dokunan her işlemin sebebi yazılı olmalı. */}
+      {dueEdit && (
+        <Modal
+          title="Due date"
+          subtitle={`${userById.get(dueEdit.userId)?.name ?? ""} · ${dueEdit.courseTitle}`}
+          onClose={() => setDueEdit(null)}
+          width="max-w-sm"
+        >
+          <DueDateForm
+            row={dueEdit}
+            onDone={(m) => {
+              setToast(m);
+              setDueEdit(null);
+            }}
+            onCancel={() => setDueEdit(null)}
+          />
+        </Modal>
+      )}
+
       {act && (
         <Modal
           title={act.kind === "cancel" && isDone(act.row.status) ? "Remove assignment" : ACT_TITLE[act.kind]}
@@ -621,6 +644,61 @@ const ACT_BUTTON: Record<ActKind, string> = {
   block: "Block access",
   unblock: "Restore access",
 };
+
+/** Son tarihi değiştirir ya da kaldırır. Boş bırakılırsa son tarih yok. */
+function DueDateForm({
+  row,
+  onDone,
+  onCancel,
+}: {
+  row: Assignment;
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const iso = (t?: Timestamp | null) => {
+    const d = t?.toDate?.();
+    if (!d) return "";
+    // Türkiye günü (son tarih o günün 23:59'u olarak kaydediliyor)
+    return d.toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+  };
+  const [v, setV] = useState(iso(row.dueDate));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(next: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await httpsCallable(functions, "setAssignmentDueDate")({ assignmentId: row.id, dueDate: next || null });
+      onDone(next ? `Due date set to ${next.split("-").reverse().join(".")}.` : "Due date removed.");
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <label className="label">Due date</label>
+      <input type="date" className="input" value={v} onChange={(e) => setV(e.target.value)} autoFocus />
+      <p className="text-[11.5px] text-slate-500 mt-1.5">Leave empty for no due date.</p>
+      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={() => save(v)} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {row.dueDate && (
+          <button onClick={() => save("")} disabled={busy} className="btn-secondary text-xs py-2">
+            Remove due date
+          </button>
+        )}
+        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-800 ml-auto">
+          Cancel
+        </button>
+      </div>
+      {err && <p className="text-[11.5px] text-red-700 mt-2">{err}</p>}
+    </div>
+  );
+}
 
 function AssignmentAction({
   row,
@@ -758,6 +836,8 @@ function AssignForm({
 
   const byCourse = mode === "BY_COURSE";
   const [notify, setNotify] = useState(true);
+  /** Son tarih (isteğe bağlı). Boş = son tarih yok. */
+  const [dueDate, setDueDate] = useState("");
 
   function switchMode(m: "BY_COURSE" | "BY_PERSON") {
     setMode(m);
@@ -831,7 +911,7 @@ function AssignForm({
       if (byCourse) {
         // Fonksiyon kişi başına çalışıyor; kişiler döngüyle geçiliyor.
         for (const uid of Array.from(picked)) {
-          const r = await assignCourses(uid, [anchor], undefined, notify);
+          const r = await assignCourses(uid, [anchor], { dueDate, notify });
           results.push(r);
           created += r.created;
           skipped.push(...r.skipped);
@@ -845,7 +925,7 @@ function AssignForm({
         );
       } else {
         // Tek kişiye çok eğitim: fonksiyon bunu tek çağrıda yapıyor.
-        const r = await assignCourses(anchor, Array.from(picked), undefined, notify);
+        const r = await assignCourses(anchor, Array.from(picked), { dueDate, notify });
         results.push(r);
         created = r.created;
         skipped.push(...r.skipped);
@@ -1023,10 +1103,28 @@ function AssignForm({
                 ? "Pick who should take it."
                 : "Pick the training to assign."
               : renewCount > 0
-              ? `Due in 30 days. ${renewCount} already completed — progress restarts, earlier certificates stay.`
-              : "Due in 30 days from today."}
+              ? `${renewCount} already completed — progress restarts, earlier certificates stay.`
+              : ""}
           </span>
         )}
+        {/* Son tarih isteğe bağlı: boş bırakılırsa atamanın son tarihi olmaz. */}
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600 shrink-0">
+          Due date
+          <input
+            type="date"
+            className="input !w-auto !py-1 !px-2 !text-[12px]"
+            value={dueDate}
+            min={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setDueDate(e.target.value)}
+            disabled={busy}
+            title="Optional — leave empty for no due date"
+          />
+          {dueDate && (
+            <button type="button" onClick={() => setDueDate("")} className="text-slate-400 hover:text-slate-700" title="No due date">
+              ×
+            </button>
+          )}
+        </label>
         {/* Kişiye "yeni eğitim atandı" e-postası (varsayılan açık). */}
         <label className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer select-none shrink-0">
           <input

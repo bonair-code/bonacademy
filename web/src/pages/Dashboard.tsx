@@ -152,7 +152,7 @@ function LearnerDashboard() {
     () =>
       rows
         .filter((r) => !isDone(r.status))
-        .sort((a, b) => (a.dueDate?.toMillis?.() ?? 0) - (b.dueDate?.toMillis?.() ?? 0)),
+        .sort((a, b) => (a.dueDate?.toMillis?.() ?? Infinity) - (b.dueDate?.toMillis?.() ?? Infinity)),
     [rows]
   );
   const done = useMemo(() => rows.filter((r) => isDone(r.status)), [rows]);
@@ -386,7 +386,7 @@ function StaffDashboard() {
     () =>
       mineRows
         .filter((r) => !isDone(r.status))
-        .sort((a, b) => (a.dueDate?.toMillis?.() ?? 0) - (b.dueDate?.toMillis?.() ?? 0)),
+        .sort((a, b) => (a.dueDate?.toMillis?.() ?? Infinity) - (b.dueDate?.toMillis?.() ?? Infinity)),
     [mineRows]
   );
   const mineDone = useMemo(() => mineRows.filter((r) => isDone(r.status)), [mineRows]);

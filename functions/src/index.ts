@@ -570,12 +570,9 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
   if (!userSnap.exists) throw new HttpsError("not-found", "User not found.");
   const userDepartmentId = userSnap.data()?.departmentId ?? null;
 
-  // Son teslim süresi çağrıdan gelebilir (matristeki atama penceresi kullanıyor).
-  const rawDue = Number(req.data?.dueDays);
-  const dueDays = Number.isFinite(rawDue) ? Math.min(Math.max(Math.round(rawDue), 1), 365) : 30;
-
-  const now = Timestamp.now();
-  const dueDate = Timestamp.fromMillis(now.toMillis() + dueDays * 24 * 3600 * 1000);
+  // Son tarih yalnızca istenirse konur (CAPELLA kararı, 08.10.2026). Eskiden
+  // her atamaya kendiliğinden "bugün + 30 gün" yazılıyordu.
+  const dueDate = parseDue(req.data);
 
   let created = 0;
   const skipped: { courseId: string; reason: string }[] = [];
@@ -585,7 +582,7 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
     notifyItems.push({
       assignmentId,
       title: String(course.title || ""),
-      dueDate: dueDate.toDate(),
+      dueDate: dueDate ? dueDate.toDate() : null,
       examRequired: course.exam?.required !== false,
     });
   for (const courseId of courseIds) {
@@ -749,6 +746,37 @@ export const sendAssignmentReminder = onCall(
   }
 );
 
+/**
+ * Son tarih: "YYYY-MM-DD" (dueDate, o günün sonu, Türkiye saati) ya da gün
+ * sayısı (dueDays). İkisi de yoksa son tarih YOK (null).
+ */
+function parseDue(d: any): Timestamp | null {
+  const iso = typeof d?.dueDate === "string" ? d.dueDate.trim() : "";
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (m) {
+    // 23:59:59 Türkiye (UTC+3, yaz saati yok) = 20:59:59 UTC
+    const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], 20, 59, 59);
+    if (Number.isFinite(ms)) return Timestamp.fromMillis(ms);
+  }
+  const days = Number(d?.dueDays);
+  if (d?.dueDays != null && Number.isFinite(days) && days > 0)
+    return Timestamp.fromMillis(Date.now() + Math.min(Math.round(days), 730) * 24 * 3600 * 1000);
+  return null;
+}
+
+/** Atamanın son tarihini değiştirir ya da kaldırır (dueDate: null). */
+export const setAssignmentDueDate = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  await assertCanManageAssignments(req.auth?.uid);
+  const assignmentId = String(req.data?.assignmentId || "");
+  if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  const ref = getFirestore().doc(`assignments/${assignmentId}`);
+  if (!(await ref.get()).exists) throw new HttpsError("not-found", "Assignment not found.");
+  const dueDate = parseDue({ dueDate: req.data?.dueDate });
+  if (req.data?.dueDate && !dueDate) throw new HttpsError("invalid-argument", "Invalid date.");
+  await ref.update({ dueDate });
+  return { ok: true, dueDate: dueDate ? dueDate.toMillis() : null };
+});
+
 /** Atama işlemleri admin ve eğitmenin: eğitimi veren yönetir. */
 async function assertCanManageAssignments(uid?: string) {
   if (!uid) throw new HttpsError("unauthenticated", "Sign in required.");
@@ -781,8 +809,6 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
   if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
   const a = snap.data() as any;
 
-  const rawDue = Number(req.data?.dueDays);
-  const dueDays = Number.isFinite(rawDue) ? Math.min(Math.max(Math.round(rawDue), 1), 365) : 30;
   const cycle = (Number(a.cycleNumber) || 1) + 1;
 
   await ref.update({
@@ -790,7 +816,7 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
     cycleNumber: cycle,
     sectionsDone: [],
     examAttemptCount: 0,
-    dueDate: Timestamp.fromMillis(Date.now() + dueDays * 24 * 3600 * 1000),
+    dueDate: parseDue(req.data),
     startedAt: FieldValue.delete(),
     completedAt: FieldValue.delete(),
     completedVia: FieldValue.delete(),

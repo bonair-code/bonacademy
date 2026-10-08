@@ -21,15 +21,18 @@ export type AssignResult = {
 export async function assignCourses(
   userId: string,
   courseIds: string[],
-  dueDays?: number,
-  /** Kişiye "yeni eğitim atandı" e-postası gitsin mi (varsayılan evet). */
-  notify = true
+  opts: {
+    /** Son tarih "YYYY-MM-DD". Boşsa son tarih YOK (CAPELLA kararı). */
+    dueDate?: string | null;
+    /** Kişiye "yeni eğitim atandı" e-postası gitsin mi (varsayılan evet). */
+    notify?: boolean;
+  } = {}
 ): Promise<AssignResult> {
   const res = await httpsCallable(functions, "assignCourses")({
     userId,
     courseIds,
-    notify,
-    ...(dueDays ? { dueDays } : {}),
+    notify: opts.notify !== false,
+    dueDate: opts.dueDate || null,
   });
   const d = res.data as { created?: number; skipped?: { reason: string }[]; mail?: { ok: boolean } | null };
   return {
