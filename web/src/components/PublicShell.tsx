@@ -42,13 +42,27 @@ function Clock() {
   return <span className="text-[15px] font-semibold text-white/90 tabular-nums">{t}</span>;
 }
 
-/** Yıldızlar: tek katman, birkaç radial-gradient — görsel dosyası yok. */
-const STARS = [
-  "12% 18%", "32% 8%", "48% 26%", "64% 12%", "22% 42%", "8% 70%", "40% 62%", "55% 80%",
-  "85% 40%", "75% 22%", "92% 70%", "28% 88%", "68% 52%", "4% 32%",
-]
-  .map((p, i) => `radial-gradient(${i % 3 === 0 ? 1.5 : 1}px ${i % 3 === 0 ? 1.5 : 1}px at ${p}, rgba(255,255,255,${i % 2 ? 0.45 : 0.7}), transparent)`)
-  .join(",");
+/**
+ * Yıldızlar: radial-gradient katmanları — görsel dosyası yok. Konumlar sabit
+ * tohumlu sözde-rastgele üretiliyor; her açılışta aynı gökyüzü.
+ *   STARS        — çok sayıda sönük, küçük yıldız (sabit)
+ *   STARS_BRIGHT — birkaç parlak yıldız, ayrı katmanda yavaşça yanıp söner
+ */
+function starField(count: number, seed: number, size: [number, number], alpha: [number, number]) {
+  let s = seed;
+  const rnd = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const x = (rnd() * 100).toFixed(1);
+    const y = (rnd() * 100).toFixed(1);
+    const r = (size[0] + rnd() * (size[1] - size[0])).toFixed(2);
+    const a = (alpha[0] + rnd() * (alpha[1] - alpha[0])).toFixed(2);
+    out.push(`radial-gradient(${r}px ${r}px at ${x}% ${y}%, rgba(255,255,255,${a}), transparent)`);
+  }
+  return out.join(",");
+}
+const STARS = starField(120, 7, [1.0, 1.6], [0.35, 0.75]);
+const STARS_BRIGHT = starField(18, 91, [1.6, 2.4], [0.75, 1]);
 
 export function PublicShell({
   title,
@@ -95,6 +109,11 @@ export function PublicShell({
       }}
     >
       <div className="pointer-events-none absolute inset-0" style={{ backgroundImage: STARS }} aria-hidden />
+      <div
+        className="pointer-events-none absolute inset-0 motion-safe:animate-[twinkle_5s_ease-in-out_infinite]"
+        style={{ backgroundImage: STARS_BRIGHT }}
+        aria-hidden
+      />
       {/* Sertifikadaki kurşun kalem uçak çizimi, ters çevrilip ışıklı siluete
           dönüştürülmüş. Dekor — ekran okuyucudan gizli. */}
       <img

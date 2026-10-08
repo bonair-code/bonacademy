@@ -79,6 +79,17 @@
   }
 }
 
+/* Giriş ekranındaki parlak yıldızların hafif yanıp sönmesi */
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
 /* Girişte uçak uçtuktan sonra panel ekranının belirişi */
 @keyframes app-land {
   from {
