@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { updatePassword } from "firebase/auth";
 import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { auth, db, functions } from "../lib/firebase";
 import { useAuth, profileIncomplete } from "../lib/auth";
 import { ORG } from "../lib/org";
 import { placeCase } from "../lib/text";
@@ -20,6 +21,9 @@ export function Onboarding() {
 
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
+  // Ad-soyadı yönetici yazıyor, bazen yanlış: kişi burada düzeltir, onun
+  // yazdığı esas alınır (yalnızca bu ilk adımda — sonrası yöneticide).
+  const [name, setName] = useState(profile?.name ?? "");
   const [birthPlace, setBirthPlace] = useState(profile?.birthPlace ?? "");
   const [birthDate, setBirthDate] = useState(profile?.birthDate ?? "");
   const [busy, setBusy] = useState(false);
@@ -56,18 +60,19 @@ export function Onboarding() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    if (!birthPlace.trim() || !birthDate || !profile) return;
+    if (!name.trim() || !birthPlace.trim() || !birthDate || !profile) return;
     setBusy(true);
     setErr(null);
     try {
-      await updateDoc(doc(db, "users", profile.uid), {
+      // Sunucuda: kişi kendi adını kurala göre yazamıyor; ad yalnızca ilk
+      // girişte değişebilir ve varsa sertifikalara da işlenir.
+      await httpsCallable(functions, "completeProfile")({
+        name: name.replace(/\s+/g, " ").trim(),
         birthPlace: placeCase(birthPlace),
         birthDate,
-        profileCompletedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
     } catch (e2) {
-      setErr((e2 as Error).message);
+      setErr((e2 as Error).message.replace(/^.*?:\s*/, ""));
     } finally {
       setBusy(false);
     }
@@ -147,13 +152,22 @@ export function Onboarding() {
               <>
                 <h2 className="text-lg font-extrabold text-slate-900">Complete your details</h2>
                 <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Your place and date of birth are printed on every training certificate we issue,
-                  so we need them before you start.
+                  Your name, place and date of birth are printed on every training certificate we
+                  issue. Please check them carefully before you start.
                 </p>
 
                 <form onSubmit={saveProfile}>
                   <label className="label">Full Name</label>
-                  <input className="input mb-3 bg-slate-50 text-slate-500" value={profile?.name ?? ""} disabled />
+                  <input
+                    className="input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                    Exactly as it should appear on your certificates.
+                  </p>
 
                   <label className="label">Place of Birth *</label>
                   <input
@@ -162,20 +176,31 @@ export function Onboarding() {
                     onBlur={() => setBirthPlace(placeCase(birthPlace))}
                     onChange={(e) => setBirthPlace(e.target.value)}
                     placeholder="İstanbul"
-                    autoFocus
                   />
                   <label className="label">Date of Birth *</label>
-                  <input
-                    className="input mb-4"
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                  />
+                  {/* iPhone'da tarih kutusu boşken hiçbir şey yazmıyor ve kendi
+                      genişliğini dayatıp karttan taşıyordu: görünüm sıfırlanır,
+                      boşken "Select a date" yazısı üstüne bindirilir. */}
+                  <div className="relative mb-4">
+                    <input
+                      className="input block w-full min-w-0 min-h-[44px] text-left"
+                      style={{ WebkitAppearance: "none", appearance: "none" }}
+                      type="date"
+                      value={birthDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                    />
+                    {!birthDate && IOS && (
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                        Select a date
+                      </span>
+                    )}
+                  </div>
 
                   {err && <ErrorBox>{err}</ErrorBox>}
                   <button
                     type="submit"
-                    disabled={busy || !birthPlace.trim() || !birthDate}
+                    disabled={busy || !name.trim() || !birthPlace.trim() || !birthDate}
                     className="btn-primary w-full"
                   >
                     {busy ? "Saving…" : "Save & Continue"}
@@ -197,6 +222,9 @@ export function Onboarding() {
     </div>
   );
 }
+
+/** iPhone/iPad Safari: boş tarih kutusu hiçbir şey göstermiyor. */
+const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
 
 function Dot({ on, label }: { on: boolean; label: string }) {
   return (

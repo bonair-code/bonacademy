@@ -764,6 +764,64 @@ function parseDue(d: any): Timestamp | null {
   return null;
 }
 
+/**
+ * İlk giriş: kişi ad-soyadını düzeltir, doğum yeri ve tarihini girer.
+ *
+ * Adı yönetici yazıyor ve bazen yanlış oluyor (CAPELLA isteği: kişinin kendi
+ * yazdığı esas alınsın). Ad yalnızca BU ilk adımda değişebilir —
+ * profileCompletedAt yazıldıktan sonra kişi kendi adını oynatamaz (sertifikaya
+ * basılan bir kimlik bilgisi); sonrası yöneticinin işi (updateUser).
+ * Güvenlik kuralı kişinin `name` alanına yazmasına izin vermiyor, bu yüzden
+ * sunucuda.
+ */
+export const completeProfile = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const uid = req.auth.uid;
+  const db = getFirestore();
+  const ref = db.doc(`users/${uid}`);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Profile not found.");
+  const u = snap.data() as any;
+
+  const birthPlace = placeCase(req.data?.birthPlace);
+  const birthDate = String(req.data?.birthDate || "").trim();
+  if (!birthPlace) throw new HttpsError("invalid-argument", "Place of birth is required.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) throw new HttpsError("invalid-argument", "Date of birth is required.");
+
+  const patch: Record<string, unknown> = {
+    birthPlace,
+    birthDate,
+    profileCompletedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  const rawName = String(req.data?.name ?? "").replace(/\s+/g, " ").trim();
+  if (rawName && rawName !== u.name) {
+    if (u.profileCompletedAt)
+      throw new HttpsError("permission-denied", "Your name can only be changed by an administrator.");
+    if (rawName.length < 3 || rawName.length > 80 || !rawName.includes(" "))
+      throw new HttpsError("invalid-argument", "Please enter your full name (first and last name).");
+    patch.name = rawName;
+    patch.nameSetBySelfAt = FieldValue.serverTimestamp();
+  }
+  await ref.update(patch);
+
+  if (patch.name) {
+    await getAuth().updateUser(uid, { displayName: rawName }).catch(() => undefined);
+    // İlk girişten önce verilmiş sertifika olabilir (sınıf/ içe aktarım).
+    const certs = await db.collection("certificates").where("userId", "==", uid).get();
+    if (!certs.empty) {
+      const b = db.batch();
+      for (const c of certs.docs) {
+        b.update(c.ref, { userName: rawName });
+        const token = c.data().verifyToken;
+        if (token) b.set(db.doc(`certVerify/${token}`), { name: rawName }, { merge: true });
+      }
+      await b.commit();
+    }
+  }
+  return { ok: true };
+});
+
 /** Atamanın son tarihini değiştirir ya da kaldırır (dueDate: null). */
 export const setAssignmentDueDate = onCall({ region: REGION, invoker: "public" }, async (req) => {
   await assertCanManageAssignments(req.auth?.uid);
