@@ -220,7 +220,7 @@ function RefList({
       action={
         <button
           onClick={() => setDialog({ kind: "create" })}
-          className="bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold rounded-md px-2.5 py-1 transition"
+          className="btn-primary shrink-0 text-xs py-1.5 px-3"
         >
           + New {singular}
         </button>
@@ -433,7 +433,7 @@ function JobTitles({ onToast }: { onToast: (m: string) => void }) {
       action={
         <button
           onClick={() => setDialog({ kind: "create" })}
-          className="bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold rounded-md px-2.5 py-1 transition"
+          className="btn-primary shrink-0 text-xs py-1.5 px-3"
         >
           + New Authorisation Scope
         </button>
@@ -938,7 +938,7 @@ function TrackedTrainings({ onToast }: { onToast: (m: string) => void }) {
       action={
         <button
           onClick={() => setDialog({ kind: "create" })}
-          className="bg-white/15 hover:bg-white/25 text-white text-[11px] font-semibold rounded-md px-2.5 py-1 transition"
+          className="btn-primary shrink-0 text-xs py-1.5 px-3"
         >
           + New Tracked Training
         </button>
