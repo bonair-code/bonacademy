@@ -499,7 +499,7 @@ export function Learn() {
         </Modal>
       )}
 
-      <div className="grid lg:grid-cols-[230px_1fr] gap-3 items-start">
+      <div className="grid lg:grid-cols-[260px_1fr] gap-3 items-start">
         <ProgressRail
           sections={sections}
           done={done}
@@ -873,7 +873,8 @@ function ProgressRail({
       {icon(opts.kind, opts.label)}
       <span className="flex-1 min-w-0">
         <span
-          className={`block text-[13px] truncate ${
+          // Ad tam görünür, gerekirse alt satıra iner (kesilmesin — CAPELLA isteği).
+          className={`block text-[13px] leading-snug break-words ${
             opts.kind === "todo" && !opts.active ? "text-[#8e8e93]" : "text-slate-900"
           } ${opts.active ? "font-semibold" : "font-medium"}`}
         >
@@ -937,7 +938,7 @@ function ProgressRail({
         aria-expanded={open}
         className="lg:hidden w-full flex items-center justify-between rounded-xl bg-white px-3 py-2.5 text-[13px] font-medium text-slate-800"
       >
-        <span>
+        <span className="text-left leading-snug">
           {viewIndex >= 0 ? sections[viewIndex]?.title : "Exam"}
           <span className="ml-1.5 text-[#86868b] font-normal">
             {viewIndex >= 0 ? viewIndex + 1 : total}/{total}
