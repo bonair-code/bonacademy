@@ -1,8 +1,8 @@
 rules_version = '2';
 
 // Capella Academy — Cloud Storage kuralları
-// SCORM paket içeriği kurs materyalidir (gizli değil) → giriş yapmış kullanıcı
-// okuyabilir. Yükleme/değişiklik yalnızca staff (upload Function/akışı) üzerinden.
+// Kurs içeriği (content/, scorm/) yalnızca ADMIN, EĞİTMEN ve eğitim kendisine
+// atanmış kişiye açık. Yükleme yalnızca içeriği hazırlayan roller.
 // Sertifika PDF'leri kişiseldir → sahibi + staff okur.
 service firebase.storage {
   match /b/{bucket}/o {
@@ -11,6 +11,21 @@ service firebase.storage {
     function isAdmin()   { return signedIn() && role() == 'ADMIN'; }
     function isManager() { return signedIn() && role() == 'MANAGER'; }
     function isInstructor() { return signedIn() && role() == 'INSTRUCTOR'; }
+
+    // Kurs içeriği için rol ve atama Firestore'dan okunur (cross-service).
+    // Claim'e güvenilmiyor: claim'i olmayan eski hesaplar da var.
+    function isContentStaff() {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+             in ['ADMIN', 'INSTRUCTOR'];
+    }
+    // Kişiye atanmış ve erişimi engellenmemiş eğitim (atama id'si `${uid}_${courseId}`).
+    function hasCourseAccess(courseId) {
+      return signedIn()
+        && firestore.exists(/databases/(default)/documents/assignments/$(request.auth.uid + '_' + courseId))
+        && firestore.get(/databases/(default)/documents/assignments/$(request.auth.uid + '_' + courseId))
+             .data.get('accessBlocked', false) != true;
+    }
 
     // Kurs kapak görseli: covers/{courseId}/...
     // Kapak kurs kataloğunun bir parçası — eğitimi atanan herkes (müşteri dahil)
@@ -22,17 +37,18 @@ service firebase.storage {
 
     // SCORM paket içeriği: scorm/{courseId}/{revision}/...
     match /scorm/{courseId}/{allPaths=**} {
-      allow read: if signedIn();
+      allow read: if isContentStaff() || hasCourseAccess(courseId);
       allow write: if isAdmin() || isManager();
     }
 
-    // Bölüm içerikleri (PDF / SCORM zip): content/{courseId}/{sectionId}/...
-    // NOT: Storage kuralları rolü Firestore'dan okuyamaz ve henüz custom claim
-    // yok. Geçici olarak giriş yapmış kullanıcıya yazma izni (şu an yalnızca
-    // staff kullanıyor). Claim Function'ı gelince isAdmin/isInstructor'a daraltılacak.
+    // Bölüm içerikleri (PDF / video / SCORM dosyaları): content/{courseId}/{sectionId}/...
+    // Okuma: ADMIN, EĞİTMEN ve eğitim kendisine atanmış kişi. Yükleme yalnızca
+    // içeriği hazırlayan roller (CourseDetail).
+    // NOT: getDownloadURL'nin jetonlu adresleri kuralları atlar; o adresler
+    // sections dokümanında durduğu için Firestore kuralıyla korunuyor.
     match /content/{courseId}/{allPaths=**} {
-      allow read: if signedIn();
-      allow write: if signedIn();
+      allow read: if isContentStaff() || hasCourseAccess(courseId);
+      allow write: if isContentStaff();
     }
 
     // Dışarıdan alınan eğitim belgeleri: externalCertificates/{userId}/...

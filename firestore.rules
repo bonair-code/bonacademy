@@ -24,6 +24,13 @@ service cloud.firestore {
     function isStaff()      { return signedIn() && myRole() != 'CUSTOMER'; }
     function courseData(cid){ return get(/databases/$(database)/documents/courses/$(cid)).data; }
     function ownsCourse(cid){ return isInstructor() && courseData(cid).ownerInstructorId == request.auth.uid; }
+    // Kursun İÇERİĞİNE erişim: kişiye atanmış ve erişimi engellenmemiş olmalı.
+    // Atama id'si belirlenimci (`${userId}_${courseId}`); atama kaldırılınca
+    // (cancelAssignment) belge silinir ve içerik kapanır, sertifika kalır.
+    function hasCourseAccess(cid) {
+      let a = /databases/$(database)/documents/assignments/$(request.auth.uid + '_' + cid);
+      return signedIn() && exists(a) && get(a).data.get('accessBlocked', false) != true;
+    }
 
     // ---- USERS ----
     match /users/{uid} {
@@ -72,11 +79,14 @@ service cloud.firestore {
                           .hasAny(['isActive', 'publishedLangs']));
       allow delete: if isAdmin() || ownsCourse(cid);
 
-      // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). İçerik kurs
-      // materyalidir → çalışan okuyabilir (sıra/başlık/SCORM yolu); yalnızca
-      // ADMIN veya sahibi EĞİTMEN düzenler.
+      // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). Dosya adresleri
+      // (PDF/video indirme URL'si, SCORM yolu) burada → yalnızca ADMIN,
+      // EĞİTMEN ve eğitim kendisine atanmış (erişimi engellenmemiş) kişi
+      // okur; müdür de yalnızca kendi atamasıyla. Kurs meta dokümanı listeler
+      // (pano kartı, matris, sertifika) için açık kalıyor.
+      // Yalnızca ADMIN veya sahibi EĞİTMEN düzenler.
       match /sections/{sid} {
-        allow read: if signedIn();
+        allow read: if isAdmin() || isInstructor() || hasCourseAccess(cid);
         allow write: if isAdmin() || ownsCourse(cid);
       }
 

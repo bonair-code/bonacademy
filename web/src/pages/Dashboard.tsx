@@ -119,12 +119,14 @@ function useAssignmentCards(rows: Assignment[]) {
       await Promise.all(
         ids.map(async (id) => {
           try {
+            // Bölümler yalnızca erişimi açık atamada okunabilir (kural); o okuma
+            // düşerse kurs bilgisi de kaybolmasın diye ayrı yakalanıyor.
             const [c, secs] = await Promise.all([
               getDoc(doc(db, "courses", id)),
-              getDocs(collection(db, "courses", id, "sections")),
+              getDocs(collection(db, "courses", id, "sections")).catch(() => null),
             ]);
             if (c.exists()) found[id] = { id: c.id, ...(c.data() as Omit<Course, "id">) };
-            counts[id] = secs.size;
+            if (secs) counts[id] = secs.size;
           } catch {
             // Kurs okunamazsa kart yine basılır; yalnızca açıklama/eğitmen boş kalır.
           }

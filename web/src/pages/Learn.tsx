@@ -13,6 +13,7 @@ import { db, functions } from "../lib/firebase";
 import { ORG } from "../lib/org";
 import { PdfReader } from "../components/PdfReader";
 import { ScormPlayer } from "../components/ScormPlayer";
+import { useScormSrc } from "../lib/scormAccess";
 import { ExamRunner, type ExamQ } from "../components/ExamRunner";
 import { ExamIntro } from "../components/ExamIntro";
 
@@ -109,7 +110,9 @@ export function Learn() {
           snap.docs
             .map((d) => ({ id: d.id, ...(d.data() as any) }))
             .filter((s: Section) => asLang(s.lang) === lang)
-        )
+        ),
+      // Erişim engellenince/atama kalkınca kural okumayı reddeder.
+      () => setSections([])
     );
   }, [a?.courseId, a?.contentLanguage]);
 
@@ -1080,15 +1083,33 @@ function ContentViewer({
         />
       )}
       {item.type === "SCORM" && (
-        <ScormPlayer
-          src={`${SCORM_SERVE_BASE}/${item.basePath}${item.entryPoint}`}
-          fileName={item.fileName}
-          onDone={onDone}
-          assignmentId={assignmentId}
-          contentId={item.id}
-        />
+        <ScormContent item={item} onDone={onDone} assignmentId={assignmentId} />
       )}
     </div>
+  );
+}
+
+/** SCORM, kursa özel erişim anahtarı alındıktan sonra açılır. */
+function ScormContent({
+  item,
+  onDone,
+  assignmentId,
+}: {
+  item: Extract<Content, { type: "SCORM" }>;
+  onDone: () => void;
+  assignmentId?: string;
+}) {
+  const { src, err } = useScormSrc(SCORM_SERVE_BASE, item.basePath, item.entryPoint);
+  if (err) return <p className="text-sm text-red-600">Content could not be opened: {err}</p>;
+  if (!src) return <p className="text-sm text-slate-400">Loading…</p>;
+  return (
+    <ScormPlayer
+      src={src}
+      fileName={item.fileName}
+      onDone={onDone}
+      assignmentId={assignmentId}
+      contentId={item.id}
+    />
   );
 }
 
