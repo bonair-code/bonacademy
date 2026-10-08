@@ -150,6 +150,12 @@ export function Learn() {
   const selectedIndex = selected ? sections.findIndex((s) => s.id === selected) : -1;
   const viewIndex = selectedIndex >= 0 ? selectedIndex : currentIndex;
   const isViewingCurrent = viewIndex === currentIndex;
+  /**
+   * Sınav ya da "tamamlandı" ekranındayken raydan bir bölüm seçildi: o bölüm
+   * gösterilir. Eskiden bu ekranlarda bölüm görünümü hiç çizilmiyordu,
+   * raydaki bölüme tıklamak hiçbir şey yapmıyordu.
+   */
+  const reviewing = selectedIndex >= 0;
   const viewDone = viewIndex >= 0 ? done.has(sections[viewIndex].id) : false;
 
   /**
@@ -267,27 +273,11 @@ export function Learn() {
     }
   }
 
-  /**
-   * Bölüm, materyali bitince KENDİLİĞİNDEN tamamlanır. Eskiden kişi PDF'i
-   * okuyup "I completed this section"a basmadan sonraki bölüme geçince ilk
-   * bölüm tamamlanmamış kalıyor, ikinci bölümü okuması da sayılmıyordu
-   * (sunucu sırayı zorunlu tutuyor). Şimdi: tamamlanmamış ilk bölümün bütün
-   * materyali tüketildiyse kaydedilir; ardından sıradaki bölüm de önceden
-   * okunduysa o da hemen kaydedilir. Düğme hata durumunda elle yedek.
+  /*
+   * Bölüm KENDİLİĞİNDEN tamamlanmaz (CAPELLA isteği): materyalin son sayfasına
+   * gelince ekran bir sonraki bölüme atlıyordu. Kişi materyali bitirir,
+   * "Complete this section"a basar, sonra sıradaki bölüme geçilir.
    */
-  const autoDone = useRef<string | null>(null);
-  useEffect(() => {
-    if (!id || busy || currentIndex < 0) return;
-    if (a?.status === "COMPLETED" || a?.status === "CANCELLED") return;
-    const sec = sections[currentIndex];
-    const items = contentsOf(sec);
-    if (items.length === 0 || items.some((c) => !consumed[c.id])) return;
-    if (autoDone.current === sec.id) return;
-    autoDone.current = sec.id;
-    void completeCurrent();
-    // completeCurrent her render'da yeniden oluşuyor; tetikleyici yukarıdakiler.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, busy, currentIndex, sections, consumed, a?.status]);
 
   async function beginExam(language?: Lang) {
     if (!id) return;
@@ -335,11 +325,8 @@ export function Learn() {
         /* yok say */
       }
       // 2. başarısızlıkta sunucu bölümleri sıfırladı: bu oturumdaki okuma
-      // sayılmamalı, yoksa otomatik tamamlama bölümleri hemen geri işaretler.
-      if ((res.data as any)?.status === "RETAKE_REQUIRED") {
-        setConsumed({});
-        autoDone.current = null;
-      }
+      // sayılmamalı — kişi materyali yeniden bitirmeli.
+      if ((res.data as any)?.status === "RETAKE_REQUIRED") setConsumed({});
       setExam(null);
     } catch (e) {
       setErr((e as Error).message);
@@ -518,6 +505,7 @@ export function Learn() {
           viewIndex={viewIndex}
           examRequired={examRequired !== false}
           status={a.status}
+          examActive={!!exam}
           onSelect={(id) => setSelected(id)}
         />
 
@@ -558,7 +546,7 @@ export function Learn() {
       )}
 
       {/* TAMAMLANDI */}
-      {!result && a.status === "COMPLETED" && (
+      {!result && !reviewing && a.status === "COMPLETED" && (
         <div className="card p-4 sm:p-6 border-l-4 border-l-emerald-500">
           <div className="text-xl font-bold text-emerald-700">You have completed this training ✓</div>
           <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
@@ -583,13 +571,13 @@ export function Learn() {
       )}
 
       {/* SINAVA HAZIR — giriş ekranı: bilgiler, dil seçimi, kurallar */}
-      {!result && !exam && id && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
+      {!result && !exam && !reviewing && id && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
         <ExamIntro assignmentId={id} busy={busy} onStart={(l) => void beginExam(l)} />
       )}
 
       {/* BÖLÜMLER */}
-      {!result && !exam && a.status !== "COMPLETED" && a.status !== "SECTIONS_DONE" &&
-        a.status !== "EXAM_FAILED" && (
+      {!result && !exam && (reviewing || (a.status !== "COMPLETED" && a.status !== "SECTIONS_DONE" &&
+        a.status !== "EXAM_FAILED")) && (
           <div>
             {viewIndex >= 0 && sections[viewIndex] && (
               <div className="card p-3 sm:p-5">
@@ -674,7 +662,7 @@ export function Learn() {
                     {!canComplete && viewContents.length > 0 && (
                       <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
                         <p className="text-[13px] font-semibold text-amber-900">
-                          Go through the material — the section completes automatically.
+                          Go through the material, then press “Complete this section”.
                         </p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
                           {remaining.length} of {viewContents.length} item(s) still open — read
@@ -689,7 +677,7 @@ export function Learn() {
                       title={canComplete ? undefined : "Finish the material above first"}
                       className="btn-primary mt-4 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {busy ? "Saving…" : "I completed this section →"}
+                      {busy ? "Saving…" : "Complete this section →"}
                     </button>
                   </>
                 ) : viewDone ? (
@@ -697,7 +685,11 @@ export function Learn() {
                     onClick={() => setSelected(null)}
                     className="btn-secondary text-xs py-2 mt-4"
                   >
-                    Back to section {currentIndex + 1} →
+                    {currentIndex < 0
+                      ? a.status === "COMPLETED"
+                        ? "Back →"
+                        : "Back to exam →"
+                      : `Back to section ${currentIndex + 1} →`}
                   </button>
                 ) : (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3 flex-wrap">
@@ -810,6 +802,7 @@ function ProgressRail({
   viewIndex,
   examRequired,
   status,
+  examActive,
   onSelect,
 }: {
   sections: Section[];
@@ -819,6 +812,8 @@ function ProgressRail({
   viewIndex: number;
   examRequired: boolean;
   status: string;
+  /** Sınav sürüyor: bölüme geçilmez (cevaplar ve süre sınav ekranında). */
+  examActive: boolean;
   onSelect: (sectionId: string | null) => void;
 }) {
   /** Telefonda bölüm listesi kapalı başlar; masaüstünde bu durum kullanılmıyor. */
@@ -890,11 +885,12 @@ function ProgressRail({
         return (
           <button
             key={s.id}
+            disabled={examActive}
             onClick={() => {
               onSelect(isCurrent ? null : s.id);
               setOpen(false);
             }}
-            title={s.title}
+            title={examActive ? "Finish the exam first" : s.title}
             className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
               isViewed
                 ? "bg-slate-100 text-slate-900 font-semibold"
@@ -917,18 +913,26 @@ function ProgressRail({
           <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
             Assessment
           </div>
-          <div
-            className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] ${
-              passed
-                ? "text-slate-600"
-                : examOpen
+          <button
+            type="button"
+            disabled={!examOpen && !passed}
+            onClick={() => {
+              onSelect(null);
+              setOpen(false);
+            }}
+            className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
+              (examOpen || passed) && viewIndex < 0
                 ? "bg-slate-100 text-slate-900 font-semibold"
-                : "text-slate-400"
+                : passed
+                ? "text-slate-600 hover:bg-slate-50"
+                : examOpen
+                ? "text-slate-700 hover:bg-slate-50"
+                : "text-slate-400 cursor-default"
             }`}
           >
             {bubble(passed ? "done" : examOpen ? "current" : "locked", passed ? "✓" : examOpen ? "!" : "🔒")}
             <span className="min-w-0 truncate">Exam</span>
-          </div>
+          </button>
         </>
       )}
       </div>
