@@ -4,6 +4,7 @@ import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebase";
 import { useAuth, profileIncomplete } from "../lib/auth";
 import { ORG } from "../lib/org";
+import { placeCase } from "../lib/text";
 
 /**
  * İlk giriş akışı. İki adım: geçici şifreyi değiştir, eksik profil bilgilerini
@@ -60,7 +61,7 @@ export function Onboarding() {
     setErr(null);
     try {
       await updateDoc(doc(db, "users", profile.uid), {
-        birthPlace: birthPlace.trim(),
+        birthPlace: placeCase(birthPlace),
         birthDate,
         profileCompletedAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -158,6 +159,7 @@ export function Onboarding() {
                   <input
                     className="input mb-3"
                     value={birthPlace}
+                    onBlur={() => setBirthPlace(placeCase(birthPlace))}
                     onChange={(e) => setBirthPlace(e.target.value)}
                     placeholder="İstanbul"
                     autoFocus

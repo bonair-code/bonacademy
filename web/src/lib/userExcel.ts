@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { placeCase } from "./text";
 
 export type Role = "ADMIN" | "MANAGER" | "INSTRUCTOR" | "USER" | "CUSTOMER";
 export type Ref = { id: string; name: string };
@@ -275,7 +276,7 @@ export async function parseUserWorkbook(
       jobTitleNames: jobTitleIds.map(
         (id) => jobTitles.find((j) => j.id === id)?.name ?? id
       ),
-      birthPlace: String(raw["Place of Birth"] ?? "").trim() || null,
+      birthPlace: placeCase(String(raw["Place of Birth"] ?? "")) || null,
       birthDate,
       password: pwRaw || randomPassword(),
       generatedPassword: !pwRaw,

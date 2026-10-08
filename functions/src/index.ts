@@ -17,6 +17,20 @@ initializeApp();
  * kurulumunda yaşandı). */
 const REGION = "europe-west3";
 
+/**
+ * Yer adı biçimi: her kelimenin ilk harfi büyük, gerisi küçük (Türkçe harf
+ * kurallarıyla). Doğum yeri sertifikaya basılıyor; istemcideki
+ * web/src/lib/text.ts → placeCase ile aynı kural.
+ */
+function placeCase(s: unknown): string {
+  return String(s ?? "")
+    .trim()
+    .replace(/s+/g, " ")
+    .split(/([ -])/)
+    .map((w) => (w === " " || w === "-" ? w : w.charAt(0).toLocaleUpperCase("tr") + w.slice(1).toLocaleLowerCase("tr")))
+    .join("");
+}
+
 // CUSTOMER: dışarıdan eğitim alan müşteri. Personel değil — yetki kapsamı
 // taşımaz, kurum uyum raporlarına girmez, yalnızca kendi eğitimine erişir.
 const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
@@ -41,7 +55,7 @@ export const createUser = onCall({ region: REGION, invoker: "public" }, async (r
   // Kapsam altındaki tikli alt yetkiler — kendi gerekli eğitimlerini getirir.
   const subScopeIds: string[] = Array.isArray(d.subScopeIds) ? d.subScopeIds.map(String) : [];
   // Sertifikada "PLACE & DATE of BIRTH" satırı için gerekli.
-  const birthPlace = d.birthPlace ? String(d.birthPlace).trim() : null;
+  const birthPlace = d.birthPlace ? placeCase(d.birthPlace) || null : null;
   const birthDate = d.birthDate ? String(d.birthDate).trim() : null; // YYYY-MM-DD
   // Müşteri hangi kuruma bağlı — "X şirketinin aldığı eğitimler" raporu için.
   const company = d.company ? String(d.company).trim() : null;
@@ -122,7 +136,7 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   if (d.departmentId !== undefined) patch.departmentId = d.departmentId ? String(d.departmentId) : null;
   if (Array.isArray(d.jobTitleIds)) patch.jobTitleIds = d.jobTitleIds.map(String);
   if (Array.isArray(d.subScopeIds)) patch.subScopeIds = d.subScopeIds.map(String);
-  if (d.birthPlace !== undefined) patch.birthPlace = d.birthPlace ? String(d.birthPlace).trim() : null;
+  if (d.birthPlace !== undefined) patch.birthPlace = d.birthPlace ? placeCase(d.birthPlace) || null : null;
   if (d.birthDate !== undefined) patch.birthDate = d.birthDate ? String(d.birthDate).trim() : null;
   if (d.company !== undefined) patch.company = d.company ? String(d.company).trim() : null;
   if (d.courseMethods !== undefined) patch.courseMethods = sanitizeCourseMethods(d.courseMethods);
@@ -777,7 +791,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     serialNo,
     issuedAt: now,
     // — dondurulan alanlar —
-    birthPlace: user.birthPlace ?? null,
+    birthPlace: user.birthPlace ? placeCase(user.birthPlace) : null,
     birthDate: user.birthDate ?? null,
     durationHours: course.durationHours ?? null,
     // Hangi kurs revizyonunda eğitim alındığı — denetimde ilk sorulan şey.
@@ -1181,7 +1195,7 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
       attendeeId: d.id,
       userId: a.userId ?? null,
       userName: a.fullName ?? "",
-      birthPlace: a.birthPlace ?? null,
+      birthPlace: a.birthPlace ? placeCase(a.birthPlace) : null,
       birthDate: a.birthDate ?? null,
       courseId: ses.courseId ?? null,
       courseTitle: ses.courseTitle ?? "",
@@ -1532,7 +1546,7 @@ export const importCertificates = onCall({ region: REGION, invoker: "public" }, 
           userDepartmentId: user?.departmentId ?? null,
           courseId: course?.id ?? null,
           courseTitle: course?.title ?? String(r.courseTitle ?? "").trim(),
-          birthPlace: r.birthPlace ? String(r.birthPlace).trim() : user?.birthPlace ?? null,
+          birthPlace: r.birthPlace ? placeCase(r.birthPlace) : user?.birthPlace ? placeCase(user.birthPlace) : null,
           birthDate: r.birthDate ? String(r.birthDate).trim() : user?.birthDate ?? null,
           instructorName: r.instructorName ? String(r.instructorName).trim() : null,
           durationHours: r.durationHours != null ? Number(r.durationHours) : null,

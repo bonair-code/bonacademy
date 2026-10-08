@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { placeCase } from "./text";
 
 /**
  * Geçmiş sertifikaların Excel şablonu ve okuyucusu.
@@ -169,7 +170,7 @@ export async function parseCertWorkbook(file: File): Promise<CertParseResult> {
       serialNo,
       name,
       email: String(r["Email"] ?? "").trim() || null,
-      birthPlace: String(r["Birth Place"] ?? "").trim() || null,
+      birthPlace: placeCase(String(r["Birth Place"] ?? "")) || null,
       birthDate: toISODate(r["Birth Date"]),
       courseTitle: String(r["Training Name"] ?? "").trim(),
       instructorName: String(r["Instructor"] ?? "").trim() || null,

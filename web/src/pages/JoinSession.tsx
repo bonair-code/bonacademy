@@ -15,6 +15,7 @@ import {
   pubInput,
   pubLabel,
 } from "../components/PublicShell";
+import { placeCase } from "../lib/text";
 
 type Session = {
   courseTitle: string;
@@ -74,7 +75,7 @@ export function JoinSession() {
         fullName,
         firstName: firstName.trim().toLocaleUpperCase("tr"),
         lastName: lastName.trim().toLocaleUpperCase("tr"),
-        birthPlace: birthPlace.trim().toLocaleUpperCase("tr") || null,
+        birthPlace: placeCase(birthPlace) || null,
         birthDate: birthDate || null,
         // Personel eşleşmesi SUNUCUDA, sınıf kapatılırken ada göre yapılır.
         // Bu form girişsiz açıldığı için buradan `users` okunamıyor; eskiden
@@ -165,6 +166,7 @@ export function JoinSession() {
             <input
               className={`${pubInput} uppercase`}
               value={birthPlace}
+              onBlur={() => setBirthPlace(placeCase(birthPlace))}
               onChange={(e) => setBirthPlace(e.target.value)}
               placeholder="İSTANBUL"
             />

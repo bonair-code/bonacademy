@@ -13,6 +13,7 @@ import { MultiSelect } from "../MultiSelect";
 import { assignCourses, skipNote } from "../../lib/assign";
 import { subScopesOf, type SubScope } from "../../lib/requirements";
 import { ORG } from "../../lib/org";
+import { placeCase } from "../../lib/text";
 
 export type UserRow = {
   id: string;
@@ -206,7 +207,7 @@ export function UserForm({
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
-          birthPlace: birthPlace.trim() || null,
+          birthPlace: placeCase(birthPlace) || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
           courseMethods: isCustomer ? {} : courseMethods,
@@ -220,7 +221,7 @@ export function UserForm({
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
-          birthPlace: birthPlace.trim() || null,
+          birthPlace: placeCase(birthPlace) || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
           courseMethods: isCustomer ? {} : courseMethods,
@@ -398,6 +399,7 @@ export function UserForm({
           <input
             className="input"
             value={birthPlace}
+            onBlur={() => setBirthPlace(placeCase(birthPlace))}
             onChange={(e) => setBirthPlace(e.target.value)}
             placeholder="e.g. İstanbul"
           />
