@@ -19,6 +19,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage, FUNCTIONS_BASE } from "../lib/firebase";
+import { useScormSrc } from "../lib/scormAccess";
 import { coverTone } from "../lib/coverTone";
 import { asLang, LANGS, LANG_LABEL, ofLang, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
@@ -1576,21 +1577,32 @@ function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => 
               </a>
             </div>
           )}
-          {item.type === "SCORM" && (
-            <div>
-              <iframe
-                src={`${SCORM_SERVE_BASE}/${item.basePath}${item.entryPoint}`}
-                className="w-full h-[68vh] rounded border border-slate-200 bg-white"
-                title={item.fileName}
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Entry: {item.entryPoint} ({item.version === "SCORM_2004" ? "2004" : "1.2"}) ·
-                If it appears blank, the Cloud Function may not be deployed yet.
-              </p>
-            </div>
-          )}
+          {item.type === "SCORM" && <ScormPreview item={item} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScormPreview({ item }: { item: Extract<SectionContent, { type: "SCORM" }> }) {
+  const { src, err } = useScormSrc(SCORM_SERVE_BASE, item.basePath, item.entryPoint);
+  return (
+    <div>
+      {src ? (
+        <iframe
+          src={src}
+          className="w-full h-[68vh] rounded border border-slate-200 bg-white"
+          title={item.fileName}
+        />
+      ) : (
+        <p className={`text-sm ${err ? "text-red-600" : "text-slate-400"}`}>
+          {err ? `Content could not be opened: ${err}` : "Loading…"}
+        </p>
+      )}
+      <p className="text-[11px] text-slate-400 mt-1">
+        Entry: {item.entryPoint} ({item.version === "SCORM_2004" ? "2004" : "1.2"}) ·
+        If it appears blank, the Cloud Function may not be deployed yet.
+      </p>
     </div>
   );
 }

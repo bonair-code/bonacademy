@@ -3,7 +3,7 @@ import { initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
-import { randomBytes } from "crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -1407,12 +1407,89 @@ function typeFor(name: string): string {
   return TYPES[ext] || "application/octet-stream";
 }
 
+// ── SCORM erişim anahtarı ───────────────────────────────────
+// iframe istekleri kimlik başlığı taşımaz; bu yüzden içerik, scormAccess'in
+// verdiği imzalı anahtarla açılır. Anahtar YOLUN İÇİNDE durur
+// (/a/<anahtar>/content/...): paketin göreli yolları (./style.css) da onu
+// kendiliğinden taşır. İmza yalnızca "kim, hangi kurs, ne zamana kadar" der;
+// erişim her istekte ayrıca kontrol edilir (kısa önbellekle), böylece atama
+// kaldırılınca/engellenince anahtar bir dakika içinde işe yaramaz olur.
+
+/** Uzun bir SCORM oturumu ortasında kesilmesin diye bir iş günü. */
+const SCORM_TOKEN_TTL_MS = 12 * 60 * 60 * 1000;
+const SCORM_ACCESS_CACHE_MS = 60 * 1000;
+
+let scormKeyCache: Buffer | null = null;
+/** İmza anahtarı ilk kullanımda üretilip saklanır; istemci kuralları bu koleksiyonu kapatıyor. */
+async function scormSecret(): Promise<Buffer> {
+  if (scormKeyCache) return scormKeyCache;
+  const ref = getFirestore().doc("appSecrets/scormAccess");
+  // create() varsa başarısız olur — aynı anda iki örnek üretse de tek anahtar kalır.
+  await ref.create({ key: randomBytes(32).toString("hex"), createdAt: FieldValue.serverTimestamp() }).catch(() => {});
+  const key = String((await ref.get()).data()?.key || "");
+  if (!key) throw new Error("scorm secret missing");
+  scormKeyCache = Buffer.from(key, "hex");
+  return scormKeyCache;
+}
+
+/** Kurs içeriğini kim görebilir: ADMIN, EĞİTMEN, ya da eğitim atanmış ve engellenmemiş kişi. */
+async function canReadCourseContent(uid: string, courseId: string): Promise<boolean> {
+  const db = getFirestore();
+  const [u, a] = await Promise.all([
+    db.doc(`users/${uid}`).get(),
+    db.doc(`assignments/${uid}_${courseId}`).get(),
+  ]);
+  const role = u.data()?.role;
+  if (role === "ADMIN" || role === "INSTRUCTOR") return true;
+  return a.exists && a.data()?.accessBlocked !== true;
+}
+
+const accessCache = new Map<string, { ok: boolean; at: number }>();
+async function canReadCached(uid: string, courseId: string): Promise<boolean> {
+  const k = `${uid}|${courseId}`;
+  const hit = accessCache.get(k);
+  if (hit && Date.now() - hit.at < SCORM_ACCESS_CACHE_MS) return hit.ok;
+  const ok = await canReadCourseContent(uid, courseId);
+  if (accessCache.size > 5000) accessCache.clear();
+  accessCache.set(k, { ok, at: Date.now() });
+  return ok;
+}
+
+async function verifyScormToken(token: string): Promise<{ u: string; c: string } | null> {
+  const [body, sig] = token.split(".");
+  if (!body || !sig) return null;
+  const want = createHmac("sha256", await scormSecret()).update(body).digest();
+  const got = Buffer.from(sig, "base64url");
+  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
+  try {
+    const x = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+    if (typeof x?.u !== "string" || typeof x?.c !== "string" || !(x.e > Date.now())) return null;
+    return { u: x.u, c: x.c };
+  } catch {
+    return null;
+  }
+}
+
+/** SCORM içeriğini açmak için kursa özel, süreli anahtar. */
+export const scormAccess = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
+  const courseId = String(req.data?.courseId || "");
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(courseId))
+    throw new HttpsError("invalid-argument", "courseId is required.");
+  if (!(await canReadCourseContent(req.auth.uid, courseId)))
+    throw new HttpsError("permission-denied", "You do not have access to this training.");
+  const exp = Date.now() + SCORM_TOKEN_TTL_MS;
+  const body = Buffer.from(JSON.stringify({ u: req.auth.uid, c: courseId, e: exp })).toString("base64url");
+  const sig = createHmac("sha256", await scormSecret()).update(body).digest("base64url");
+  return { token: `${body}.${sig}`, exp };
+});
+
 /**
  * SCORM / bölüm içeriklerini aynı-origin, DİZİN YAPISI korunarak servis eder.
  * iframe içinde SCORM'un `res/index.html` → `./style.css` gibi göreli yolları
- * doğru çözülsün diye gerekli. URL: /serveScormContent/content/<...>/index.html
- * Eğitim materyali olduğu için şimdilik public (yol içindeki rastgele id ile
- * korunuyor); ileride auth eklenebilir.
+ * doğru çözülsün diye gerekli.
+ * URL: /serveScormContent/a/<anahtar>/content/<courseId>/.../index.html
+ * Anahtarsız ya da kursla eşleşmeyen istek reddedilir (bkz. scormAccess).
  */
 export const serveScormContent = onRequest(
   {
@@ -1432,17 +1509,25 @@ export const serveScormContent = onRequest(
      * yapıyordu — dosya hiçbir zaman bulunamıyordu.
      */
     const idx = p.indexOf("/content/");
-    if (idx >= 0) p = p.slice(idx + 1);
-    else if (!p.startsWith("content/")) {
-      res.status(400).send("path required (content/...)");
+    if (idx < 0) {
+      res.status(400).send("path required (a/<token>/content/...)");
       return;
     }
+    // Anahtar, content/'ten hemen önceki "/a/<anahtar>" parçası.
+    const token = /\/a\/([^/]+)$/.exec(p.slice(0, idx))?.[1];
+    p = p.slice(idx + 1);
     // güvenlik: yalnızca content/ altını servis et, .. engelle
     if (p.includes("..")) {
       res.status(403).send("forbidden");
       return;
     }
     try {
+      const courseId = p.split("/")[1] || "";
+      const grant = token ? await verifyScormToken(token) : null;
+      if (!grant || grant.c !== courseId || !(await canReadCached(grant.u, courseId))) {
+        res.status(403).send("forbidden");
+        return;
+      }
       const file = getStorage().bucket().file(p);
       const [exists] = await file.exists();
       if (!exists) {
@@ -1450,7 +1535,8 @@ export const serveScormContent = onRequest(
         return;
       }
       res.set("Content-Type", typeFor(p));
-      res.set("Cache-Control", "public, max-age=3600");
+      // private: Hosting CDN'i saklayıp anahtarsız birine sunmasın.
+      res.set("Cache-Control", "private, max-age=3600");
       res.set("Access-Control-Allow-Origin", "*");
       file
         .createReadStream()
