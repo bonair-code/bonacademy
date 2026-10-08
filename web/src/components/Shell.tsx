@@ -220,33 +220,32 @@ function ShellLayout({ children }: { children: ReactNode }) {
         className={`w-[232px] shrink-0 flex flex-col h-screen h-[100dvh] z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ background: "var(--sidebar-bg)", borderRight: "1px solid rgba(255,255,255,.07)" }}
+        style={{
+          background: "linear-gradient(180deg, #16213d 0%, var(--sidebar-bg) 60%)",
+          borderRight: "1px solid rgba(255,255,255,.07)",
+        }}
       >
-        {/* Antet bandı: logo koyu metinli olduğu için beyaz zemine oturmak
-            zorunda. Kart yerine tam genişlikte bir bant — basılı evraktaki
-            antet mantığı, logo da en büyük burada duruyor. */}
-        <div className="bg-white px-3.5 py-4 flex items-center justify-center">
-          <img src="/Logo.png" alt="Capella Aviation Solutions" className="h-[46px] w-auto" />
-        </div>
-
-        <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
-          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+        {/* Logo giriş ekranındaki gibi: beyaz, kutusuz, ortalı. Altında iki ucu
+            eriyen ince çizgi (eski "CAPELLA ACADEMY / TRAINING MANAGEMENT
+            SYSTEM" yazılarının yerine). */}
+        <div className="flex flex-col items-center px-4 pt-6 pb-3">
+          <img
+            src="/Logo.png"
+            alt={ORG.name}
+            className="h-[38px] w-auto"
+            style={{ filter: "brightness(0) invert(1)" }}
+          />
           <span
-            className="text-[8.5px] font-bold whitespace-nowrap"
-            style={{ color: "#98989d", letterSpacing: "0.15em" }}
-          >
-            {ORG.productName.toUpperCase()}
-          </span>
-          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+            className="mt-4 h-px w-full"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent, rgba(126,162,230,.65) 30%, rgba(126,162,230,.65) 70%, transparent)",
+            }}
+            aria-hidden
+          />
         </div>
-        <p
-          className="text-center text-[8.5px] font-bold uppercase px-3 pb-1"
-          style={{ color: "#98989d", letterSpacing: "0.15em", lineHeight: 1.6 }}
-        >
-          Training Management System
-        </p>
 
-        <nav className="flex-1 pb-3 overflow-y-auto">
+        <nav className="flex-1 pb-3 overflow-y-auto sidebar-scroll">
           {GROUP_ORDER.map((g) => {
             const inGroup = items.filter((n) => n.group === g);
             if (inGroup.length === 0) return null;
@@ -268,44 +267,12 @@ function ShellLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Kimlik bloğu buraya taşındı — üst barda ikinci kez göstermek
-            gereksizdi. Çıkış da kimliğin yanında duruyor. */}
-        {/* Telefonda tarayıcının alttaki (yüzen) araç çubuğu bu bölümün üstüne
-            biniyordu; çıkış düğmesine ulaşılamıyordu. Güvenli alan + çubuk payı. */}
-        <div className="px-2 py-2 max-lg:pb-[calc(env(safe-area-inset-bottom)+4.5rem)]" style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
-          <div className="flex items-center gap-[9px] px-2 py-1.5 rounded-[10px]">
-            <div
-              className="h-[26px] w-[26px] rounded-full grid place-items-center text-[10.5px] font-bold shrink-0"
-              style={{ background: "rgba(126,162,230,.22)", color: "#a9c1ef" }}
-            >
-              {initials || "?"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-semibold text-white leading-tight truncate">
-                {profile?.name || "User"}
-              </div>
-              <div className="text-[10.5px] leading-tight truncate" style={{ color: "#98989d" }}>
-                {ROLE_LABEL[r]}
-              </div>
-            </div>
-            <button
-              onClick={() => signOut()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="shrink-0 h-7 w-7 grid place-items-center rounded-lg text-white/55 hover:text-white hover:bg-white/10 transition"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-4 w-4"
-              >
-                <path d="M15 17l5-5-5-5M20 12H9M12 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <AccountRow
+          name={profile?.name || "User"}
+          role={ROLE_LABEL[r]}
+          initials={initials || "?"}
+          onSignOut={() => signOut()}
+        />
       </aside>
 
       <main className="flex-1 min-w-0 flex flex-col">
@@ -350,6 +317,97 @@ function ShellLayout({ children }: { children: ReactNode }) {
           <ReportFootnote />
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Menünün altındaki hesap satırı: küçük avatar, ad, rol ve güç simgesi.
+ * Simgeye basınca aynı satırda "Sign out?" onayı çıkar — tek dokunuşla
+ * yanlışlıkla çıkış yapılmasın. Esc ya da Cancel onayı kapatır.
+ *
+ * Telefonda tarayıcının alttaki (yüzen) araç çubuğu bu bölümün üstüne
+ * biniyordu; güvenli alan + çubuk payı bırakılıyor.
+ */
+function AccountRow({
+  name,
+  role,
+  initials,
+  onSignOut,
+}: {
+  name: string;
+  role: string;
+  initials: string;
+  onSignOut: () => void;
+}) {
+  const [ask, setAsk] = useState(false);
+  useEffect(() => {
+    if (!ask) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAsk(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ask]);
+  return (
+    <div className="px-2 pt-1.5 pb-2.5 max-lg:pb-[calc(env(safe-area-inset-bottom)+4.5rem)]">
+      <div
+        className="relative flex items-center gap-2 px-2 py-2"
+        style={{ borderTop: "1px solid rgba(255,255,255,.07)" }}
+      >
+        <div
+          className="h-6 w-6 rounded-full grid place-items-center text-[9.5px] font-bold shrink-0"
+          style={{ background: "rgba(126,162,230,.22)", color: "#a9c1ef" }}
+        >
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="text-[12px] font-semibold truncate" style={{ color: "#e8edf7" }}>
+            {name}
+          </div>
+          <div className="text-[10px] truncate" style={{ color: "#8a98b8" }}>
+            {role}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAsk(true)}
+          title="Sign out"
+          aria-label="Sign out"
+          className="shrink-0 h-[26px] w-[26px] grid place-items-center rounded-full transition text-[#8a98b8] hover:text-[#ff9b96] hover:bg-[rgba(224,51,44,.18)]"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-[15px] w-[15px]" aria-hidden>
+            <path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" />
+          </svg>
+        </button>
+
+        {/* Satır içi onay */}
+        <div
+          role="dialog"
+          aria-label="Sign out?"
+          className={`absolute inset-x-0 inset-y-1 flex items-center gap-1.5 px-1.5 rounded-[10px] transition-opacity duration-150 ${
+            ask ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          style={{ background: "#1e2a4a" }}
+        >
+          <span className="flex-1 pl-1 text-[12px] font-semibold text-white">Sign out?</span>
+          <button
+            type="button"
+            onClick={() => setAsk(false)}
+            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold transition hover:bg-white/15"
+            style={{ background: "rgba(255,255,255,.08)", color: "#d3daea" }}
+            tabIndex={ask ? 0 : -1}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold text-white bg-[#e0332c] hover:bg-[#c92a24] transition"
+            tabIndex={ask ? 0 : -1}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
