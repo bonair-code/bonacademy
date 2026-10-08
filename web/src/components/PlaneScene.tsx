@@ -89,6 +89,7 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
         const hgt = size.y * k;
 
         prop = replacePropeller(model, pivot);
+        addTailStar(model, pivot);
         tips[0].set(0, 0.25 * hgt, span / 2 - 0.05);
         tips[1].set(0, 0.25 * hgt, -span / 2 + 0.05);
         onReady();
@@ -130,15 +131,18 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
 
     // ── Yerleşim: geniş ekranda uçak solda, dar ekranda üstte ──
     const base = new THREE.Vector3();
+    let narrow = false;
     const layout = () => {
       const w = canvas.clientWidth || window.innerWidth;
       const h = canvas.clientHeight || window.innerHeight;
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      const narrow = w < 1024;
-      base.set(narrow ? 0 : -2.2, narrow ? 2.7 : 0, 0);
-      jet.scale.setScalar(narrow ? 0.44 : 1);
+      narrow = w < 1024;
+      // Telefonda uçak logo ile panel arasındaki boşluğun ortasında
+      // (eskiden 2.7 idi, logonun üstüne biniyordu).
+      base.set(narrow ? 0 : -2.2, narrow ? 1.95 : 0, 0);
+      jet.scale.setScalar(narrow ? 0.46 : 1);
     };
     window.addEventListener("resize", layout);
     layout();
@@ -196,8 +200,15 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
         const p = Math.min(1, (t - t0) / FLIGHT);
         const e = ease(p);
         const s = smooth(Math.min(1, p * 1.6));
-        jet.position.set(start.x + e * 19, start.y + e * 2.6 + s * 0.2, start.z + e * 3);
-        jet.rotation.set(0.1 + 0.32 * s, -0.55 + 0.25 * s, 0.14 * s);
+        if (narrow) {
+          // Telefon: burnunu aşağı ve izleyiciye çevirip ekranın altından çıkar
+          // (sağa uçsa dar ekranda hemen kayboluyordu).
+          jet.position.set(start.x + e * 1.2, start.y - e * 13 + s * 0.15, start.z + e * 5);
+          jet.rotation.set(0.1 - 0.15 * s, -0.55 - 0.75 * s, -0.75 * s);
+        } else {
+          jet.position.set(start.x + e * 19, start.y + e * 2.6 + s * 0.2, start.z + e * 3);
+          jet.rotation.set(0.1 + 0.32 * s, -0.55 + 0.25 * s, 0.14 * s);
+        }
         // İz yalnızca uçak hızlanınca (başta aynı noktada birikip leke yapıyordu)
         if (p > 0.18 && p < 0.92) {
           jet.updateMatrixWorld();
@@ -259,6 +270,76 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
   }, [onReady, onFail]);
 
   return <canvas ref={ref} className="absolute inset-0 h-full w-full" aria-hidden />;
+}
+
+/**
+ * Dikey kuyruğun iki yüzüne Capella yıldızı (logonun sol kısmı, Logo.png'nin
+ * ilk ~97 pikseli). Kuyruk modelden ölçülür: arka bölümün en yüksek noktası
+ * kuyruk ucu; onun biraz altındaki dilimin kirişi ve kalınlığı çıkartmanın
+ * yerini ve boyunu verir. Yıldız her iki yüzde de uçuş yönüne (buruna) bakar.
+ */
+function addTailStar(model: THREE.Object3D, pivot: THREE.Object3D) {
+  pivot.updateMatrixWorld(true);
+  const inv = pivot.matrixWorld.clone().invert();
+  const v = new THREE.Vector3();
+  const pts: number[][] = [];
+  model.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (!m.isMesh) return;
+    const p = m.geometry.attributes.position;
+    for (let i = 0; i < p.count; i += 2) {
+      v.fromBufferAttribute(p as THREE.BufferAttribute, i).applyMatrix4(m.matrixWorld).applyMatrix4(inv);
+      pts.push([v.x, v.y, v.z]);
+    }
+  });
+  if (!pts.length) return;
+  // Kuyruk burnun tersinde
+  let minX = Infinity, maxX = -Infinity;
+  for (const [x] of pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+  const len = maxX - minX;
+  const tailSign = NOSE_FLIP ? 1 : -1;
+  const tailX = NOSE_FLIP ? maxX : minX;
+  const rear = pts.filter(([x]) => (tailX - x) * tailSign < len * 0.3);
+  let yTop = -Infinity;
+  for (const [, y] of rear) yTop = Math.max(yTop, y);
+  // Kuyruk ucunun altındaki dilim: kiriş (x aralığı) ve yüzey (z)
+  const band = rear.filter(([, y, z]) => y < yTop - 0.18 && y > yTop - 0.6 && Math.abs(z) < 0.25);
+  if (band.length < 10) return;
+  let bx0 = Infinity, bx1 = -Infinity, zMax = -Infinity, zMin = Infinity;
+  for (const [x, , z] of band) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); zMax = Math.max(zMax, z); zMin = Math.min(zMin, z); }
+  const chord = bx1 - bx0;
+  const size = Math.min(chord * 0.62, 0.5);
+  const cx = (bx0 + bx1) / 2;
+  const cy = yTop - 0.4;
+
+  const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 256;
+    const g = c.getContext("2d")!;
+    const sw = 97, sh = img.naturalHeight; // yıldız + kuyruk çizgileri
+    const k = 240 / Math.max(sw, sh);
+    g.drawImage(img, 0, 0, sw, sh, (256 - sw * k) / 2, (256 - sh * k) / 2, sw * k, sh * k);
+    const make = (flip: boolean) => {
+      const t = new THREE.CanvasTexture(c);
+      t.colorSpace = THREE.SRGBColorSpace;
+      t.anisotropy = 4;
+      if (flip) { t.wrapS = THREE.RepeatWrapping; t.repeat.x = -1; t.offset.x = 1; }
+      return new THREE.MeshStandardMaterial({
+        map: t, transparent: true, alphaTest: 0.05, roughness: 0.45, metalness: 0.1,
+        polygonOffset: true, polygonOffsetFactor: -4,
+      });
+    };
+    const geo = new THREE.PlaneGeometry(size, size);
+    // +z yüzü: görüntünün sağı kuyruk tarafı → yıldız buruna baksın diye aynalı
+    const right = new THREE.Mesh(geo, make(NOSE_FLIP));
+    right.position.set(cx, cy, zMax + 0.004);
+    const left = new THREE.Mesh(geo, make(!NOSE_FLIP));
+    left.rotation.y = Math.PI;
+    left.position.set(cx, cy, zMin - 0.004);
+    pivot.add(right, left);
+  };
+  img.src = "/Logo.png";
 }
 
 /**
