@@ -18,6 +18,19 @@ initializeApp();
 const REGION = "europe-west3";
 
 /**
+ * İngilizce klavyeyle büyük "I" ile yazılınca Türkçe kural onu noktasız ı
+ * sayıyor ("Istanbul" → "Istanbul", sertifikada "ıstanbul" bile çıktı).
+ * Noktalı İ ile başlayan yaygın yer adları düzeltilir; anahtar ı → i
+ * çevrilerek aranır. (Isparta, Iğdır noktasız — listede yok.)
+ */
+const DOTTED_I: Record<string, string> = {
+  istanbul: "İstanbul",
+  izmir: "İzmir",
+  izmit: "İzmit",
+  iskenderun: "İskenderun",
+};
+
+/**
  * Yer adı biçimi: her kelimenin ilk harfi büyük, gerisi küçük (Türkçe harf
  * kurallarıyla). Doğum yeri sertifikaya basılıyor; istemcideki
  * web/src/lib/text.ts → placeCase ile aynı kural.
@@ -25,9 +38,14 @@ const REGION = "europe-west3";
 function placeCase(s: unknown): string {
   return String(s ?? "")
     .trim()
-    .replace(/s+/g, " ")
+    // \s — eskiden "s" yazılmıştı: yer adındaki her "s" boşluğa dönüyordu
+    .replace(/\s+/g, " ")
     .split(/([ -])/)
-    .map((w) => (w === " " || w === "-" ? w : w.charAt(0).toLocaleUpperCase("tr") + w.slice(1).toLocaleLowerCase("tr")))
+    .map((w) => {
+      if (w === " " || w === "-") return w;
+      const low = w.toLocaleLowerCase("tr");
+      return DOTTED_I[low.replace(/ı/g, "i")] ?? low.charAt(0).toLocaleUpperCase("tr") + low.slice(1);
+    })
     .join("");
 }
 
@@ -143,7 +161,34 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   if (typeof d.isActive === "boolean") patch.isActive = d.isActive;
 
   const oldDept = snap.data()?.departmentId ?? null;
+  const old = snap.data() || {};
   await snap.ref.update(patch);
+
+  /**
+   * Kimlik bilgisi düzeltilince (yazım hatası: "Berkan" → "Berkay",
+   * "Istanbul" → "İstanbul") sertifikalar da düzeltilir. Sertifika verildiği
+   * anki bilgileri dondurur, ama yanlış yazılmış bir ad dondurulacak bir bilgi
+   * değil, hatadır: belge ve QR doğrulama sayfası doğrusunu göstermeli.
+   */
+  const certFix: Record<string, unknown> = {};
+  if (typeof patch.name === "string" && patch.name !== old.name) certFix.userName = patch.name;
+  if (patch.birthPlace !== undefined && patch.birthPlace !== (old.birthPlace ?? null))
+    certFix.birthPlace = patch.birthPlace;
+  if (patch.birthDate !== undefined && patch.birthDate !== (old.birthDate ?? null))
+    certFix.birthDate = patch.birthDate;
+  if (Object.keys(certFix).length) {
+    const certs = await db.collection("certificates").where("userId", "==", uid).get();
+    for (let i = 0; i < certs.docs.length; i += 200) {
+      const batch = db.batch();
+      for (const c of certs.docs.slice(i, i + 200)) {
+        batch.update(c.ref, certFix);
+        const token = c.data().verifyToken;
+        if (token && certFix.userName)
+          batch.set(db.doc(`certVerify/${token}`), { name: certFix.userName }, { merge: true });
+      }
+      await batch.commit();
+    }
+  }
 
   /**
    * Departman değişince KAYITLAR da güncellenmeli.
