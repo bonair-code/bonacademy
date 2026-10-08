@@ -46,6 +46,8 @@ type Assignment = {
   languageChosen?: boolean;
   /** Kaçıncı kez alınıyor — sertifika kimliği buna bağlı. */
   cycleNumber?: number;
+  /** Geçilen sınavın notu (submitExam yazar). */
+  examScore?: number | null;
   /** Yönetici erişimi engelledi (setAssignmentAccess). */
   accessBlocked?: boolean;
 };
@@ -500,7 +502,7 @@ export function Learn() {
         </Modal>
       )}
 
-      <div className="grid lg:grid-cols-[230px_1fr] gap-3 items-start">
+      <div className="grid lg:grid-cols-[260px_1fr] gap-3 items-start">
         <ProgressRail
           sections={sections}
           done={done}
@@ -509,6 +511,7 @@ export function Learn() {
           examRequired={examRequired !== false}
           status={a.status}
           examActive={!!exam}
+          examScore={a.examScore}
           onSelect={(id) => setSelected(id)}
         />
 
@@ -798,6 +801,13 @@ function Spinner() {
   );
 }
 
+/**
+ * Sol panel — "C, gruplu liste" tasarımı (CAPELLA/ilerleme-tasarimlari.html):
+ * iPhone Ayarlar gibi gri zemin üstünde beyaz gruplar. Üstte her adım için
+ * ayrı bir çubuk parçası; her satırda simge kutusu, başlık ve durum satırı.
+ * Bitmiş bölüm ve sınav satırı tıklanınca açılır; sınav sürerken bölümler
+ * kilitli (cevaplar ve süre sınav ekranında).
+ */
 function ProgressRail({
   sections,
   done,
@@ -806,6 +816,7 @@ function ProgressRail({
   examRequired,
   status,
   examActive,
+  examScore,
   onSelect,
 }: {
   sections: Section[];
@@ -817,127 +828,167 @@ function ProgressRail({
   status: string;
   /** Sınav sürüyor: bölüme geçilmez (cevaplar ve süre sınav ekranında). */
   examActive: boolean;
+  examScore?: number | null;
   onSelect: (sectionId: string | null) => void;
 }) {
-  /** Telefonda bölüm listesi kapalı başlar; masaüstünde bu durum kullanılmıyor. */
+  /** Telefonda liste kapalı başlar; masaüstünde bu durum kullanılmıyor. */
   const [open, setOpen] = useState(false);
   const passed = status === "COMPLETED" || status === "EXAM_PASSED";
   const examOpen = status === "SECTIONS_DONE" || status === "EXAM_FAILED";
   const total = sections.length + (examRequired ? 1 : 0);
   const doneCount = done.size + (passed && examRequired ? 1 : 0);
-  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const bubble = (kind: "done" | "current" | "locked", label: string) => (
+  type Kind = "done" | "current" | "todo";
+  const icon = (kind: Kind, label: string) => (
     <span
-      className={`h-[18px] w-[18px] rounded-full grid place-items-center text-[9.5px] font-extrabold shrink-0 ${
-        kind === "done"
-          ? "bg-emerald-100 text-emerald-700"
-          : kind === "current"
-          ? "bg-brand-600 text-white"
-          : "bg-slate-100 text-slate-400"
+      className={`h-6 w-6 rounded-[7px] grid place-items-center text-[11px] font-bold text-white shrink-0 ${
+        kind === "done" ? "bg-[#30b15a]" : kind === "current" ? "bg-brand-600" : "bg-[#c7c7cc]"
       }`}
       aria-hidden="true"
     >
       {label}
     </span>
   );
+  const row = (opts: {
+    key: string;
+    kind: Kind;
+    label: string;
+    title: string;
+    sub: string;
+    active: boolean;
+    disabled: boolean;
+    onClick: () => void;
+    hint?: string;
+  }) => (
+    <button
+      key={opts.key}
+      type="button"
+      disabled={opts.disabled}
+      onClick={() => {
+        opts.onClick();
+        setOpen(false);
+      }}
+      title={opts.hint ?? opts.title}
+      className={`group relative w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition disabled:cursor-default ${
+        opts.active ? "bg-[#eef2f9]" : "hover:bg-[#f8f8fa] disabled:hover:bg-transparent"
+      } [&+&]:before:content-[''] [&+&]:before:absolute [&+&]:before:left-[46px] [&+&]:before:right-0 [&+&]:before:top-0 [&+&]:before:h-px [&+&]:before:bg-[#e5e5ea]`}
+    >
+      {icon(opts.kind, opts.label)}
+      <span className="flex-1 min-w-0">
+        <span
+          // Ad tam görünür, gerekirse alt satıra iner (kesilmesin — CAPELLA isteği).
+          className={`block text-[13px] leading-snug break-words ${
+            opts.kind === "todo" && !opts.active ? "text-[#8e8e93]" : "text-slate-900"
+          } ${opts.active ? "font-semibold" : "font-medium"}`}
+        >
+          {opts.title}
+        </span>
+        <span
+          className={`block text-[11.5px] ${
+            opts.kind === "current" ? "text-brand-600 font-medium" : "text-[#86868b]"
+          }`}
+        >
+          {opts.sub}
+        </span>
+      </span>
+      {!opts.disabled && <span className="text-[#c7c7cc] text-[15px] shrink-0">›</span>}
+    </button>
+  );
+
+  const examKind: Kind = passed ? "done" : examOpen ? "current" : "todo";
+  const examSub = passed
+    ? examScore != null
+      ? `Passed · ${examScore}%`
+      : "Passed"
+    : status === "EXAM_FAILED"
+    ? "Retake available"
+    : examOpen
+    ? "Ready to start"
+    : "After all sections";
 
   return (
-    <div className="card p-1.5 lg:sticky lg:top-[72px]">
-      <div className="px-2.5 pt-2 pb-1">
-        <div className="flex justify-between text-[11px] text-slate-500">
-          <span>Progress</span>
-          <span className={`font-semibold ${pct === 100 ? "text-emerald-700" : "text-slate-700"}`}>
-            {doneCount}/{total}
-          </span>
-        </div>
-        <div className="h-[5px] rounded-full bg-slate-100 overflow-hidden mt-1.5">
-          <div
-            className="h-full rounded-full transition-[width] duration-300"
-            style={{ width: `${pct}%`, background: pct === 100 ? "#30b15a" : "#2b4685" }}
+    <div className="rounded-2xl bg-[#f2f2f7] p-3 lg:sticky lg:top-[72px]">
+      <div className="flex items-baseline justify-between px-1.5 pb-2">
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-slate-900">Progress</span>
+        <span className={`text-[12px] ${doneCount === total && total > 0 ? "text-[#30b15a] font-semibold" : "text-[#86868b]"}`}>
+          {doneCount} of {total}
+        </span>
+      </div>
+      {/* Her adım için bir parça: hangi adımda olunduğu tek bakışta. */}
+      <div className="flex gap-1 px-1.5 pb-3">
+        {sections.map((s, i) => (
+          <span
+            key={s.id}
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              done.has(s.id) ? "bg-[#30b15a]" : i === currentIndex ? "bg-brand-600" : "bg-[#d1d1d6]"
+            }`}
           />
-        </div>
+        ))}
+        {examRequired && (
+          <span
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              passed ? "bg-[#30b15a]" : examOpen ? "bg-brand-600" : "bg-[#d1d1d6]"
+            }`}
+          />
+        )}
       </div>
 
-      {/* Telefonda raf içeriğin ÜSTÜNE yığılıyor: bütün bölüm listesini
-          geçmeden eğitime ulaşılamıyordu. Kapalı başlar, ilerleme çubuğu
-          yukarıda görünmeye devam eder. Masaüstünde her zaman açık. */}
+      {/* Telefonda liste içeriğin ÜSTÜNE yığılıyor: bütün listeyi geçmeden
+          eğitime ulaşılamıyordu. Kapalı başlar; çubuk üstte görünmeye devam eder. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="lg:hidden w-full flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+        className="lg:hidden w-full flex items-center justify-between rounded-xl bg-white px-3 py-2.5 text-[13px] font-medium text-slate-800"
       >
-        <span>
-          Sections
-          <span className="ml-1.5 font-normal text-slate-400">
-            {Math.min(viewIndex + 1, total)}/{total}
+        <span className="text-left leading-snug">
+          {viewIndex >= 0 ? sections[viewIndex]?.title : "Exam"}
+          <span className="ml-1.5 text-[#86868b] font-normal">
+            {viewIndex >= 0 ? viewIndex + 1 : total}/{total}
           </span>
         </span>
-        <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+        <span className={`text-[#c7c7cc] transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
       </button>
 
-      <div className={open ? "" : "hidden lg:block"}>
-      <div className="hidden lg:block text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
-        Sections
-      </div>
-      {sections.map((s, i) => {
-        const isDone = done.has(s.id);
-        const isCurrent = i === currentIndex;
-        const isViewed = i === viewIndex;
-        return (
-          <button
-            key={s.id}
-            disabled={examActive}
-            onClick={() => {
-              onSelect(isCurrent ? null : s.id);
-              setOpen(false);
-            }}
-            title={examActive ? "Finish the exam first" : s.title}
-            className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
-              isViewed
-                ? "bg-slate-100 text-slate-900 font-semibold"
-                : isDone
-                ? "text-slate-600 hover:bg-slate-50"
-                : "text-slate-400 hover:bg-slate-50"
-            }`}
-          >
-            {bubble(
-              isDone ? "done" : isCurrent ? "current" : "locked",
-              isDone ? "✓" : isCurrent ? String(i + 1) : String(i + 1)
-            )}
-            <span className="min-w-0 truncate">{s.title}</span>
-          </button>
-        );
-      })}
+      <div className={open ? "mt-3" : "hidden lg:block"}>
+        <div className="text-[11px] uppercase tracking-[0.04em] text-[#86868b] px-2.5 pb-1.5">Sections</div>
+        <div className="rounded-xl bg-white overflow-hidden">
+          {sections.map((s, i) => {
+            const isDone = done.has(s.id);
+            const isCurrent = i === currentIndex;
+            return row({
+              key: s.id,
+              kind: isDone ? "done" : isCurrent ? "current" : "todo",
+              label: isDone ? "✓" : String(i + 1),
+              title: s.title,
+              sub: isDone ? "Completed" : isCurrent ? "In progress" : "Not started",
+              active: i === viewIndex,
+              disabled: examActive,
+              hint: examActive ? "Finish the exam first" : undefined,
+              onClick: () => onSelect(isCurrent ? null : s.id),
+            });
+          })}
+        </div>
 
-      {examRequired && (
-        <>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
-            Assessment
-          </div>
-          <button
-            type="button"
-            disabled={!examOpen && !passed}
-            onClick={() => {
-              onSelect(null);
-              setOpen(false);
-            }}
-            className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
-              (examOpen || passed) && viewIndex < 0
-                ? "bg-slate-100 text-slate-900 font-semibold"
-                : passed
-                ? "text-slate-600 hover:bg-slate-50"
-                : examOpen
-                ? "text-slate-700 hover:bg-slate-50"
-                : "text-slate-400 cursor-default"
-            }`}
-          >
-            {bubble(passed ? "done" : examOpen ? "current" : "locked", passed ? "✓" : examOpen ? "!" : "🔒")}
-            <span className="min-w-0 truncate">Exam</span>
-          </button>
-        </>
-      )}
+        {examRequired && (
+          <>
+            <div className="text-[11px] uppercase tracking-[0.04em] text-[#86868b] px-2.5 pt-3.5 pb-1.5">
+              Assessment
+            </div>
+            <div className="rounded-xl bg-white overflow-hidden">
+              {row({
+                key: "exam",
+                kind: examKind,
+                label: examKind === "done" ? "✓" : "★",
+                title: "Exam",
+                sub: examSub,
+                active: (examOpen || passed) && viewIndex < 0,
+                disabled: !examOpen && !passed,
+                onClick: () => onSelect(null),
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
