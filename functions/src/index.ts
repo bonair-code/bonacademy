@@ -351,6 +351,23 @@ export const publishCourse = onCall({ region: REGION, invoker: "public" }, async
     updatedAt: FieldValue.serverTimestamp(),
   });
 
+  // Kurs adı değiştiyse bitmemiş atamalardaki kopyayı da güncelle: öğrenci
+  // panelinde ve atama listesinde eski ad kalmasın. Biten atamalara dokunulmaz
+  // — onlar o günkü adla verilmiş bir kaydın parçası.
+  const title = String(c.title ?? "").trim();
+  if (title) {
+    const stale = await db.collection("assignments").where("courseId", "==", courseId).get();
+    const batch = db.batch();
+    let n = 0;
+    for (const d of stale.docs) {
+      const x = d.data() as any;
+      if (x.courseTitle === title || x.status === "COMPLETED" || x.status === "CANCELLED") continue;
+      batch.update(d.ref, { courseTitle: title });
+      n++;
+    }
+    if (n) await batch.commit();
+  }
+
   return { revisionNo, active: true };
 });
 
@@ -738,6 +755,10 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     const ins = await db.doc(`users/${course.ownerInstructorId}`).get();
     instructorName = ins.data()?.name || "";
   }
+  // Ad KURSTAN okunur: atamadaki courseTitle atama anında kopyalanıyor ve kurs
+  // sonradan yeniden adlandırılırsa eski adı taşıyordu (sertifikaya eski ad
+  // basılıyordu). Belge verildiği anki adla dondurulur.
+  const courseTitle = String(course.title || a.courseTitle || "");
   const org = (await db.doc("orgSettings/singleton").get()).data() || {};
   const [serialNo] = await nextSerialNo();
   const verifyToken = newVerifyToken();
@@ -752,7 +773,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     // güvenlik kuralı bu alana bakıyor.
     userDepartmentId: a.userDepartmentId ?? null,
     courseId: a.courseId,
-    courseTitle: a.courseTitle,
+    courseTitle,
     serialNo,
     issuedAt: now,
     // — dondurulan alanlar —
@@ -780,7 +801,7 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
   await db.doc(`certVerify/${verifyToken}`).set({
     serialNo,
     name: userName,
-    courseTitle: a.courseTitle,
+    courseTitle,
     issuedAt: now,
   });
 }
