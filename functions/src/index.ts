@@ -4,7 +4,7 @@ import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "fir
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
-import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
+import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -694,6 +694,60 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
   return { created, skipped, mail };
 });
 
+
+/**
+ * Hatırlatma e-postası: atanmış ama bitmemiş eğitim için kişiye elle
+ * gönderilir (Assign Training → ⋮ → Send reminder). Son tarih ve ilerleme
+ * (kaç bölüm bitti) mailde yazar. Ne zaman ve kaç kez hatırlatıldığı atamada
+ * tutulur; liste "Reminded …" diye gösterir.
+ */
+export const sendAssignmentReminder = onCall(
+  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] },
+  async (req) => {
+    await assertCanManageAssignments(req.auth?.uid);
+    const assignmentId = String(req.data?.assignmentId || "");
+    if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+    const db = getFirestore();
+    const ref = db.doc(`assignments/${assignmentId}`);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
+    const a = snap.data() as any;
+    if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
+      throw new HttpsError("failed-precondition", "This training is already completed.");
+    if (a.status === "CANCELLED") throw new HttpsError("failed-precondition", "This assignment was withdrawn.");
+    if (a.accessBlocked)
+      throw new HttpsError("failed-precondition", "Access to this training is blocked — restore access first.");
+
+    const u = (await db.doc(`users/${a.userId}`).get()).data();
+    if (!u?.email) throw new HttpsError("failed-precondition", "This person has no email address.");
+    if (u.isActive === false) throw new HttpsError("failed-precondition", "This person's account is inactive.");
+
+    const total = (await courseSections(a.courseId, asLang(a.contentLanguage))).length;
+    const done = Array.isArray(a.sectionsDone) ? a.sectionsDone.length : 0;
+    const m = reminderMail(mailLang(u.locale), {
+      name: u.name || u.email,
+      title: String(a.courseTitle || ""),
+      dueDate: a.dueDate?.toDate?.() ?? null,
+      done: Math.min(done, total),
+      total,
+      started: done > 0 || a.status !== "PENDING",
+      link: `${appUrl()}/learn/${assignmentId}`,
+    });
+    const res = await sendMail({
+      to: u.email,
+      ...m,
+      type: "REMINDER",
+      userId: a.userId,
+      meta: { assignmentId, sentById: req.auth!.uid },
+    });
+    if (!res.ok) throw new HttpsError("unavailable", "The reminder could not be sent: " + res.error);
+    await ref.update({
+      lastReminderAt: FieldValue.serverTimestamp(),
+      reminderCount: FieldValue.increment(1),
+    });
+    return { ok: true };
+  }
+);
 
 /** Atama işlemleri admin ve eğitmenin: eğitimi veren yönetir. */
 async function assertCanManageAssignments(uid?: string) {

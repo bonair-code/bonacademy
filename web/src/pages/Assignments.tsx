@@ -45,6 +45,9 @@ type Assignment = {
   /** Yönetici erişimi engelledi: eğitim açılmaz, sertifika kişide görünmez. */
   accessBlocked?: boolean;
   accessBlockReason?: string | null;
+  /** Elle gönderilen hatırlatma e-postası (sendAssignmentReminder). */
+  lastReminderAt?: Timestamp | null;
+  reminderCount?: number;
 };
 type UserRow = {
   id: string;
@@ -87,6 +90,21 @@ export function Assignments() {
   const [departments, setDepartments] = useState<Map<string, string>>(new Map());
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** Hatırlatma gönderilen satır — çift tıklamayla iki mail gitmesin. */
+  const [reminding, setReminding] = useState<string | null>(null);
+  async function remind(a: Assignment, name: string) {
+    if (reminding) return;
+    setReminding(a.id);
+    setToast(`Sending a reminder to ${name}…`);
+    try {
+      await httpsCallable(functions, "sendAssignmentReminder")({ assignmentId: a.id });
+      setToast(`Reminder emailed to ${name}.`);
+    } catch (e) {
+      setToast((e as Error).message);
+    } finally {
+      setReminding(null);
+    }
+  }
   /** Sıfırlama / geri alma penceresi. */
   const [act, setAct] = useState<{ kind: ActKind; row: Assignment } | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -366,6 +384,12 @@ export function Assignments() {
                           {Math.round((now - due) / DAY)} days late
                         </span>
                       )}
+                      {a.lastReminderAt && !isDone(a.status) && (
+                        <span className="block text-[10.5px] text-slate-400" title="Last reminder email">
+                          Reminded {fmt(a.lastReminderAt)}
+                          {(a.reminderCount ?? 0) > 1 ? ` (${a.reminderCount}×)` : ""}
+                        </span>
+                      )}
                     </td>
                     <td className="td">
                       <span
@@ -436,6 +460,16 @@ export function Assignments() {
                         label={`Actions for ${a.courseTitle}`}
                         items={[
                           { label: "Open person", icon: "→", to: `/team/${a.userId}` },
+                          // Bitmemiş, açık eğitim için hatırlatma e-postası.
+                          ...(!isDone(a.status) && a.status !== "CANCELLED" && !a.accessBlocked
+                            ? [
+                                {
+                                  label: reminding === a.id ? "Sending…" : "Send reminder",
+                                  icon: "✉",
+                                  onClick: () => void remind(a, u?.name ?? "the person"),
+                                },
+                              ]
+                            : []),
                           {
                             label: "Reset training",
                             icon: "⟲",

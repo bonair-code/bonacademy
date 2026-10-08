@@ -200,3 +200,58 @@ ${button(p.link, "Eğitime başla")}
   const text = `Sayın ${p.name},\n\nCapella Academy'de size aşağıdaki eğitim atanmıştır:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (son tarih ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nBaşlamak için: ${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
   return { subject, html, text };
 }
+
+/**
+ * Hatırlatma: atanmış ama bitmemiş eğitim. Yönetici Assign Training'den elle
+ * gönderir. Son tarih yaklaştı mı / geçti mi ve ne kadarının bittiği yazar.
+ */
+export function reminderMail(
+  lang: MailLang,
+  p: { name: string; title: string; dueDate: Date | null; done: number; total: number; started: boolean; link: string }
+) {
+  const now = Date.now();
+  const days = p.dueDate ? Math.ceil((p.dueDate.getTime() - now) / 86_400_000) : null;
+  const late = days !== null && days < 0;
+  const dueTxt =
+    p.dueDate === null
+      ? ""
+      : lang === "en"
+      ? late
+        ? `<b style="color:#b91c1c">Overdue since ${fmtDate(p.dueDate)}</b>`
+        : `Due: <b style="color:#334155">${fmtDate(p.dueDate)}</b>${days !== null && days <= 14 ? ` (${days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} left`})` : ""}`
+      : late
+      ? `<b style="color:#b91c1c">Son tarih geçti (${fmtDate(p.dueDate)})</b>`
+      : `Son tarih: <b style="color:#334155">${fmtDate(p.dueDate)}</b>${days !== null && days <= 14 ? ` (${days === 0 ? "bugün" : `${days} gün kaldı`})` : ""}`;
+  const progTxt =
+    p.total > 0
+      ? lang === "en"
+        ? `${p.done} of ${p.total} sections completed`
+        : `${p.total} bölümden ${p.done} tamamlandı`
+      : "";
+  const card = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px"><tr><td style="padding:14px 16px"><div style="font-weight:600;font-size:15px;color:#0f172a">${esc(p.title)}</div><div style="font-size:13px;color:#64748b;margin-top:3px">${[dueTxt, progTxt].filter(Boolean).join(" · ")}</div></td></tr></table>`;
+
+  if (lang === "en") {
+    const subject = late ? `Overdue training: ${p.title}` : `Reminder: ${p.title}`;
+    const html = shell(
+      `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">This is a reminder that the following training assigned to you on Capella Academy has not been completed yet:</p>
+${card}
+${button(p.link, p.started ? "Continue training" : "Start training")}
+${plainLink(p.link, "If the button does not work, copy this address into your browser:")}`,
+      lang
+    );
+    const text = `Dear ${p.name},\n\nReminder: the training "${p.title}" assigned to you on Capella Academy has not been completed yet.${p.dueDate ? ` Due: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    return { subject, html, text };
+  }
+  const subject = late ? `Son tarihi geçen eğitim: ${p.title}` : `Hatırlatma: ${p.title}`;
+  const html = shell(
+    `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">Capella Academy'de size atanan aşağıdaki eğitim henüz tamamlanmamıştır:</p>
+${card}
+${button(p.link, p.started ? "Eğitime devam et" : "Eğitime başla")}
+${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırın:")}`,
+    lang
+  );
+  const text = `Sayın ${p.name},\n\nHatırlatma: Capella Academy'de size atanan "${p.title}" eğitimi henüz tamamlanmamıştır.${p.dueDate ? ` Son tarih: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  return { subject, html, text };
+}
