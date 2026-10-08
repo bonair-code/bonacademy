@@ -255,3 +255,41 @@ ${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırı
   const text = `Sayın ${p.name},\n\nHatırlatma: Capella Academy'de size atanan "${p.title}" eğitimi henüz tamamlanmamıştır.${p.dueDate ? ` Son tarih: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
   return { subject, html, text };
 }
+
+/**
+ * Yönetici şifreyi sıfırladı (Users → Reset password): geçici şifre kişiye
+ * gider. Kişi ilk girişte kendi şifresini belirlemek zorunda
+ * (mustChangePassword), geçici şifre o anda geçersiz olur.
+ */
+export function tempPasswordMail(lang: MailLang, p: { name: string; email: string; password: string }) {
+  const login = `${appUrl()}/login`;
+  const pwBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0"><tr><td style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;font-family:Menlo,Consolas,monospace;font-size:17px;letter-spacing:.04em;color:#0f172a">${esc(p.password)}</td></tr></table>`;
+  if (lang === "en") {
+    const subject = "Your temporary Capella Academy password";
+    const html = shell(
+      `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 14px">A temporary password has been set for your <b>Capella Academy</b> account.</p>
+<p style="margin:0">Sign-in email: <b>${esc(p.email)}</b></p>
+<p style="margin:12px 0 0">Temporary password:</p>
+${pwBox}
+${button(login, "Sign in")}
+<p style="margin:0;font-size:13px;color:#64748b">When you sign in you will be asked to choose your own password; the temporary one stops working then. If you did not expect this email, please write to ${REPLY_TO}.</p>`,
+      lang
+    );
+    const text = `Dear ${p.name},\n\nA temporary password has been set for your Capella Academy account.\nSign-in email: ${p.email}\nTemporary password: ${p.password}\n\nSign in: ${login}\nYou will be asked to choose your own password when you sign in.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    return { subject, html, text };
+  }
+  const subject = "Capella Academy geçici şifreniz";
+  const html = shell(
+    `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 14px"><b>Capella Academy</b> hesabınız için geçici bir şifre oluşturulmuştur.</p>
+<p style="margin:0">Giriş e-postanız: <b>${esc(p.email)}</b></p>
+<p style="margin:12px 0 0">Geçici şifreniz:</p>
+${pwBox}
+${button(login, "Giriş yap")}
+<p style="margin:0;font-size:13px;color:#64748b">Giriş yaptığınızda kendi şifrenizi belirlemeniz istenecektir; geçici şifre o anda geçersiz olur. Bu e-postayı beklemiyorsanız lütfen ${REPLY_TO} adresine yazınız.</p>`,
+    lang
+  );
+  const text = `Sayın ${p.name},\n\nCapella Academy hesabınız için geçici bir şifre oluşturulmuştur.\nGiriş e-postanız: ${p.email}\nGeçici şifreniz: ${p.password}\n\nGiriş: ${login}\nGiriş yaptığınızda kendi şifrenizi belirlemeniz istenecektir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  return { subject, html, text };
+}

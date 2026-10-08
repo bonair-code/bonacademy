@@ -4,7 +4,7 @@ import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "fir
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
-import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
+import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, tempPasswordMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -1830,7 +1830,7 @@ export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public
  *
  * Kim, kime, ne zaman sıfırladı kullanıcı kaydına yazılır.
  */
-export const setUserPassword = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const setUserPassword = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -1860,7 +1860,16 @@ export const setUserPassword = onCall({ region: REGION, invoker: "public" }, asy
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  return { ok: true, email: target.data()?.email ?? null };
+  // Geçici şifre kişiye e-postayla (noreply@capella.aero) gider; ilk girişte
+  // kendi şifresini belirlemek zorunda (mustChangePassword yukarıda).
+  const t = target.data() || {};
+  let mail: MailResult | null = null;
+  if (req.data?.notify !== false && t.email) {
+    const m = tempPasswordMail(mailLang(t.locale), { name: t.name || t.email, email: t.email, password });
+    mail = await sendMail({ to: t.email, ...m, type: "TEMP_PASSWORD", userId: uid, meta: { sentById: req.auth.uid } });
+  }
+
+  return { ok: true, email: t.email ?? null, mail };
 });
 
 /**

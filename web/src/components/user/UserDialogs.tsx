@@ -76,6 +76,8 @@ export function PasswordReset({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Geçici şifre kişiye e-postayla gitsin (noreply@capella.aero). */
+  const [notify, setNotify] = useState(true);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,8 +85,15 @@ export function PasswordReset({
     setBusy(true);
     setErr(null);
     try {
-      await httpsCallable(functions, "setUserPassword")({ uid: user.id, password: pw });
-      onDone(`Password reset for ${user.name}.`);
+      const r = await httpsCallable(functions, "setUserPassword")({ uid: user.id, password: pw, notify });
+      const mail = (r.data as { mail?: { ok: boolean } | null }).mail;
+      onDone(
+        !notify
+          ? `Password reset for ${user.name}.`
+          : mail?.ok
+          ? `Password reset — the temporary password was emailed to ${user.email}.`
+          : `Password reset, but the email could not be sent. Pass the password on yourself.`
+      );
     } catch (e2) {
       setErr((e2 as Error).message);
       setBusy(false);
@@ -128,6 +137,11 @@ export function PasswordReset({
       <p className="text-[10px] text-slate-500 mt-1">
         At least 6 characters. Copy it before saving — it is not shown again.
       </p>
+
+      <label className="flex items-center gap-2 mt-3 text-[12.5px] text-slate-700 cursor-pointer">
+        <input type="checkbox" className="accent-brand-600" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+        Email it to <b className="font-semibold">{user.email}</b>
+      </label>
 
       <p className="text-[12px] text-slate-700 mt-3 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-2">
         Temporary password. {user.name} is forced to set their own the next time they sign in.
