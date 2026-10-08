@@ -593,6 +593,15 @@ export function Learn() {
                       Completed
                     </span>
                   )}
+                  {isViewingCurrent && canComplete && (
+                    <button
+                      onClick={completeCurrent}
+                      disabled={busy}
+                      className="btn-primary text-xs py-1.5 px-3 shrink-0 disabled:opacity-40"
+                    >
+                      {busy ? "Saving…" : "Complete this section →"}
+                    </button>
+                  )}
                 </div>
                 {/* Bir bölümde birden fazla materyal varsa TEK TEK gösteriliyor:
                     hepsini alt alta basmak hangisinin bitip hangisinin
@@ -709,6 +718,51 @@ export function Learn() {
                   </div>
                 )}
               </div>
+            )}
+            {/* Ekranın altında yüzen çubuk. Düğme uzun PDF'in altında kalıyordu,
+                öğrenci kaydırmadan göremiyordu. Materyal bitene kadar ne
+                kaldığını söyler; bitince "Complete this section" olur. */}
+            {isViewingCurrent && viewContents.length > 0 && (
+              <>
+                <div className="h-20" aria-hidden />
+                <div className="fixed z-40 left-1/2 -translate-x-1/2 lg:left-[calc(50%+116px)] bottom-[calc(env(safe-area-inset-bottom)+1rem)] max-lg:bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] w-[min(560px,calc(100vw-2rem))] no-print">
+                  {canComplete ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-brand-600 text-white pl-4 pr-2 py-2 shadow-[0_12px_32px_rgba(24,40,75,.35)] animate-[app-land_.35s_ease-out]">
+                      <span className="flex-1 min-w-0 text-[13px] leading-snug">
+                        <b className="font-semibold">Material finished.</b>{" "}
+                        <span className="text-white/75">Complete the section to continue.</span>
+                      </span>
+                      <button
+                        onClick={completeCurrent}
+                        disabled={busy}
+                        className="shrink-0 rounded-xl bg-white text-brand-700 font-semibold text-[13px] px-4 py-2 hover:bg-brand-50 disabled:opacity-60"
+                      >
+                        {busy ? "Saving…" : "Complete this section →"}
+                      </button>
+                    </div>
+                  ) : itemAt < viewContents.length - 1 && consumed[viewContents[itemAt]?.id ?? ""] ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 pl-4 pr-2 py-2 shadow-[0_12px_32px_rgba(15,23,42,.12)]">
+                      <span className="flex-1 min-w-0 text-[13px] text-slate-700">
+                        Item {itemAt + 1} of {viewContents.length} finished.
+                      </span>
+                      <button onClick={() => setItemIndex(itemAt + 1)} className="btn-primary text-[13px] px-4 py-2 shrink-0">
+                        Next item →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 px-4 py-2.5 shadow-[0_12px_32px_rgba(15,23,42,.12)] text-[12.5px] text-slate-600">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" aria-hidden />
+                      <span className="leading-snug">
+                        Go through the material to the end
+                        {viewContents.length > 1
+                          ? ` (${remaining.length} of ${viewContents.length} items left)`
+                          : ""}{" "}
+                        — then you can complete this section.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
             {currentIndex < 0 && sections.length > 0 && (
               <p className="text-sm text-slate-400">All sections finished, updating status…</p>
