@@ -201,10 +201,11 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
         const e = ease(p);
         const s = smooth(Math.min(1, p * 1.6));
         if (narrow) {
-          // Telefon: burnunu aşağı ve izleyiciye çevirip ekranın altından çıkar
-          // (sağa uçsa dar ekranda hemen kayboluyordu).
-          jet.position.set(start.x + e * 1.2, start.y - e * 13 + s * 0.15, start.z + e * 5);
-          jet.rotation.set(0.1 - 0.15 * s, -0.55 - 0.75 * s, -0.75 * s);
+          // Telefon: burnunu kaldırıp tırmanarak ekranın üstünden, uzaklaşarak
+          // çıkar (sağa uçsa dar ekranda hemen kayboluyordu; aşağı dalış da
+          // "düşüyor" gibi yanlış anlaşılıyordu).
+          jet.position.set(start.x + e * 0.8, start.y + e * 11 + s * 0.15, start.z - e * 6);
+          jet.rotation.set(0.1 + 0.2 * s, -0.55 - 0.35 * s, 0.85 * s);
         } else {
           jet.position.set(start.x + e * 19, start.y + e * 2.6 + s * 0.2, start.z + e * 3);
           jet.rotation.set(0.1 + 0.32 * s, -0.55 + 0.25 * s, 0.14 * s);
