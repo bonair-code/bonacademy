@@ -275,8 +275,8 @@ export default function PlaneScene({ onReady, onFail }: { onReady: () => void; o
 /**
  * Dikey kuyruğun iki yüzüne Capella yıldızı (logonun sol kısmı, Logo.png'nin
  * ilk ~97 pikseli). Kuyruk modelden ölçülür: arka bölümün en yüksek noktası
- * kuyruk ucu; onun biraz altındaki dilimin kirişi ve kalınlığı çıkartmanın
- * yerini ve boyunu verir. Yıldız her iki yüzde de uçuş yönüne (buruna) bakar.
+ * kuyruk ucu, genişliğin birden açıldığı seviye kuyruk kökü; yıldız ikisinin
+ * ortasına, o yükseklikteki kirişin ortasına oturur. Yıldız her iki yüzde de uçuş yönüne (buruna) bakar.
  */
 function addTailStar(model: THREE.Object3D, pivot: THREE.Object3D) {
   pivot.updateMatrixWorld(true);
@@ -302,15 +302,23 @@ function addTailStar(model: THREE.Object3D, pivot: THREE.Object3D) {
   const rear = pts.filter(([x]) => (tailX - x) * tailSign < len * 0.3);
   let yTop = -Infinity;
   for (const [, y] of rear) yTop = Math.max(yTop, y);
-  // Kuyruk ucunun altındaki dilim: kiriş (x aralığı) ve yüzey (z)
-  const band = rear.filter(([, y, z]) => y < yTop - 0.18 && y > yTop - 0.6 && Math.abs(z) < 0.25);
+  // Kuyruğun gövdeyle birleştiği yükseklik: uçtan aşağı inerken arka
+  // bölümün genişliği (|z|) birden açıldığı ilk seviye — gövde/yatay kuyruk.
+  let root = yTop - 0.6;
+  for (let y = yTop - 0.1; y > yTop - 2; y -= 0.04) {
+    let w = 0;
+    for (const [, py, pz] of rear) if (py >= y && py < y + 0.04) w = Math.max(w, Math.abs(pz));
+    if (w > 0.16) { root = y + 0.04; break; }
+  }
+  // Yıldız kuyruğun dikeyde ortasında; o yükseklikteki kiriş ve yüzey (z)
+  const cy = (root + yTop) / 2;
+  const band = rear.filter(([, y, z]) => Math.abs(y - cy) < 0.1 && Math.abs(z) < 0.25);
   if (band.length < 10) return;
   let bx0 = Infinity, bx1 = -Infinity, zMax = -Infinity, zMin = Infinity;
   for (const [x, , z] of band) { bx0 = Math.min(bx0, x); bx1 = Math.max(bx1, x); zMax = Math.max(zMax, z); zMin = Math.min(zMin, z); }
   const chord = bx1 - bx0;
-  const size = Math.min(chord * 0.62, 0.5);
+  const size = Math.min(chord * 0.6, (yTop - root) * 0.62, 0.55);
   const cx = (bx0 + bx1) / 2;
-  const cy = yTop - 0.4;
 
   const img = new Image();
   img.onload = () => {
