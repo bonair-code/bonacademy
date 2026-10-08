@@ -64,7 +64,60 @@ export function printCertificate(cert?: Parameters<typeof certificateFileName>[0
     window.addEventListener("afterprint", restore);
     setTimeout(restore, 3000);
   }
-  withPageStyle("@page { size: A4 landscape; margin: 0; }", () => window.print(), "");
+  const undo = isolateForPrint(document.querySelector<HTMLElement>(".cert-print"));
+  withPageStyle(CERT_PRINT_CSS, () => window.print(), "");
+  window.addEventListener("afterprint", undo, { once: true });
+  setTimeout(undo, 3000);
+}
+
+/**
+ * Sertifika baskısı tam bir yatay A4 sayfa.
+ *
+ * Eskiden sayfanın geri kalanı yalnızca `visibility: hidden` ile gizleniyordu:
+ * görünmüyor ama yer kaplıyordu, belge bir sayfadan uzun olunca PDF 2 sayfa
+ * çıkıyordu. Artık sertifikanın dışındaki her şey düzenden çıkarılıyor
+ * (display: none), sertifikayı saran kutular da sıfırlanıyor; geriye
+ * yalnızca 297×210 mm'lik belge kalıyor. Yükseklik 210 mm'nin bir tık altında:
+ * yuvarlama payı boş bir ikinci sayfa açmasın.
+ */
+const CERT_PRINT_CSS = `
+@page { size: A4 landscape; margin: 0; }
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+  .print-hide { display: none !important; }
+  .print-chain {
+    position: static !important; display: block !important; transform: none !important;
+    margin: 0 !important; padding: 0 !important; border: 0 !important; box-shadow: none !important;
+    width: auto !important; min-width: 0 !important; max-width: none !important;
+    height: auto !important; min-height: 0 !important; overflow: visible !important;
+    background: #fff !important;
+  }
+  .cert-print.print-solo {
+    position: static !important; width: 297mm !important; height: 209.5mm !important;
+    aspect-ratio: auto !important; break-inside: avoid; page-break-inside: avoid;
+  }
+}`;
+
+/** Sertifikayı saran zincir dışında her şeyi baskıdan çıkarır; geri alma işlevi döner. */
+function isolateForPrint(sheet: HTMLElement | null): () => void {
+  if (!sheet) return () => {};
+  const marked: [Element, string][] = [];
+  const mark = (el: Element, cls: string) => {
+    el.classList.add(cls);
+    marked.push([el, cls]);
+  };
+  mark(sheet, "print-solo");
+  for (let el: HTMLElement = sheet; el.parentElement && el !== document.body; el = el.parentElement) {
+    const parent = el.parentElement;
+    for (const sib of Array.from(parent.children)) if (sib !== el) mark(sib, "print-hide");
+    if (parent !== document.body) mark(parent, "print-chain");
+  }
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    for (const [el, cls] of marked) el.classList.remove(cls);
+  };
 }
 
 /**
