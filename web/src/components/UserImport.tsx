@@ -9,7 +9,7 @@ import {
   type Ref,
 } from "../lib/userExcel";
 
-type Outcome = { user: ParsedUser; ok: boolean; error?: string };
+type Outcome = { user: ParsedUser; ok: boolean; error?: string; /** Davet e-postası gitti mi (yalnızca şifresiz satırlar). */ invited?: boolean };
 
 /**
  * Excel'den toplu kullanıcı oluşturma. Auth hesabı Function üzerinden açıldığı
@@ -65,7 +65,10 @@ export function UserImport({
     const out: Outcome[] = [];
     for (const u of parsed.users) {
       try {
-        await fn({
+        // Dosyada şifresi olmayana davet e-postası gider: şifresini kendisi
+        // belirler. Eskiden rastgele şifre üretilip bir kez gösteriliyordu,
+        // admin bunları tek tek iletmek zorundaydı.
+        const r = await fn({
           email: u.email,
           name: u.name,
           role: u.role,
@@ -74,9 +77,10 @@ export function UserImport({
           company: u.company,
           birthPlace: u.birthPlace,
           birthDate: u.birthDate,
-          password: u.password,
+          ...(u.generatedPassword ? { invite: true } : { password: u.password }),
         });
-        out.push({ user: u, ok: true });
+        const inv = (r.data as { invite?: { ok: boolean } | null }).invite;
+        out.push({ user: u, ok: true, invited: inv ? inv.ok : undefined });
       } catch (e) {
         out.push({ user: u, ok: false, error: (e as Error).message });
       }
@@ -92,7 +96,8 @@ export function UserImport({
   if (results) {
     const ok = results.filter((r) => r.ok);
     const failed = results.filter((r) => !r.ok);
-    const generated = ok.filter((r) => r.user.generatedPassword);
+    const invited = ok.filter((r) => r.invited === true);
+    const inviteFailed = ok.filter((r) => r.invited === false);
     // Dosyadan okunan toplam satır — "25 / 65" gibi ilerleme gösterebilmek için.
     const total = parsed?.users.length ?? results.length;
     const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
@@ -144,35 +149,20 @@ export function UserImport({
           </div>
         )}
 
-        {generated.length > 0 && (
-          <div className="mb-3">
-            <div className="label">Generated passwords — copy before closing</div>
-            <p className="text-[10px] text-slate-500 mb-1">
-              These rows had no password in the file. They are shown once, here.
-            </p>
-            <div className="max-h-40 overflow-auto rounded-md border border-slate-200">
-              <table className="w-full text-[12px]">
-                <tbody className="divide-y divide-slate-100">
-                  {generated.map((r) => (
-                    <tr key={r.user.email}>
-                      <td className="px-2 py-1 text-slate-700">{r.user.email}</td>
-                      <td className="px-2 py-1 font-mono text-slate-900">{r.user.password}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <button
-              type="button"
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  generated.map((r) => `${r.user.email}\t${r.user.password}`).join("\n")
-                )
-              }
-              className="mt-2 text-[11px] font-semibold text-brand-700 hover:underline"
-            >
-              Copy all to clipboard
-            </button>
+        {(invited.length > 0 || inviteFailed.length > 0) && (
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50/70 p-2.5 text-[12px] text-slate-700">
+            {invited.length > 0 && (
+              <p>
+                <b>{invited.length}</b> invitation email{invited.length === 1 ? "" : "s"} sent — they set their own
+                password from the link.
+              </p>
+            )}
+            {inviteFailed.length > 0 && (
+              <p className="text-red-700 mt-1">
+                {inviteFailed.length} invitation{inviteFailed.length === 1 ? "" : "s"} could not be sent (
+                {inviteFailed.map((r) => r.user.email).join(", ")}). Use “Send invitation” on those users later.
+              </p>
+            )}
           </div>
         )}
 
@@ -260,7 +250,7 @@ export function UserImport({
                     <th className="th !py-1.5">Email</th>
                     <th className="th !py-1.5">Role</th>
                     <th className="th !py-1.5">Authorisation Scope(s)</th>
-                    <th className="th !py-1.5">Password</th>
+                    <th className="th !py-1.5">Sign-in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -286,7 +276,7 @@ export function UserImport({
                         )}
                       </td>
                       <td className="px-3 py-1 text-slate-400">
-                        {u.generatedPassword ? "auto" : "from file"}
+                        {u.generatedPassword ? "email invitation" : "from file"}
                       </td>
                     </tr>
                   ))}

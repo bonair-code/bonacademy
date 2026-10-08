@@ -4,6 +4,7 @@ import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "fir
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { randomBytes } from "crypto";
+import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -57,7 +58,7 @@ const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
  * Admin, yeni bir kullanıcı (Auth hesabı + users/{uid} profili) oluşturur.
  * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
  */
-export const createUser = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const createUser = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   if (caller.data()?.role !== "ADMIN")
@@ -79,7 +80,10 @@ export const createUser = onCall({ region: REGION, invoker: "public" }, async (r
   const company = d.company ? String(d.company).trim() : null;
   // Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar: { courseId: ["PT","MT"] }
   const courseMethods = sanitizeCourseMethods(d.courseMethods);
-  const password = d.password ? String(d.password) : randomBytes(9).toString("base64") + "Aa1!";
+  // Davet: kişi şifresini e-postadaki bağlantıyla kendisi belirler; buradaki
+  // rastgele şifre kimsenin bilmediği bir yer tutucu.
+  const invite = d.invite === true;
+  const password = !invite && d.password ? String(d.password) : randomBytes(9).toString("base64") + "Aa1!";
 
   let userRecord;
   try {
@@ -100,15 +104,125 @@ export const createUser = onCall({ region: REGION, invoker: "public" }, async (r
     birthDate,
     company,
     courseMethods,
-    // Admin geçici şifre verdi; kullanıcı ilk girişte değiştirmek zorunda.
-    mustChangePassword: true,
+    // Admin geçici şifre verdiyse kullanıcı ilk girişte değiştirmek zorunda.
+    // Davette şifreyi zaten kendisi belirliyor.
+    mustChangePassword: !invite,
     isActive: true,
     locale: "tr",
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
-  return { uid: userRecord.uid };
+  const inviteResult = invite ? await sendInviteFor(userRecord.uid, req.auth.uid) : null;
+  return { uid: userRecord.uid, invite: inviteResult };
 });
+
+/* ── Davet (şifre belirleme) ──────────────────────────────────
+ * Yeni kullanıcıya ortak bir şifre vermek yerine "şifreni belirle" bağlantısı
+ * gönderilir. Bağlantı kendi belirtecimizle (invites/{token}) çalışır:
+ * Firebase'in hazır şifre sıfırlama bağlantısı 1 saatte doluyor, davet için
+ * kısa. Belirteç tek kullanımlık, 14 gün geçerli; yeniden gönderilince
+ * öncekiler iptal olur. Koleksiyon istemciye tamamen kapalı (kural yok).
+ */
+const INVITE_DAYS = 14;
+const TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
+
+async function sendInviteFor(uid: string, byUid: string): Promise<MailResult> {
+  const db = getFirestore();
+  const u = (await db.doc(`users/${uid}`).get()).data();
+  if (!u?.email) return { ok: false, error: "User has no email address." };
+
+  const open = await db.collection("invites").where("uid", "==", uid).where("status", "==", "OPEN").get();
+  if (!open.empty) {
+    const b = db.batch();
+    for (const d of open.docs) b.update(d.ref, { status: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
+    await b.commit();
+  }
+  const token = randomBytes(24).toString("base64url");
+  await db.doc(`invites/${token}`).set({
+    uid,
+    email: u.email,
+    status: "OPEN",
+    createdAt: FieldValue.serverTimestamp(),
+    createdById: byUid,
+    expiresAt: Timestamp.fromMillis(Date.now() + INVITE_DAYS * 24 * 3600 * 1000),
+  });
+  const mail = inviteMail(mailLang(u.locale), {
+    name: u.name || u.email,
+    email: u.email,
+    link: `${appUrl()}/invite/${token}`,
+    days: INVITE_DAYS,
+  });
+  const res = await sendMail({ to: u.email, ...mail, type: "INVITE", userId: uid });
+  await db.doc(`users/${uid}`).update({
+    invitedAt: FieldValue.serverTimestamp(),
+    inviteEmailStatus: res.ok ? "SENT" : "FAILED",
+  });
+  return res;
+}
+
+/** Admin: daveti (yeniden) gönderir. Önceki bağlantılar geçersiz olur. */
+export const resendInvite = onCall(
+  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] },
+  async (req) => {
+    await assertAdmin(req.auth?.uid);
+    const uid = String(req.data?.uid || "");
+    if (!uid) throw new HttpsError("invalid-argument", "uid is required.");
+    const res = await sendInviteFor(uid, req.auth!.uid);
+    if (!res.ok) throw new HttpsError("unavailable", "The invitation email could not be sent: " + res.error);
+    return { ok: true };
+  }
+);
+
+/** Herkese açık: davet sayfası bağlantının durumunu ve kişinin adını sorar. */
+export const inviteInfo = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  const token = String(req.data?.token || "");
+  if (!TOKEN_RE.test(token)) return { valid: false, reason: "invalid" };
+  const db = getFirestore();
+  const s = await db.doc(`invites/${token}`).get();
+  if (!s.exists) return { valid: false, reason: "invalid" };
+  const v = s.data() as any;
+  if (v.status === "USED") return { valid: false, reason: "used", email: v.email };
+  if (v.status !== "OPEN") return { valid: false, reason: "replaced" };
+  if (v.expiresAt?.toMillis?.() < Date.now()) return { valid: false, reason: "expired" };
+  const u = (await db.doc(`users/${v.uid}`).get()).data();
+  return { valid: true, name: u?.name ?? "", email: v.email };
+});
+
+/** Herkese açık: davetle şifre belirler. Başarılıysa istemci bu e-postayla giriş yapar. */
+export const acceptInvite = onCall({ region: REGION, invoker: "public" }, async (req) => {
+  const token = String(req.data?.token || "");
+  const password = String(req.data?.password || "");
+  if (!TOKEN_RE.test(token)) throw new HttpsError("not-found", "This invitation link is not valid.");
+  if (password.length < 8) throw new HttpsError("invalid-argument", "The password must be at least 8 characters.");
+
+  const db = getFirestore();
+  const ref = db.doc(`invites/${token}`);
+  const inv = await db.runTransaction(async (tx) => {
+    const s = await tx.get(ref);
+    const v = s.data() as any;
+    if (!s.exists || v.status === "REVOKED")
+      throw new HttpsError("not-found", "This invitation link is not valid any more. Ask for a new one.");
+    if (v.status === "USED")
+      throw new HttpsError("failed-precondition", "This invitation was already used. Sign in, or use “Forgot password?”.");
+    if (v.expiresAt?.toMillis?.() < Date.now())
+      throw new HttpsError("deadline-exceeded", "This invitation link has expired. Ask for a new one.");
+    tx.update(ref, { status: "USED", usedAt: FieldValue.serverTimestamp() });
+    return v as { uid: string; email: string };
+  });
+  try {
+    await getAuth().updateUser(inv.uid, { password, emailVerified: true });
+  } catch (e) {
+    // Şifre yazılamadıysa bağlantı yanmasın.
+    await ref.update({ status: "OPEN", usedAt: FieldValue.delete() });
+    throw new HttpsError("invalid-argument", (e as Error).message);
+  }
+  await db.doc(`users/${inv.uid}`).update({
+    mustChangePassword: false,
+    inviteAcceptedAt: FieldValue.serverTimestamp(),
+  });
+  return { email: inv.email };
+});
+
 
 /**
  * { courseId: ["PT","MT"] } biçimini temizler. Boş kalan kurslar atılır ki
@@ -435,7 +549,7 @@ export const publishCourse = onCall({ region: REGION, invoker: "public" }, async
  * yalnızca Function tarafından yazılır. Deterministik id ({userId}_{courseId})
  * → aynı eğitim ikinci kez atanmaz (idempotent).
  */
-export const assignCourses = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const assignCourses = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   const callerRole = caller.data()?.role;
@@ -465,6 +579,15 @@ export const assignCourses = onCall({ region: REGION, invoker: "public" }, async
 
   let created = 0;
   const skipped: { courseId: string; reason: string }[] = [];
+  // E-posta bildirimi için: bu çağrıda açılan atamalar (tek mailde toplanır).
+  const notifyItems: (AssignedItem & { assignmentId: string })[] = [];
+  const noteItem = (assignmentId: string, course: any) =>
+    notifyItems.push({
+      assignmentId,
+      title: String(course.title || ""),
+      dueDate: dueDate.toDate(),
+      examRequired: course.exam?.required !== false,
+    });
   for (const courseId of courseIds) {
     const courseSnap = await db.doc(`courses/${courseId}`).get();
     if (!courseSnap.exists) {
@@ -512,6 +635,7 @@ export const assignCourses = onCall({ region: REGION, invoker: "public" }, async
           reassignedAt: FieldValue.serverTimestamp(),
         });
         created++;
+        noteItem(id, course);
         continue;
       }
 
@@ -545,10 +669,29 @@ export const assignCourses = onCall({ region: REGION, invoker: "public" }, async
       createdAt: FieldValue.serverTimestamp(),
     });
     created++;
+    noteItem(id, course);
+  }
+
+  // Atama bildirimi: kişiye tek e-posta. Gönderilemezse atama yine geçerli.
+  let mail: MailResult | null = null;
+  if (notifyItems.length && req.data?.notify !== false) {
+    const u = userSnap.data() || {};
+    if (u.email && u.isActive !== false) {
+      const link =
+        notifyItems.length === 1 ? `${appUrl()}/learn/${notifyItems[0].assignmentId}` : `${appUrl()}/dashboard`;
+      const m = assignmentMail(mailLang(u.locale), { name: u.name || u.email, items: notifyItems, link });
+      mail = await sendMail({
+        to: u.email,
+        ...m,
+        type: "ASSIGNMENT",
+        userId,
+        meta: { assignmentIds: notifyItems.map((x) => x.assignmentId) },
+      });
+    }
   }
   // `skipped` geri dönüyor: arayüz "20 kişiye atadım" deyip 12'sini sessizce
   // atlamasın, sebebini gösterebilsin.
-  return { created, skipped };
+  return { created, skipped, mail };
 });
 
 

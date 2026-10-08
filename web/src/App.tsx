@@ -18,6 +18,7 @@ import { TrainingMatrix } from "./pages/TrainingMatrix";
 import { StaffDetail } from "./pages/StaffDetail";
 import { ClassSessions, ClassSessionDetail } from "./pages/ClassSessions";
 import { JoinSession } from "./pages/JoinSession";
+import { Invite } from "./pages/Invite";
 import { CertificateView } from "./pages/CertificateView";
 import { Onboarding } from "./pages/Onboarding";
 import { Placeholder } from "./pages/Placeholder";
@@ -163,7 +164,7 @@ export function App() {
   // İlk giriş: şifre ve eksik profil tamamlanmadan uygulamaya girilemez.
   // Herkese açık rotalar (doğrulama, yoklama) bundan etkilenmez.
   const path = window.location.pathname;
-  const isPublic = path.startsWith("/verify") || path.startsWith("/join");
+  const isPublic = path.startsWith("/verify") || path.startsWith("/join") || path.startsWith("/invite");
   if (user && !isPublic && !flight.hold && needsOnboarding(profile)) return <Onboarding />;
 
   return (
@@ -173,6 +174,8 @@ export function App() {
       <Route path="/verify" element={<Verify />} />
       {/* Yoklama formu — giriş gerektirmez, link parolanın kendisidir */}
       <Route path="/join/:sessionId" element={<JoinSession />} />
+      {/* Davet e-postasındaki "şifremi belirle" bağlantısı */}
+      <Route path="/invite/:token" element={<Invite />} />
       <Route path="/login" element={user && !flight.hold ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route
         path="/*"

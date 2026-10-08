@@ -31,6 +31,10 @@ export type UserRow = {
   /** Müşteri hesabının bağlı olduğu kurum; personelde boş. */
   company?: string | null;
   isActive: boolean;
+  /** Davet e-postası gönderildi / kişi bağlantıyla şifresini belirledi. */
+  invitedAt?: unknown;
+  inviteAcceptedAt?: unknown;
+  inviteEmailStatus?: "SENT" | "FAILED";
 };
 export type Ref = { id: string; name: string };
 export type MethodCourse = { id: string; title: string; methods: string[] };
@@ -173,6 +177,12 @@ export function UserForm({
   );
   const [password, setPassword] = useState("");
   /**
+   * Yeni kullanıcıya şifre nasıl verilir: davet e-postası (kişi kendisi
+   * belirler — varsayılan) ya da admin geçici şifre yazar (e-postası olmayan
+   * ya da mail gitmeyen durumlar için yedek).
+   */
+  const [access, setAccess] = useState<"invite" | "password">("invite");
+  /**
    * Müşteri personel değil: departmanı ve yetki kapsamı yok. Bu alanları
    * göstermek, müşteriye zorunlu eğitim atanması gibi yanlış bir sonuç
    * doğuruyordu — kapsam seçilirse Follow-Up onu personel gibi sayardı.
@@ -191,7 +201,7 @@ export function UserForm({
 
   const canSubmit = editing
     ? name.trim().length > 0
-    : name.trim().length > 0 && email.trim().length > 0 && password.length >= 6;
+    : name.trim().length > 0 && email.trim().length > 0 && (access === "invite" || password.length >= 6);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -214,7 +224,7 @@ export function UserForm({
         });
         onDone(`${name.trim()} updated.`);
       } else {
-        await httpsCallable(functions, "createUser")({
+        const res = await httpsCallable(functions, "createUser")({
           email: email.trim(),
           name: name.trim(),
           role: roleV,
@@ -225,9 +235,17 @@ export function UserForm({
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
           courseMethods: isCustomer ? {} : courseMethods,
-          password,
+          invite: access === "invite",
+          password: access === "password" ? password : undefined,
         });
-        onDone(`${name.trim()} created.`);
+        const inv = (res.data as { invite?: { ok: boolean; error?: string } | null }).invite;
+        onDone(
+          access === "invite"
+            ? inv?.ok
+              ? `${name.trim()} created — invitation emailed to ${email.trim()}.`
+              : `${name.trim()} created, but the invitation email could not be sent. Use “Send invitation” on the user later.`
+            : `${name.trim()} created.`
+        );
       }
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -258,16 +276,44 @@ export function UserForm({
           )}
         </div>
         {!editing && (
-          <div>
-            <label className="label">Temporary Password</label>
-            <input
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-            />
-            {password.length > 0 && password.length < 6 && (
-              <p className="text-[10px] text-red-700 mt-1">Must be at least 6 characters.</p>
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3">
+            <label className="label !mb-2">Sign-in</label>
+            <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer">
+              <input
+                type="radio"
+                className="mt-0.5 accent-brand-600"
+                checked={access === "invite"}
+                onChange={() => setAccess("invite")}
+              />
+              <span>
+                <b className="font-semibold">Email an invitation</b>{" "}
+                <span className="text-slate-500">(recommended) — they set their own password from the link.</span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer mt-2">
+              <input
+                type="radio"
+                className="mt-0.5 accent-brand-600"
+                checked={access === "password"}
+                onChange={() => setAccess("password")}
+              />
+              <span>
+                <b className="font-semibold">Set a temporary password</b>{" "}
+                <span className="text-slate-500">— you pass it on yourself; they change it at first sign-in.</span>
+              </span>
+            </label>
+            {access === "password" && (
+              <div className="mt-2.5 pl-6">
+                <input
+                  className="input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 6 characters"
+                />
+                {password.length > 0 && password.length < 6 && (
+                  <p className="text-[10px] text-red-700 mt-1">Must be at least 6 characters.</p>
+                )}
+              </div>
             )}
           </div>
         )}

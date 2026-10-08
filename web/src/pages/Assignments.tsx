@@ -4,7 +4,7 @@ import { collection, getDocs, onSnapshot, query, where } from "firebase/firestor
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
-import { assignCourses, skipNote } from "../lib/assign";
+import { assignCourses, mailNote, skipNote, type AssignResult } from "../lib/assign";
 import { asLang } from "../lib/lang";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../lib/firebase";
@@ -723,6 +723,7 @@ function AssignForm({
   const [err, setErr] = useState<string | null>(null);
 
   const byCourse = mode === "BY_COURSE";
+  const [notify, setNotify] = useState(true);
 
   function switchMode(m: "BY_COURSE" | "BY_PERSON") {
     setMode(m);
@@ -791,11 +792,13 @@ function AssignForm({
     try {
       let created = 0;
       const skipped: string[] = [];
+      const results: AssignResult[] = [];
 
       if (byCourse) {
         // Fonksiyon kişi başına çalışıyor; kişiler döngüyle geçiliyor.
         for (const uid of Array.from(picked)) {
-          const r = await assignCourses(uid, [anchor]);
+          const r = await assignCourses(uid, [anchor], undefined, notify);
+          results.push(r);
           created += r.created;
           skipped.push(...r.skipped);
           setProgress((p) => p + 1);
@@ -803,18 +806,21 @@ function AssignForm({
         const title = courses.find((c) => c.id === anchor)?.title ?? "Training";
         onDone(
           `${title} assigned to ${created} ${created === 1 ? "person" : "people"}.` +
-            skipNote(skipped)
+            skipNote(skipped) +
+            mailNote(results)
         );
       } else {
         // Tek kişiye çok eğitim: fonksiyon bunu tek çağrıda yapıyor.
-        const r = await assignCourses(anchor, Array.from(picked));
+        const r = await assignCourses(anchor, Array.from(picked), undefined, notify);
+        results.push(r);
         created = r.created;
         skipped.push(...r.skipped);
         setProgress(picked.size);
         const name = users.find((u) => u.id === anchor)?.name ?? "the employee";
         onDone(
           `${created} training${created === 1 ? "" : "s"} assigned to ${name}.` +
-            skipNote(skipped)
+            skipNote(skipped) +
+            mailNote(results)
         );
       }
     } catch (e) {
@@ -987,6 +993,17 @@ function AssignForm({
               : "Due in 30 days from today."}
           </span>
         )}
+        {/* Kişiye "yeni eğitim atandı" e-postası (varsayılan açık). */}
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer select-none shrink-0">
+          <input
+            type="checkbox"
+            className="accent-brand-600 h-3.5 w-3.5"
+            checked={notify}
+            onChange={(e) => setNotify(e.target.checked)}
+            disabled={busy}
+          />
+          Notify by email
+        </label>
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>

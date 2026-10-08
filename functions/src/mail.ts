@@ -1,0 +1,185 @@
+/**
+ * E-posta gönderimi — CAPELLA'nın kendi posta sunucusu üzerinden (SMTP).
+ *
+ * Neden kendi sunucuları: capella.aero'nun SPF kaydı yalnızca kendi IP
+ * bloklarına izin veriyor (`-all`). Mail o sunucudan çıkınca SPF'ten geçer,
+ * spam'e düşmez; ayrı bir gönderim servisi ve DNS değişikliği gerekmez.
+ *
+ * Ayarlar (gizli olmayan): functions/.env → SMTP_HOST, SMTP_PORT, SMTP_USER,
+ * APP_URL. Şifre Secret Manager'da: SMTP_PASSWORD
+ *   npx firebase functions:secrets:set SMTP_PASSWORD --project capella-academy-v2
+ * Mail gönderen her fonksiyon `secrets: [SMTP_PASSWORD]` taşımalı.
+ *
+ * Gönderim hatası asıl işlemi BOZMAZ (kullanıcı açılır, atama yapılır);
+ * sonuç `notifications` koleksiyonuna yazılır ve çağırana döner.
+ */
+import nodemailer from "nodemailer";
+import { defineSecret } from "firebase-functions/params";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+
+export const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
+
+const env = (k: string, d: string) => (process.env[k] || d).trim();
+export const appUrl = () => env("APP_URL", "https://academy.capella.aero").replace(/\/+$/, "");
+const fromAddress = () => env("SMTP_USER", "noreply@capella.aero");
+const REPLY_TO = "info@capella.aero";
+
+let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
+function getTransport() {
+  if (transport) return transport;
+  const port = Number(env("SMTP_PORT", "465"));
+  transport = nodemailer.createTransport({
+    host: env("SMTP_HOST", "mx01.capella.aero"),
+    port,
+    secure: port === 465, // 465: doğrudan TLS; 587: STARTTLS
+    auth: { user: fromAddress(), pass: SMTP_PASSWORD.value() },
+    connectionTimeout: 15_000,
+    greetingTimeout: 15_000,
+  });
+  return transport;
+}
+
+export type MailResult = { ok: boolean; error?: string };
+
+export async function sendMail(m: {
+  to: string;
+  subject: string;
+  html: string;
+  text: string;
+  /** INVITE, ASSIGNMENT … — kayıt ve raporlama için. */
+  type: string;
+  userId?: string | null;
+  meta?: Record<string, unknown>;
+}): Promise<MailResult> {
+  const log = getFirestore().collection("notifications").doc();
+  const base = {
+    channel: "EMAIL",
+    type: m.type,
+    userId: m.userId ?? null,
+    to: m.to,
+    subject: m.subject,
+    createdAt: FieldValue.serverTimestamp(),
+    ...(m.meta ?? {}),
+  };
+  try {
+    await getTransport().sendMail({
+      from: { name: "Capella Academy", address: fromAddress() },
+      replyTo: REPLY_TO,
+      to: m.to,
+      subject: m.subject,
+      html: m.html,
+      text: m.text,
+    });
+    await log.set({ ...base, status: "SENT", sentAt: FieldValue.serverTimestamp() });
+    return { ok: true };
+  } catch (e) {
+    const error = (e as Error).message.slice(0, 500);
+    console.error(`sendMail ${m.type} → ${m.to} failed:`, error);
+    await log.set({ ...base, status: "FAILED", error });
+    return { ok: false, error };
+  }
+}
+
+/* ── Şablonlar ──────────────────────────────────────────────
+ * Tablo + satır içi stil: e-posta istemcileri (Outlook dahil) CSS dosyası ve
+ * çoğu modern CSS'i okumaz. Tasarım CAPELLA/eposta-sablonlari.html'de onaylandı.
+ */
+
+export type MailLang = "tr" | "en";
+export const mailLang = (locale: unknown): MailLang => (String(locale).toLowerCase() === "en" ? "en" : "tr");
+
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+
+function shell(inner: string, lang: MailLang) {
+  const foot =
+    lang === "en"
+      ? `This is an automated message. For questions please write to <a href="mailto:${REPLY_TO}" style="color:#64748b">${REPLY_TO}</a>`
+      : `Bu e-posta otomatik gönderilmiştir. Sorularınız için <a href="mailto:${REPLY_TO}" style="color:#64748b">${REPLY_TO}</a>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f9">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px"><tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;border:1px solid #e2e8f0;font-family:${FONT};color:#1e293b">
+<tr><td style="padding:26px 32px 18px;border-bottom:1px solid #eef2f7"><img src="${appUrl()}/Logo.png" alt="Capella Aviation Solutions" height="38" style="display:block;height:38px;border:0"></td></tr>
+<tr><td style="padding:26px 32px 30px;font-size:15px;line-height:1.6">${inner}</td></tr>
+<tr><td style="padding:16px 32px 22px;border-top:1px solid #eef2f7;font-size:12px;line-height:1.6;color:#94a3b8">Capella Aviation Solutions · <a href="https://www.capella.aero" style="color:#94a3b8">www.capella.aero</a><br>${foot}</td></tr>
+</table></td></tr></table></body></html>`;
+}
+
+const button = (href: string, text: string) =>
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px"><tr><td style="background:#2b4685;border-radius:10px"><a href="${esc(href)}" style="display:inline-block;padding:13px 26px;color:#ffffff;font-weight:600;font-size:15px;text-decoration:none;font-family:${FONT}">${esc(text)}</a></td></tr></table>`;
+
+const fmtDate = (d: Date | null | undefined) =>
+  d ? d.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" }) : "";
+
+export function inviteMail(lang: MailLang, p: { name: string; email: string; link: string; days: number }) {
+  const host = appUrl().replace(/^https?:\/\//, "");
+  if (lang === "en") {
+    const subject = "Your Capella Academy account has been created";
+    const html = shell(
+      `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 14px">An account has been created for you on <b>Capella Academy</b>, the training platform of Capella Aviation Solutions.</p>
+<p style="margin:0">Your sign-in email: <b>${esc(p.email)}</b></p>
+${button(p.link, "Set my password")}
+<p style="margin:0;font-size:13px;color:#64748b">The link is valid for ${p.days} days and can be used once. After setting your password you can sign in at <a href="${appUrl()}" style="color:#2b4685">${host}</a>.</p>`,
+      lang
+    );
+    const text = `Dear ${p.name},\n\nAn account has been created for you on Capella Academy, the training platform of Capella Aviation Solutions.\nYour sign-in email: ${p.email}\n\nSet your password: ${p.link}\n\nThe link is valid for ${p.days} days and can be used once.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    return { subject, html, text };
+  }
+  const subject = "Capella Academy hesabınız oluşturuldu";
+  const html = shell(
+    `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 14px">Capella Aviation Solutions eğitim platformu <b>Capella Academy</b>'de sizin için bir hesap oluşturulmuştur.</p>
+<p style="margin:0">Giriş e-postanız: <b>${esc(p.email)}</b></p>
+${button(p.link, "Şifremi belirle")}
+<p style="margin:0;font-size:13px;color:#64748b">Bağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir. Şifrenizi belirledikten sonra <a href="${appUrl()}" style="color:#2b4685">${host}</a> adresinden giriş yapabilirsiniz.</p>`,
+    lang
+  );
+  const text = `Sayın ${p.name},\n\nCapella Aviation Solutions eğitim platformu Capella Academy'de sizin için bir hesap oluşturulmuştur.\nGiriş e-postanız: ${p.email}\n\nŞifrenizi belirleyin: ${p.link}\n\nBağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  return { subject, html, text };
+}
+
+export type AssignedItem = { title: string; dueDate: Date | null; examRequired: boolean };
+
+export function assignmentMail(lang: MailLang, p: { name: string; items: AssignedItem[]; link: string }) {
+  const one = p.items.length === 1;
+  const card = p.items
+    .map((it, i) => {
+      const bits = [
+        it.dueDate ? (lang === "en" ? `Due: <b style="color:#334155">${fmtDate(it.dueDate)}</b>` : `Son tarih: <b style="color:#334155">${fmtDate(it.dueDate)}</b>`) : "",
+        "Online",
+        it.examRequired ? (lang === "en" ? "Includes an exam" : "Sınavlı") : "",
+      ].filter(Boolean);
+      return `<tr><td style="padding:14px 16px;${i ? "border-top:1px solid #e2e8f0;" : ""}"><div style="font-weight:600;font-size:15px;color:#0f172a">${esc(it.title)}</div><div style="font-size:13px;color:#64748b;margin-top:3px">${bits.join(" · ")}</div></td></tr>`;
+    })
+    .join("");
+  const list = `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px">${card}</table>`;
+
+  if (lang === "en") {
+    const subject = one ? `New training: ${p.items[0].title}` : `${p.items.length} new trainings assigned`;
+    const html = shell(
+      `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">The following training ${one ? "has" : "have"} been assigned to you on Capella Academy:</p>
+${list}
+${button(p.link, "Start training")}
+<p style="margin:0;font-size:13px;color:#64748b">You can stop at any time and continue where you left off.</p>`,
+      lang
+    );
+    const text = `Dear ${p.name},\n\nThe following training has been assigned to you on Capella Academy:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (due ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nStart: ${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    return { subject, html, text };
+  }
+  const subject = one ? `Yeni eğitim: ${p.items[0].title}` : `${p.items.length} yeni eğitim atandı`;
+  const html = shell(
+    `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">Capella Academy'de size aşağıdaki ${one ? "eğitim" : "eğitimler"} atanmıştır:</p>
+${list}
+${button(p.link, "Eğitime başla")}
+<p style="margin:0;font-size:13px;color:#64748b">Eğitimi istediğiniz zaman bırakıp kaldığınız yerden devam edebilirsiniz.</p>`,
+    lang
+  );
+  const text = `Sayın ${p.name},\n\nCapella Academy'de size aşağıdaki eğitim atanmıştır:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (son tarih ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nBaşlamak için: ${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  return { subject, html, text };
+}
