@@ -118,6 +118,14 @@ function shell(inner: string, lang: MailLang) {
 const button = (href: string, text: string) =>
   `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px"><tr><td style="background:#2b4685;border-radius:10px"><a href="${esc(href)}" style="display:inline-block;padding:13px 26px;color:#ffffff;font-weight:600;font-size:15px;text-decoration:none;font-family:${FONT}">${esc(text)}</a></td></tr></table>`;
 
+/**
+ * Butonun altında linkin açık hali. Kişi nereye gideceğini görür; spam
+ * filtreleri de "buton yazısı başka, adres başka" durumunu oltalama sayıyor
+ * (davet maili ilk denemede gereksize düştü).
+ */
+const plainLink = (href: string, label: string) =>
+  `<p style="margin:12px 0 0;font-size:12px;color:#94a3b8">${esc(label)}<br><span style="color:#475569;word-break:break-all">${esc(href)}</span></p>`;
+
 const fmtDate = (d: Date | null | undefined) =>
   d ? d.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" }) : "";
 
@@ -129,11 +137,12 @@ export function inviteMail(lang: MailLang, p: { name: string; email: string; lin
       `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
 <p style="margin:0 0 14px">An account has been created for you on <b>Capella Academy</b>, the training platform of Capella Aviation Solutions.</p>
 <p style="margin:0">Your sign-in email: <b>${esc(p.email)}</b></p>
-${button(p.link, "Set my password")}
-<p style="margin:0;font-size:13px;color:#64748b">The link is valid for ${p.days} days and can be used once. After setting your password you can sign in at <a href="${appUrl()}" style="color:#2b4685">${host}</a>.</p>`,
+${button(p.link, "Activate my account")}
+${plainLink(p.link, "If the button does not work, copy this address into your browser:")}
+<p style="margin:14px 0 0;font-size:13px;color:#64748b">The link is valid for ${p.days} days and can be used once. Afterwards you can sign in at <a href="${appUrl()}" style="color:#2b4685">${host}</a>.</p>`,
       lang
     );
-    const text = `Dear ${p.name},\n\nAn account has been created for you on Capella Academy, the training platform of Capella Aviation Solutions.\nYour sign-in email: ${p.email}\n\nSet your password: ${p.link}\n\nThe link is valid for ${p.days} days and can be used once.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nAn account has been created for you on Capella Academy, the training platform of Capella Aviation Solutions.\nYour sign-in email: ${p.email}\n\nActivate your account: ${p.link}\n\nThe link is valid for ${p.days} days and can be used once.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
     return { subject, html, text };
   }
   const subject = "Capella Academy hesabınız oluşturuldu";
@@ -141,11 +150,12 @@ ${button(p.link, "Set my password")}
     `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
 <p style="margin:0 0 14px">Capella Aviation Solutions eğitim platformu <b>Capella Academy</b>'de sizin için bir hesap oluşturulmuştur.</p>
 <p style="margin:0">Giriş e-postanız: <b>${esc(p.email)}</b></p>
-${button(p.link, "Şifremi belirle")}
-<p style="margin:0;font-size:13px;color:#64748b">Bağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir. Şifrenizi belirledikten sonra <a href="${appUrl()}" style="color:#2b4685">${host}</a> adresinden giriş yapabilirsiniz.</p>`,
+${button(p.link, "Hesabımı etkinleştir")}
+${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırın:")}
+<p style="margin:14px 0 0;font-size:13px;color:#64748b">Bağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir. Sonrasında <a href="${appUrl()}" style="color:#2b4685">${host}</a> adresinden giriş yapabilirsiniz.</p>`,
     lang
   );
-  const text = `Sayın ${p.name},\n\nCapella Aviation Solutions eğitim platformu Capella Academy'de sizin için bir hesap oluşturulmuştur.\nGiriş e-postanız: ${p.email}\n\nŞifrenizi belirleyin: ${p.link}\n\nBağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\nCapella Aviation Solutions eğitim platformu Capella Academy'de sizin için bir hesap oluşturulmuştur.\nGiriş e-postanız: ${p.email}\n\nHesabınızı etkinleştirin: ${p.link}\n\nBağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
   return { subject, html, text };
 }
 
