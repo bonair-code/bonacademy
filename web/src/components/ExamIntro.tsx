@@ -136,7 +136,6 @@ export function ExamIntro({
             })}
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-[13px] text-slate-600">
-            {info.shuffle && bank > count && <span>{t.shuffled(bank)}</span>}
             {pts > 0 && <span>{t.perQuestion(String(pts))}</span>}
           </div>
         </div>

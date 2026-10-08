@@ -10,6 +10,7 @@ import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../lib/firebase";
+import { ORG } from "../lib/org";
 import { PdfReader } from "../components/PdfReader";
 import { ScormPlayer } from "../components/ScormPlayer";
 import { ExamRunner, type ExamQ } from "../components/ExamRunner";
@@ -491,7 +492,8 @@ export function Learn() {
             </button>
           ) : result.status === "RETAKE_REQUIRED" ? (
             <p className="text-sm text-red-800 mt-3">
-              You failed twice — you must retake the training from the beginning.
+              You did not pass on your second attempt. Please consult your instructor or write to{" "}
+              <a href={`mailto:${ORG.contactEmail}`} className="underline">{ORG.contactEmail}</a>.
             </p>
           ) : (
             <button onClick={() => setResult(null)} disabled={busy} className="btn-primary mt-4">

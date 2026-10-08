@@ -1,4 +1,5 @@
 import type { Lang } from "./lang";
+import { ORG } from "./org";
 
 /**
  * Sınav giriş ve sınav ekranının metinleri. Öğrenci giriş ekranında sınav
@@ -15,7 +16,6 @@ export type ExamText = {
   passMark: string;
   attempt: string;
   language: string;
-  shuffled: (bank: number) => string;
   perQuestion: (pts: string) => string;
   rulesTitle: string;
   rules: (o: { timed: boolean; maxAttempts: number }) => string[];
@@ -55,7 +55,6 @@ const TR: ExamText = {
   passMark: "Geçme notu",
   attempt: "Deneme hakkı",
   language: "Sınav dili",
-  shuffled: (bank) => `Sorular ${bank} soruluk bankadan karışık seçilir`,
   perQuestion: (pts) => `Her soru ${pts} puan`,
   rulesTitle: "Sınav kuralları",
   rules: ({ timed, maxAttempts }) => [
@@ -67,7 +66,7 @@ const TR: ExamText = {
     timed
       ? "Sayfayı kapatsanız da süre işlemeye devam eder; döndüğünüzde kaldığınız yerden devam edersiniz."
       : "Sayfayı kapatırsanız döndüğünüzde aynı sorularla kaldığınız yerden devam edersiniz.",
-    `Toplam ${maxAttempts} deneme hakkınız var. ${maxAttempts}. denemede de geçemezseniz eğitim materyalini yeniden tamamlamanız gerekir.`,
+    `Toplam ${maxAttempts} deneme hakkınız var. ${maxAttempts}. denemede de geçemezseniz lütfen eğitmeninize danışınız veya ${ORG.contactEmail} adresine yazınız.`,
   ],
   agree: "Kuralları okudum ve sınava hazırım.",
   start: "Sınavı başlat",
@@ -107,7 +106,6 @@ const EN: ExamText = {
   passMark: "Pass mark",
   attempt: "Attempt",
   language: "Exam language",
-  shuffled: (bank) => `Questions are drawn at random from a bank of ${bank}`,
   perQuestion: (pts) => `${pts} points per question`,
   rulesTitle: "Exam rules",
   rules: ({ timed, maxAttempts }) => [
@@ -119,7 +117,7 @@ const EN: ExamText = {
     timed
       ? "Closing the page does not stop the timer; when you come back you continue where you left off."
       : "If you close the page you continue with the same questions where you left off.",
-    `You have ${maxAttempts} attempts. If you do not pass on attempt ${maxAttempts}, you must complete the training material again.`,
+    `You have ${maxAttempts} attempts. If you do not pass on attempt ${maxAttempts}, please consult your instructor or write to ${ORG.contactEmail}.`,
   ],
   agree: "I have read the rules and I am ready.",
   start: "Start exam",
