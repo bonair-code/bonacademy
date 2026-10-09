@@ -646,6 +646,8 @@ export function ClassSessionDetail() {
   const isClosed = session.status === "CLOSED" || session.status === "CLOSING";
   /** Yoklama bitti, eğitim sürüyor: sertifika bu aşamada verilir. */
   const attendanceDone = session.status === "ATTENDANCE_CLOSED";
+  /** Yoklama açılmış, sonra duraklatılmış (DRAFT ama imza var). */
+  const paused = session.status === "DRAFT" && attendees.length > 0;
 
   return (
     <div>
@@ -656,24 +658,62 @@ export function ClassSessionDetail() {
       <div className="mb-4" />
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-4">
-        {/* QR + kontrol */}
+        {/* QR + kontrol — "B" tasarımı (CAPELLA/sinif-oturumu-butonlari.html):
+            her an TEK bir sıradaki adım düğmesi; araçlar altta eşit kutucuk.
+            Akış: yoklamayı aç → (duraklat) → yoklamayı kapat → sertifika ver. */}
         <div className="card p-4">
           <div className="flex items-center justify-between gap-2 mb-3">
             <span
               className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 ${STATUS_CLS[session.status]}`}
             >
-              {STATUS_LABEL[session.status] ?? session.status}
+              {paused ? "Paused" : STATUS_LABEL[session.status] ?? session.status}
             </span>
             <span className="text-[11px] text-slate-500 tabular-nums">
               {attendees.length} signed in
             </span>
           </div>
 
+          <div className="no-print">
+            {isClosed ? (
+              <div className="rounded-lg bg-sky-50 text-sky-800 text-[12.5px] text-center px-3 py-2.5">
+                ✓ {session.issuedCount ?? 0} certificate{(session.issuedCount ?? 0) === 1 ? "" : "s"} issued
+                {session.certLastNo
+                  ? ` — ${session.certFirstNo ? `${session.certFirstNo} to ${session.certLastNo}` : session.certLastNo}`
+                  : ""}
+              </div>
+            ) : attendanceDone ? (
+              <>
+                <button
+                  onClick={() => setConfirmFinish(true)}
+                  disabled={attendees.length === 0}
+                  className="btn-primary w-full text-[13px] py-2.5 disabled:opacity-40"
+                >
+                  Finish training &amp; issue certificates
+                </button>
+                <p className="text-[11.5px] text-slate-500 mt-2">
+                  Attendance is closed ({attendees.length} people). When the training is over, issue the
+                  certificates.
+                </p>
+              </>
+            ) : isOpen || paused ? (
+              <button
+                onClick={() => setStatus("ATTENDANCE_CLOSED")}
+                className="btn-primary w-full text-[13px] py-2.5"
+              >
+                Close attendance
+              </button>
+            ) : (
+              <button onClick={() => setStatus("OPEN")} className="btn-primary w-full text-[13px] py-2.5">
+                Open attendance
+              </button>
+            )}
+          </div>
+
           {/* Yazdırmada kendi kipini kullanır (dikey A4, tek sayfa);
               sertifikanın sayfayı kaplayan kipinde QR taşıyordu. */}
           <div
             ref={printRef}
-            className="qr-print bg-white rounded-lg border border-slate-200 p-4 text-center"
+            className="qr-print bg-white rounded-lg border border-slate-200 p-4 text-center mt-3"
           >
             <div className="qr-title text-[12px] font-bold text-slate-900">
               {session.courseTitle}
@@ -694,62 +734,27 @@ export function ClassSessionDetail() {
             <div className="qr-url text-[9px] text-slate-400 break-all mt-1">{joinUrl}</div>
           </div>
 
-          <div className="flex flex-wrap gap-2 mt-3 no-print">
-            {!isClosed && !attendanceDone && (
-              <button
-                onClick={() => setStatus(isOpen ? "DRAFT" : "OPEN")}
-                className={isOpen ? "btn-secondary text-xs py-1.5" : "btn-primary text-xs py-1.5"}
-              >
-                {isOpen ? "Pause attendance" : "Open attendance"}
-              </button>
+          <div className="grid grid-cols-3 gap-1.5 mt-2 no-print">
+            {isOpen ? (
+              <ToolTile icon="⏸" label="Pause" onClick={() => setStatus("DRAFT")} />
+            ) : paused ? (
+              <ToolTile icon="▶" label="Resume" onClick={() => setStatus("OPEN")} />
+            ) : attendanceDone ? (
+              <ToolTile icon="↺" label="Reopen" onClick={() => setStatus("OPEN")} />
+            ) : (
+              <ToolTile icon="⏸" label="Pause" disabled />
             )}
-            {attendanceDone && (
-              <button onClick={() => setStatus("OPEN")} className="btn-secondary text-xs py-1.5">
-                Reopen attendance
-              </button>
-            )}
-            <button onClick={printQr} className="btn-secondary text-xs py-1.5">
-              Print QR
-            </button>
-            <button
+            <ToolTile icon="⎙" label="Print QR" onClick={printQr} disabled={isClosed} />
+            <ToolTile
+              icon="⧉"
+              label="Copy link"
+              disabled={isClosed}
               onClick={() => {
                 navigator.clipboard.writeText(joinUrl);
                 setToast("Link copied.");
               }}
-              className="btn-secondary text-xs py-1.5"
-            >
-              Copy link
-            </button>
+            />
           </div>
-
-          {/* İki adım: önce yoklama kapanır (eğitim sürerken), eğitim bitince
-              sertifikalar verilir. Eskiden tek düğme vardı ve yoklama açıkken
-              "eğitimi bitir" diyordu. */}
-          {!isClosed && !attendanceDone && (
-            <button
-              onClick={() => setStatus("ATTENDANCE_CLOSED")}
-              disabled={attendees.length === 0}
-              className="btn-primary w-full text-xs py-2 mt-3 disabled:opacity-40 no-print"
-              title={attendees.length === 0 ? "Nobody has signed in yet" : undefined}
-            >
-              Close attendance
-            </button>
-          )}
-          {attendanceDone && (
-            <>
-              <p className="text-[11.5px] text-slate-500 mt-3 no-print">
-                Attendance is closed ({attendees.length} people). When the training is over, issue the
-                certificates.
-              </p>
-              <button
-                onClick={() => setConfirmFinish(true)}
-                disabled={attendees.length === 0}
-                className="btn-primary w-full text-xs py-2 mt-2 disabled:opacity-40 no-print"
-              >
-                Finish training &amp; issue certificates
-              </button>
-            </>
-          )}
         </div>
 
         {/* Katılımcılar */}
@@ -886,5 +891,30 @@ export function ClassSessionDetail() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Sol paneldeki eşit araç kutucuğu (simge + kısa ad). */
+function ToolTile({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: string;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-white py-2 text-[11px] font-semibold text-slate-600 transition hover:border-brand-600 hover:text-brand-700 disabled:opacity-35 disabled:hover:border-slate-200 disabled:hover:text-slate-600"
+    >
+      <span className="text-[15px] font-normal leading-none">{icon}</span>
+      {label}
+    </button>
   );
 }
