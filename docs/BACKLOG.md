@@ -33,8 +33,8 @@
   (/scorm-content). Risk sınırlandı (yalnız admin/kurs sahibi yükler, yalnız scorm/
   klasörü sunulur) ama kalıcı çözüm ayrı alan adı + postMessage ile SCORM API köprüsü.
 - **App Check (bot koruması):** girişsiz uçlar (yoklama formu, davet) için.
-- **Konsol ayarları (CAPELLA):** e-posta numaralandırma koruması, şifre politikası
-  (en az 8), Browser key'in web sitesi kısıtlaması.
+- ~~**Konsol ayarları (CAPELLA):** e-posta numaralandırma koruması, şifre politikası
+  (en az 8), Browser key'in web sitesi kısıtlaması.~~ — yapıldı (09.10.2026).
 - **Müdür kişi sayfası:** müdür başka bir personelin sayfasını açınca sorgular kuralca
   reddediliyor (userDepartmentId süzgeci eksik) — StaffDetail.tsx.
 
