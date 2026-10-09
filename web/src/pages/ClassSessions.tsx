@@ -34,7 +34,11 @@ type Session = {
   /** Kapanışta atanan numara aralığı — oturum açılırken girilmez. */
   certFirstNo?: string | null;
   certLastNo?: string | null;
-  status: "DRAFT" | "OPEN" | "CLOSED";
+  /**
+   * DRAFT: yoklama kapalı (henüz açılmadı / duraklatıldı) · OPEN: yoklama açık ·
+   * ATTENDANCE_CLOSED: yoklama bitti, eğitim sürüyor · CLOSED: sertifikalar verildi.
+   */
+  status: "DRAFT" | "OPEN" | "ATTENDANCE_CLOSED" | "CLOSING" | "CLOSED";
   issuedCount?: number;
   createdAt?: Timestamp | null;
 };
@@ -54,7 +58,17 @@ type Attendee = {
 const STATUS_CLS: Record<Session["status"], string> = {
   DRAFT: "bg-slate-100 text-slate-600 ring-slate-200",
   OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  ATTENDANCE_CLOSED: "bg-amber-50 text-amber-800 ring-amber-200",
+  CLOSING: "bg-amber-50 text-amber-800 ring-amber-200",
   CLOSED: "bg-sky-50 text-sky-700 ring-sky-200",
+};
+/** Durumun ekrandaki adı. */
+const STATUS_LABEL: Record<Session["status"], string> = {
+  DRAFT: "Not open",
+  OPEN: "Attendance open",
+  ATTENDANCE_CLOSED: "In training",
+  CLOSING: "Issuing…",
+  CLOSED: "Completed",
 };
 
 const dmy = (d?: string | null) => (d ? d.split("-").reverse().join(".") : "—");
@@ -141,7 +155,7 @@ function SessionCard({
           STATUS_CLS[s.status]
         }`}
       >
-        {s.status}
+        {STATUS_LABEL[s.status] ?? s.status}
       </span>
 
       {/* Taslak oturum henüz belge üretmedi; düzeltilebilir ve silinebilir.
@@ -588,7 +602,13 @@ export function ClassSessionDetail() {
   async function setStatus(status: Session["status"]) {
     if (!sessionId) return;
     await updateDoc(doc(db, "classSessions", sessionId), { status });
-    setToast(status === "OPEN" ? "Attendance is open." : "Attendance paused.");
+    setToast(
+      status === "OPEN"
+        ? "Attendance is open."
+        : status === "ATTENDANCE_CLOSED"
+        ? "Attendance closed. Issue certificates when the training is over."
+        : "Attendance paused."
+    );
   }
 
   async function finish() {
@@ -618,7 +638,9 @@ export function ClassSessionDetail() {
     );
 
   const isOpen = session.status === "OPEN";
-  const isClosed = session.status === "CLOSED";
+  const isClosed = session.status === "CLOSED" || session.status === "CLOSING";
+  /** Yoklama bitti, eğitim sürüyor: sertifika bu aşamada verilir. */
+  const attendanceDone = session.status === "ATTENDANCE_CLOSED";
 
   return (
     <div>
@@ -635,7 +657,7 @@ export function ClassSessionDetail() {
             <span
               className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 ${STATUS_CLS[session.status]}`}
             >
-              {session.status}
+              {STATUS_LABEL[session.status] ?? session.status}
             </span>
             <span className="text-[11px] text-slate-500 tabular-nums">
               {attendees.length} signed in
@@ -668,12 +690,17 @@ export function ClassSessionDetail() {
           </div>
 
           <div className="flex flex-wrap gap-2 mt-3 no-print">
-            {!isClosed && (
+            {!isClosed && !attendanceDone && (
               <button
                 onClick={() => setStatus(isOpen ? "DRAFT" : "OPEN")}
                 className={isOpen ? "btn-secondary text-xs py-1.5" : "btn-primary text-xs py-1.5"}
               >
                 {isOpen ? "Pause attendance" : "Open attendance"}
+              </button>
+            )}
+            {attendanceDone && (
+              <button onClick={() => setStatus("OPEN")} className="btn-secondary text-xs py-1.5">
+                Reopen attendance
               </button>
             )}
             <button onClick={printQr} className="btn-secondary text-xs py-1.5">
@@ -690,14 +717,33 @@ export function ClassSessionDetail() {
             </button>
           </div>
 
-          {!isClosed && (
+          {/* İki adım: önce yoklama kapanır (eğitim sürerken), eğitim bitince
+              sertifikalar verilir. Eskiden tek düğme vardı ve yoklama açıkken
+              "eğitimi bitir" diyordu. */}
+          {!isClosed && !attendanceDone && (
             <button
-              onClick={() => setConfirmFinish(true)}
+              onClick={() => setStatus("ATTENDANCE_CLOSED")}
               disabled={attendees.length === 0}
               className="btn-primary w-full text-xs py-2 mt-3 disabled:opacity-40 no-print"
+              title={attendees.length === 0 ? "Nobody has signed in yet" : undefined}
             >
-              Finish training &amp; issue certificates
+              Close attendance
             </button>
+          )}
+          {attendanceDone && (
+            <>
+              <p className="text-[11.5px] text-slate-500 mt-3 no-print">
+                Attendance is closed ({attendees.length} people). When the training is over, issue the
+                certificates.
+              </p>
+              <button
+                onClick={() => setConfirmFinish(true)}
+                disabled={attendees.length === 0}
+                className="btn-primary w-full text-xs py-2 mt-2 disabled:opacity-40 no-print"
+              >
+                Finish training &amp; issue certificates
+              </button>
+            </>
           )}
         </div>
 

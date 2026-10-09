@@ -1729,6 +1729,9 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
     const d = sn.data() as any;
     if (d.status === "CLOSED" || d.status === "CLOSING")
       throw new HttpsError("failed-precondition", "This session is already closed.");
+    // Önce yoklama kapanmalı: yoklama açıkken sertifika verilmez.
+    if (d.status === "OPEN")
+      throw new HttpsError("failed-precondition", "Close attendance first.");
     tx.update(sRef, { status: "CLOSING", closingStartedAt: FieldValue.serverTimestamp(), statusBeforeClosing: d.status ?? null });
     return d;
   });

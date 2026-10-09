@@ -19,7 +19,7 @@ import { placeCase } from "../lib/text";
 
 type Session = {
   courseTitle: string;
-  status: "DRAFT" | "OPEN" | "CLOSED";
+  status: "DRAFT" | "OPEN" | "ATTENDANCE_CLOSED" | "CLOSING" | "CLOSED";
   startDate?: string | null;
   endDate?: string | null;
   location?: string | null;
@@ -116,7 +116,11 @@ export function JoinSession() {
           ? "Check the link or ask your instructor for a new one."
           : state === "ready" && !open
           ? `${session?.courseTitle} is not accepting sign-ins${
-              session?.status === "CLOSED" ? " — the session has finished." : " yet."
+              session?.status === "CLOSED" || session?.status === "CLOSING"
+                ? " — the session has finished."
+                : session?.status === "ATTENDANCE_CLOSED"
+                ? " — attendance is closed."
+                : " yet."
             }`
           : open && !done
           ? [
