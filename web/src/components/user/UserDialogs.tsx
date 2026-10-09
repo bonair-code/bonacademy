@@ -227,6 +227,8 @@ export function UserForm({
         await httpsCallable(functions, "updateUser")({
           uid: existing!.id,
           name: name.trim(),
+          // Giriş adresi de buradan değişir (sunucu Auth hesabını da günceller).
+          email: email.trim().toLowerCase(),
           role: roleV,
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
@@ -281,12 +283,13 @@ export function UserForm({
             className="input disabled:bg-slate-50 disabled:text-slate-500"
             type="email"
             value={email}
-            disabled={editing}
             onChange={(e) => setEmail(e.target.value)}
             placeholder={`first.last@${ORG.emailDomain}`}
           />
           {editing && (
-            <p className="text-[10px] text-slate-400 mt-1">Email cannot be changed here.</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              This is also their sign-in address. If you change it, they sign in with the new one.
+            </p>
           )}
         </div>
         {!editing && (

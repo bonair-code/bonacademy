@@ -197,8 +197,10 @@ export function Assignments() {
     () =>
       courses
         .filter((c) => c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false)
+        // Eğitmen yalnızca kendi kursunu atar (sunucu da aynı kuralı uyguluyor).
+        .filter((c) => role !== "INSTRUCTOR" || (c as { ownerInstructorId?: string }).ownerInstructorId === profile?.uid)
         .sort((a, b) => a.title.localeCompare(b.title, "tr")),
-    [courses]
+    [courses, role, profile?.uid]
   );
 
   const now = Date.now();

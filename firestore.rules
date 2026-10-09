@@ -184,7 +184,24 @@ service cloud.firestore {
       // listeleyebiliyordu).
       allow get: if true;
       allow list: if isAdmin() || isInstructor();
-      allow create, update, delete: if isAdmin() || isInstructor();
+      // Eğitmen yalnızca KENDİ oturumunu açar/değiştirir (CAPELLA kararı).
+      // Kursa bağlı oturum yalnızca eğitmenin KENDİ kursu için ("Other" serbest).
+      function ownCourseOrNone() {
+        return request.resource.data.get('courseId', null) == null
+          || request.resource.data.courseId == 'OTHER'
+          || ownsCourse(request.resource.data.courseId);
+      }
+      allow create: if isAdmin()
+                    || (isInstructor()
+                        && request.resource.data.createdById == request.auth.uid
+                        && ownCourseOrNone());
+      allow update: if isAdmin()
+                    || (isInstructor()
+                        && resource.data.createdById == request.auth.uid
+                        && request.resource.data.createdById == request.auth.uid
+                        && ownCourseOrNone());
+      allow delete: if isAdmin()
+                    || (isInstructor() && resource.data.createdById == request.auth.uid);
 
       match /attendees/{aid} {
         // Katılımcı kendi kaydını yazar; oturum kapandıysa yazamaz. YALNIZCA
@@ -208,7 +225,9 @@ service cloud.firestore {
                       && (request.resource.data.get('birthDate', null) == null
                           || (request.resource.data.birthDate is string
                               && request.resource.data.birthDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
-        allow read, update, delete: if isAdmin() || isInstructor();
+        // Katılımcı listesi (kişisel bilgiler) yalnızca oturumun sahibine ve admine.
+        allow read, update, delete: if isAdmin()
+                                    || (isInstructor() && session().createdById == request.auth.uid);
       }
     }
 

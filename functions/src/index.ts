@@ -288,6 +288,29 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   if (d.courseMethods !== undefined) patch.courseMethods = sanitizeCourseMethods(d.courseMethods);
   if (typeof d.isActive === "boolean") patch.isActive = d.isActive;
 
+  // E-posta (giriş adresi) değişikliği: önce Auth'ta (aynı adres başka hesapta
+  // varsa reddedilir), sonra profilde. Açık davetler eski adrese gitmiş
+  // olabileceği için iptal edilir — gerekirse yeniden gönderilir.
+  const newEmail = typeof d.email === "string" ? d.email.trim().toLowerCase() : "";
+  if (newEmail && newEmail !== String(snap.data()?.email ?? "").toLowerCase()) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail) || newEmail.length > 200)
+      throw new HttpsError("invalid-argument", "That does not look like a valid email address.");
+    try {
+      await getAuth().updateUser(uid, { email: newEmail, emailVerified: false });
+    } catch (e) {
+      const code = (e as { code?: string }).code ?? "";
+      throw new HttpsError(
+        code.includes("email-already-exists") ? "already-exists" : "invalid-argument",
+        code.includes("email-already-exists")
+          ? "Another account already uses that email address."
+          : "Could not change the email: " + (e as Error).message
+      );
+    }
+    patch.email = newEmail;
+    const open = await db.collection("invites").where("uid", "==", uid).where("status", "==", "OPEN").get();
+    for (const inv of open.docs) await inv.ref.update({ status: "REVOKED", revokedAt: FieldValue.serverTimestamp() });
+  }
+
   const oldDept = snap.data()?.departmentId ?? null;
   const old = snap.data() || {};
   await snap.ref.update(patch);
@@ -611,6 +634,10 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
       continue;
     }
     const course = courseSnap.data() as any;
+    if (callerRole === "INSTRUCTOR" && course.ownerInstructorId !== req.auth.uid) {
+      skipped.push({ courseId, reason: "Not your course." });
+      continue;
+    }
 
     // Yayında olmayan ya da hiçbir dili yayınlanmamış kursa atama yapılmaz —
     // kişi açtığında yapacak bir şey bulamaz ve atama sonsuza kadar PENDING
@@ -724,6 +751,7 @@ export const sendAssignmentReminder = onCall(
     await assertCanManageAssignments(req.auth?.uid);
     const assignmentId = cleanId(req.data?.assignmentId);
     if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+    await assertOwnsAssignmentCourse(req.auth!.uid, assignmentId);
     const db = getFirestore();
     const ref = db.doc(`assignments/${assignmentId}`);
     const snap = await ref.get();
@@ -880,6 +908,7 @@ export const setAssignmentDueDate = onCall({ region: REGION, invoker: "public" }
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  await assertOwnsAssignmentCourse(req.auth!.uid, assignmentId);
   const ref = getFirestore().doc(`assignments/${assignmentId}`);
   if (!(await ref.get()).exists) throw new HttpsError("not-found", "Assignment not found.");
   const dueDate = parseDue({ dueDate: req.data?.dueDate });
@@ -896,6 +925,22 @@ async function clearExamSessions(assignmentId: string) {
     for (const d of snap.docs.slice(i, i + 400)) b.delete(d.ref);
     await b.commit();
   }
+}
+
+/**
+ * Eğitmen yalnızca KENDİ kursunun atamalarını yönetir; admin hepsini
+ * (CAPELLA kararı, 09.10.2026). Atama yoksa sessiz geçer — sonraki kontrol
+ * "bulunamadı" der.
+ */
+async function assertOwnsAssignmentCourse(uid: string, assignmentId: string) {
+  const db = getFirestore();
+  const role = (await db.doc(`users/${uid}`).get()).data()?.role;
+  if (role === "ADMIN") return;
+  const a = (await db.doc(`assignments/${assignmentId}`).get()).data();
+  if (!a) return;
+  const c = (await db.doc(`courses/${a.courseId}`).get()).data();
+  if (c?.ownerInstructorId !== uid)
+    throw new HttpsError("permission-denied", "You can only manage assignments of your own courses.");
 }
 
 /** Atama işlemleri admin ve eğitmenin: eğitimi veren yönetir. */
@@ -923,6 +968,7 @@ export const resetAssignment = onCall({ region: REGION, invoker: "public" }, asy
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  await assertOwnsAssignmentCourse(req.auth!.uid, assignmentId);
   const reason = String(req.data?.reason ?? "").trim();
 
   const db = getFirestore();
@@ -974,6 +1020,7 @@ export const setAssignmentAccess = onCall({ region: REGION, invoker: "public" },
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  await assertOwnsAssignmentCourse(req.auth!.uid, assignmentId);
   const blocked = req.data?.blocked === true;
   const reason = String(req.data?.reason ?? "").trim().slice(0, 500);
 
@@ -1010,6 +1057,7 @@ export const cancelAssignment = onCall({ region: REGION, invoker: "public" }, as
   await assertCanManageAssignments(req.auth?.uid);
   const assignmentId = cleanId(req.data?.assignmentId);
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
+  await assertOwnsAssignmentCourse(req.auth!.uid, assignmentId);
   const reason = String(req.data?.reason ?? "").trim();
 
   const db = getFirestore();
@@ -1727,6 +1775,8 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
     const sn = await tx.get(sRef);
     if (!sn.exists) throw new HttpsError("not-found", "Session not found.");
     const d = sn.data() as any;
+    if (caller?.role === "INSTRUCTOR" && d.createdById !== req.auth!.uid)
+      throw new HttpsError("permission-denied", "You can only finish your own sessions.");
     if (d.status === "CLOSED" || d.status === "CLOSING")
       throw new HttpsError("failed-precondition", "This session is already closed.");
     // Önce yoklama kapanmalı: yoklama açıkken sertifika verilmez.

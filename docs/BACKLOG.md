@@ -12,6 +12,32 @@
 
 ## 0. CAPELLA talepleri
 
+### Sırada (09.10.2026)
+- **Sertifika PDF'i e-postayla:** sınıf eğitiminde QR formuna e-posta alanı; "sertifika
+  ver" denince her katılımcıya PDF. Online eğitimde sertifika hakkı kazanılınca PDF.
+  Sunucuda PDF üretimi gerekiyor (bugün yalnızca tarayıcıda yazdırılıyor); örnek PDF
+  CAPELLA onayına sunulacak.
+- **Kişi sayfası (/team/:id) yeniden tasarım:** daha az ve öz gösterge, iPhone tarzı.
+  Örnek tasarım hazırlanacak.
+- **Sınavlı yüz yüze eğitim:** sınıf oturumuna bağlı sınav — işleyiş önerisi hazırlanacak.
+  Canlı/gözetimli toplu sınav (aşağıda) ile birlikte düşünülmeli.
+- **CAPELLA kontrol edecek:** eğitim içeriği (PDF/SCORM) görüntüleme — yeni içerik
+  kurallarından sonra.
+
+### Güvenlik — sonraya kalanlar (inceleme 08.10.2026)
+- **Tam CSP'yi zorunlu yap:** şu an `Content-Security-Policy-Report-Only` (firebase.json).
+  Giriş (masaüstü + iPhone Safari), 3D uçak, PDF okuyucu, önizleme/yazdır/indir, SCORM
+  (öğrenci + önizleme), video, QR, Excel, sınıf QR'ı denenip konsolda ihlal yoksa
+  zorunluya çevrilecek.
+- **SCORM'u ayrı kökenden sun:** paket HTML'i bugün uygulamayla aynı kökende çalışıyor
+  (/scorm-content). Risk sınırlandı (yalnız admin/kurs sahibi yükler, yalnız scorm/
+  klasörü sunulur) ama kalıcı çözüm ayrı alan adı + postMessage ile SCORM API köprüsü.
+- **App Check (bot koruması):** girişsiz uçlar (yoklama formu, davet) için.
+- **Konsol ayarları (CAPELLA):** e-posta numaralandırma koruması, şifre politikası
+  (en az 8), Browser key'in web sitesi kısıtlaması.
+- **Müdür kişi sayfası:** müdür başka bir personelin sayfasını açınca sorgular kuralca
+  reddediliyor (userDepartmentId süzgeci eksik) — StaffDetail.tsx.
+
 ### Canlı (gözetimli) toplu sınav — istendi 07.10.2026
 Birden fazla kişinin (ör. 10 kişi) **aynı anda, admin'in başlattığı** bir
 sınava girmesi. Mevcut sınav kursa bağlı ve herkes kendi zamanında giriyor;

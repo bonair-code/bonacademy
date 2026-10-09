@@ -334,7 +334,12 @@ function SessionForm({
   existing?: Session | null;
   onClose: () => void;
 }) {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
+  // Eğitmen yalnızca kendi kursu için oturum açar (kural da aynısını istiyor).
+  const pickable =
+    role === "INSTRUCTOR"
+      ? courses.filter((c) => (c as { ownerInstructorId?: string }).ownerInstructorId === profile?.uid)
+      : courses;
   // "OTHER": sistemde kursu olmayan bir eğitim; adı elle yazılır.
   const [courseId, setCourseId] = useState(
     existing ? (existing.courseId ?? "OTHER") : ""
@@ -413,7 +418,7 @@ function SessionForm({
             }}
           >
             <option value="">— Select —</option>
-            {courses.map((c) => (
+            {pickable.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
               </option>

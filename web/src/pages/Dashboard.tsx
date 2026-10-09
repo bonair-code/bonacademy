@@ -215,16 +215,22 @@ function LearnerDashboard() {
                 }
               />
               <div className="card divide-y divide-slate-100">
+                {/* Biten eğitime tekrar girilir: içerik okunabilir (ilerleme
+                    ve sertifika değişmez). */}
                 {done.map((a) => (
-                  <div key={a.id} className="flex items-center gap-3 px-5 py-3">
+                  <Link
+                    key={a.id}
+                    to={`/learn/${a.id}`}
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/80 transition"
+                  >
                     <span className="h-7 w-7 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
                       <IconCheck />
                     </span>
                     <span className="flex-1 min-w-0 text-[13px] font-semibold text-slate-900 truncate">
                       {a.courseTitle}
                     </span>
-                    <span className="text-[11px] text-slate-400 shrink-0">Completed</span>
-                  </div>
+                    <span className="text-[11.5px] font-semibold text-brand-700 shrink-0">Review content ›</span>
+                  </Link>
                 ))}
               </div>
             </section>

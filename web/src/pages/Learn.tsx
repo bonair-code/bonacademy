@@ -555,9 +555,19 @@ export function Learn() {
       {!result && !reviewing && a.status === "COMPLETED" && (
         <div className="card p-4 sm:p-6 border-l-4 border-l-emerald-500">
           <div className="text-xl font-bold text-emerald-700">You have completed this training ✓</div>
-          <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
-            View My Certificate
-          </button>
+          <p className="text-[13px] text-slate-600 mt-1">
+            You can go back through the material at any time — your result and certificate stay as they are.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button onClick={() => setCertOpen(true)} className="btn-primary">
+              View My Certificate
+            </button>
+            {sections.length > 0 && (
+              <button onClick={() => setSelected(sections[0].id)} className="btn-secondary">
+                Review training content
+              </button>
+            )}
+          </div>
         </div>
       )}
 
