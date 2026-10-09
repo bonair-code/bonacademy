@@ -209,7 +209,12 @@ service cloud.firestore {
         // yazılıp sertifikanın başkasına bağlanması sağlanabiliyordu.
         allow create: if session().status == 'OPEN'
                       && request.resource.data.keys().hasOnly(
-                           ['fullName', 'firstName', 'lastName', 'birthPlace', 'birthDate', 'userId', 'signedAt'])
+                           ['fullName', 'firstName', 'lastName', 'birthPlace', 'birthDate', 'email', 'userId', 'signedAt'])
+                      // Sertifika PDF'i bu adrese gider; eşleştirmede KULLANILMAZ.
+                      && (request.resource.data.get('email', null) == null
+                          || (request.resource.data.email is string
+                              && request.resource.data.email.size() < 200
+                              && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')))
                       && request.resource.data.get('userId', null) == null
                       && request.resource.data.signedAt == request.time
                       && request.resource.data.fullName is string

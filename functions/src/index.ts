@@ -1813,19 +1813,20 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
   const norm = (s: unknown) => String(s ?? "").trim().toLocaleLowerCase("tr");
   const usersSnap = await db.collection("users").get();
   const userByName = new Map<string, string>();
-  const userByEmail = new Map<string, string>();
   for (const u of usersSnap.docs) {
     const x = u.data() as any;
     if (x.name) userByName.set(norm(x.name), u.id);
-    if (x.email) userByEmail.set(norm(x.email), u.id);
   }
 
   for (let i = 0; i < attendees.length; i++) {
     const d = attendees[i];
     const a = d.data() as any;
     const serialNo = serials[i];
+    // Eşleşme yalnızca ADA göre (öğretmenin ekranda gördüğüyle aynı). Katılımcının
+    // yazdığı e-posta eşleştirmede KULLANILMAZ — başkasının adresini yazan biri
+    // onun atamasını kapatamasın; e-posta yalnızca sertifikayı göndermek için.
     if (!a.userId) {
-      const match = (a.email ? userByEmail.get(norm(a.email)) : null) ?? userByName.get(norm(a.fullName));
+      const match = userByName.get(norm(a.fullName));
       if (match) a.userId = match;
     }
 

@@ -788,7 +788,12 @@ export function ClassSessionDetail() {
                 {attendees.map((a, i) => (
                   <tr key={a.id} className="hover:bg-slate-50/70">
                     <td className="td text-slate-400 tabular-nums">{i + 1}</td>
-                    <td className="td font-semibold text-slate-900">{a.fullName}</td>
+                    <td className="td font-semibold text-slate-900">
+                      {a.fullName}
+                      {a.email && (
+                        <span className="block text-[11px] font-normal text-slate-400">{a.email}</span>
+                      )}
+                    </td>
                     <td className="td text-slate-500">{a.birthPlace || "—"}</td>
                     <td className="td tabular-nums text-slate-500">{dmy(a.birthDate)}</td>
                     {/* Eşleşme görünür ve düzeltilebilir: yanlış kişiye
