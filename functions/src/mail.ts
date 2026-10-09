@@ -57,6 +57,7 @@ export async function sendMail(m: {
   type: string;
   userId?: string | null;
   meta?: Record<string, unknown>;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 }): Promise<MailResult> {
   const log = getFirestore().collection("notifications").doc();
   const base = {
@@ -76,6 +77,7 @@ export async function sendMail(m: {
       subject: m.subject,
       html: m.html,
       text: m.text,
+      attachments: m.attachments,
     });
     await log.set({ ...base, status: "SENT", sentAt: FieldValue.serverTimestamp() });
     return { ok: true };
@@ -253,6 +255,46 @@ ${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırı
     lang
   );
   const text = `Sayın ${p.name},\n\nHatırlatma: Capella Academy'de size atanan "${p.title}" eğitimi henüz tamamlanmamıştır.${p.dueDate ? ` Son tarih: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  return { subject, html, text };
+}
+
+/**
+ * Sertifika: eğitim bitti, belge PDF olarak ekte. Online eğitimde sertifika
+ * hak edilince, sınıf eğitiminde eğitmen "sertifika ver" deyince gider.
+ * Buton herkese açık doğrulama sayfasına (QR'daki adresin aynısı) gider.
+ */
+export function certificateMail(
+  lang: MailLang,
+  p: { name: string; courseTitle: string; serialNo: string; issuedAt: Date | null; verifyUrl: string; sample?: boolean }
+) {
+  const tag = p.sample ? (lang === "en" ? "[SAMPLE] " : "[ÖRNEK] ") : "";
+  const row = (k: string, v: string) =>
+    `<tr><td style="padding:3px 0;font-size:13px;color:#64748b;width:42%">${esc(k)}</td><td style="padding:3px 0;font-size:13px;color:#0f172a;font-weight:600">${esc(v)}</td></tr>`;
+  const card = (k1: string, k2: string) =>
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px"><tr><td style="padding:14px 16px"><div style="font-weight:600;font-size:15px;color:#0f172a;margin-bottom:6px">${esc(p.courseTitle)}</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${row(k1, p.serialNo)}${p.issuedAt ? row(k2, fmtDate(p.issuedAt)) : ""}</table></td></tr></table>`;
+  if (lang === "en") {
+    const subject = `${tag}Your certificate: ${p.courseTitle}`;
+    const html = shell(
+      `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">Congratulations — you have successfully completed the following training. Your certificate is attached to this email as a PDF.</p>
+${card("Certificate No", "Certificate Date")}
+${button(p.verifyUrl, "Verify certificate")}
+${plainLink(p.verifyUrl, "Anyone can check the certificate at this address (the QR code on the certificate opens it too):")}`,
+      lang
+    );
+    const text = `Dear ${p.name},\n\nYou have successfully completed "${p.courseTitle}". Your certificate (No ${p.serialNo}) is attached as a PDF.\n\nVerify: ${p.verifyUrl}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    return { subject, html, text };
+  }
+  const subject = `${tag}Sertifikanız: ${p.courseTitle}`;
+  const html = shell(
+    `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
+<p style="margin:0 0 16px">Tebrikler, aşağıdaki eğitimi başarıyla tamamladınız. Sertifikanız bu e-postanın ekinde PDF olarak yer almaktadır.</p>
+${card("Sertifika No", "Sertifika Tarihi")}
+${button(p.verifyUrl, "Sertifikayı doğrula")}
+${plainLink(p.verifyUrl, "Sertifika bu adresten herkes tarafından doğrulanabilir (sertifikadaki QR kod da bu adresi açar):")}`,
+    lang
+  );
+  const text = `Sayın ${p.name},\n\n"${p.courseTitle}" eğitimini başarıyla tamamladınız. Sertifikanız (No ${p.serialNo}) ekte PDF olarak yer almaktadır.\n\nDoğrulama: ${p.verifyUrl}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
   return { subject, html, text };
 }
 

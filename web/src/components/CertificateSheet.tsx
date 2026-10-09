@@ -17,8 +17,9 @@ export type Cert = {
   birthPlace?: string | null;
   birthDate?: string | null; // YYYY-MM-DD
   durationHours?: number | null;
-  trainingStartedAt?: Timestamp | null;
-  trainingCompletedAt?: Timestamp | null;
+  /** Online: Timestamp. Sınıf oturumu: "YYYY-MM-DD" metni. */
+  trainingStartedAt?: Timestamp | string | null;
+  trainingCompletedAt?: Timestamp | string | null;
   heldIn?: string | null;
   organisationName?: string | null;
   approvalNo?: string | null;
@@ -31,7 +32,10 @@ export type Cert = {
   verifyToken?: string | null;
 };
 
-export function fmtTs(ts?: Timestamp | null) {
+export function fmtTs(ts?: Timestamp | string | null) {
+  // Sınıf oturumu tarihleri metin ("YYYY-MM-DD") — eskiden "—" dönüyor,
+  // sınıf sertifikasında eğitim tarihi hiç basılmıyordu.
+  if (typeof ts === "string") return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? ts.split("-").reverse().join(".") : "—";
   return ts?.toDate?.().toLocaleDateString("tr-TR") ?? "—";
 }
 

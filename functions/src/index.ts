@@ -4,7 +4,8 @@ import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "fir
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, tempPasswordMail, mailLang, appUrl, type AssignedItem, type MailResult } from "./mail";
+import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, tempPasswordMail, certificateMail, mailLang, appUrl, type AssignedItem, type MailLang, type MailResult } from "./mail";
+import { renderCertificatePdf, certificateFileName, type CertData } from "./certPdf";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
 // giriş noktaları kullanılıyor.
@@ -1290,9 +1291,9 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
   // ikincisi belgeyi var bulup çıkar. Eskiden iki numara harcanıyor, ikinci
   // belge birincinin üzerine yazılıyor, ilk QR kaydı sahipsiz kalıyordu.
   const counterRef = db.doc("counters/certificates");
-  await db.runTransaction(async (tx) => {
+  const created = await db.runTransaction(async (tx) => {
     const [existing, counterSnap] = await Promise.all([tx.get(certRef), tx.get(counterRef)]);
-    if (existing.exists) return;
+    if (existing.exists) return false;
     const { serials, counter } = allocSerials(counterSnap.data(), 1);
     const serialNo = serials[0];
     tx.set(counterRef, counter, { merge: true });
@@ -1335,12 +1336,153 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     // sorgu). Alan HER sertifikada olmalı: eksikse kişi belgesini göremez.
     blocked: !!a.accessBlocked,
     });
+    return true;
+  });
+  // Belge PDF olarak kişinin e-postasına. Erişimi kapatılmış kişiye gitmez
+  // (belgesini sistemde de göremiyor). Gönderim hatası tamamlamayı bozmaz.
+  if (created && !a.accessBlocked) await emailCertificate(certRef.id);
+}
+
+/** Firestore Timestamp ya da "YYYY-MM-DD" → Date (sınıf oturumu tarihleri metin). */
+function asDate(v: unknown): Date | null {
+  if (!v) return null;
+  if (typeof (v as any).toDate === "function") return (v as any).toDate();
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return new Date(`${v}T12:00:00Z`);
+  return null;
+}
+
+function certData(c: any): CertData {
+  return {
+    serialNo: String(c.serialNo ?? ""),
+    userName: String(c.userName ?? ""),
+    courseTitle: String(c.courseTitle ?? ""),
+    courseRevisionNo: c.courseRevisionNo ?? null,
+    courseRevisionDate: c.courseRevisionDate ?? null,
+    birthPlace: c.birthPlace ?? null,
+    birthDate: c.birthDate ?? null,
+    durationHours: c.durationHours ?? null,
+    trainingStartedAt: asDate(c.trainingStartedAt),
+    trainingCompletedAt: asDate(c.trainingCompletedAt),
+    issuedAt: asDate(c.issuedAt),
+    heldIn: c.heldIn ?? null,
+    verifyUrl: c.verifyToken ? `${appUrl()}/verify/${encodeURIComponent(c.verifyToken)}` : null,
+  };
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/** PDF'i üretip gönderir. Üretim hatası da MailResult olarak döner (atmaz). */
+async function sendCertificatePdf(
+  data: CertData,
+  to: string,
+  lang: MailLang,
+  log: { userId?: string | null; certificateId?: string | null; sample?: boolean }
+): Promise<MailResult> {
+  let pdf: Buffer;
+  try {
+    pdf = await renderCertificatePdf(data);
+  } catch (e) {
+    console.error("certificate pdf failed:", e);
+    return { ok: false, error: "PDF could not be generated." };
+  }
+  const m = certificateMail(lang, {
+    name: data.userName,
+    courseTitle: data.courseTitle,
+    serialNo: data.serialNo,
+    issuedAt: data.issuedAt ?? null,
+    verifyUrl: data.verifyUrl || appUrl(),
+    sample: log.sample,
+  });
+  return sendMail({
+    to,
+    ...m,
+    type: log.sample ? "CERTIFICATE_SAMPLE" : "CERTIFICATE",
+    userId: log.userId ?? null,
+    meta: { certificateId: log.certificateId ?? null, serialNo: data.serialNo },
+    attachments: [{ filename: certificateFileName(data), content: pdf, contentType: "application/pdf" }],
   });
 }
 
+/**
+ * Bir sertifikayı sahibine PDF olarak gönderir.
+ * Alıcı: sınıf sertifikasında QR formuna yazılan adres, personelde hesabın
+ * e-postası (sınıfta adres yoksa eşleşen personelinki). Sonuç belgeye yazılır
+ * (emailedTo / emailedAt / emailError) — kimin eline ulaştığı kayıtta dursun.
+ */
+async function emailCertificate(certId: string, toOverride?: string | null): Promise<MailResult & { to?: string }> {
+  const db = getFirestore();
+  const ref = db.doc(`certificates/${certId}`);
+  const c = (await ref.get()).data() as any;
+  if (!c) return { ok: false, error: "Certificate not found." };
+  let to = (toOverride || "").trim().toLowerCase();
+  let lang: MailLang = "tr";
+  const user = c.userId ? ((await db.doc(`users/${c.userId}`).get()).data() as any) : null;
+  if (user) lang = mailLang(user.locale);
+  if (!to && c.sessionId && c.attendeeId) {
+    const att = (await db.doc(`classSessions/${c.sessionId}/attendees/${c.attendeeId}`).get()).data() as any;
+    to = String(att?.email || "").trim().toLowerCase();
+  }
+  if (!to && user?.email) to = String(user.email).trim().toLowerCase();
+  if (!EMAIL_RE.test(to)) return { ok: false, error: "No email address." };
+  const r = await sendCertificatePdf(certData(c), to, lang, { userId: c.userId ?? null, certificateId: certId });
+  await ref
+    .update(
+      r.ok
+        ? { emailedTo: to, emailedAt: FieldValue.serverTimestamp(), emailError: FieldValue.delete() }
+        : { emailError: r.error ?? "failed", emailErrorAt: FieldValue.serverTimestamp() }
+    )
+    .catch(() => undefined);
+  return { ...r, to };
+}
+
+/**
+ * Yönetici: sertifikayı yeniden e-postayla gönderir (certId), ya da şablonu
+ * denemek için ÖRNEK bir sertifika yollar (sampleUserId — kişinin adıyla,
+ * kayda geçmeyen "SAMPLE" numaralı, konu satırında [ÖRNEK] yazan bir belge).
+ */
+export const emailCertificateNow = onCall(
+  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD], memory: "512MiB" },
+  async (req) => {
+    await assertAdmin(req.auth?.uid);
+    const db = getFirestore();
+    const sampleUserId = cleanId(req.data?.sampleUserId);
+    if (sampleUserId) {
+      const u = (await db.doc(`users/${sampleUserId}`).get()).data() as any;
+      if (!u?.email) throw new HttpsError("not-found", "User has no email.");
+      const now = new Date();
+      const r = await sendCertificatePdf(
+        {
+          serialNo: "SAMPLE",
+          userName: u.name || "",
+          courseTitle: "SHT-CAM | Continuation Training",
+          courseRevisionNo: "00",
+          courseRevisionDate: "2026-08-15",
+          birthPlace: u.birthPlace ? placeCase(u.birthPlace) : null,
+          birthDate: u.birthDate ?? null,
+          durationHours: 4,
+          trainingStartedAt: now,
+          trainingCompletedAt: now,
+          issuedAt: now,
+          heldIn: "ONLINE",
+          verifyUrl: `${appUrl()}/verify/sample`,
+        },
+        String(u.email).trim().toLowerCase(),
+        mailLang(u.locale),
+        { userId: sampleUserId, sample: true }
+      );
+      return { ...r, to: u.email };
+    }
+    const certId = cleanId(req.data?.certId);
+    if (!certId) throw new HttpsError("invalid-argument", "certId is required.");
+    const to = req.data?.to ? String(req.data.to).trim() : null;
+    if (to && !EMAIL_RE.test(to)) throw new HttpsError("invalid-argument", "Invalid email.");
+    return emailCertificate(certId, to);
+  }
+);
+
 /** Bir bölümü tamamlar (sıralı zorunluluk kontrolüyle). Hepsi bitince sınav
  *  varsa SECTIONS_DONE, yoksa COMPLETED + sertifika. */
-export const completeSection = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const completeSection = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, sectionId } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -1478,7 +1620,7 @@ export const examInfo = onCall({ region: REGION, invoker: "public" }, async (req
   };
 });
 
-export const startExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const startExam = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, language } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -1656,7 +1798,7 @@ async function finalizeAttempt(
  * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
  * eğitimi hangi dilde aldı" sorusunun cevabı.
  */
-export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const assignmentId = String(req.data?.assignmentId || "");
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
@@ -1733,7 +1875,7 @@ async function claimAttempt(ref: DocumentReference, sessRef: DocumentReference) 
   });
 }
 
-export const submitExam = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const submitExam = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, attemptNo, answers } = req.data || {};
   const n = Number(attemptNo);
@@ -1756,7 +1898,10 @@ export const submitExam = onCall({ region: REGION, invoker: "public" }, async (r
  * (ör. 25-131, 25-132 …) — kağıt kayıtlarının devamı getirilebilsin diye.
  * Katılımcı sistemde kayıtlıysa aynı kursun açık ataması da kapatılır.
  */
-export const finishClassSession = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const finishClassSession = onCall(
+  // Katılımcı başına bir PDF + e-posta: kalabalık sınıfta süre ve bellek payı.
+  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD], timeoutSeconds: 300, memory: "512MiB" },
+  async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -1898,8 +2043,18 @@ export const finishClassSession = onCall({ region: REGION, invoker: "public" }, 
     issuedCount: results.length,
   });
 
-  return { issued: results.length, first: results[0]?.serialNo, last: results.at(-1)?.serialNo };
-});
+  // Sertifikalar QR formuna yazılan adreslere PDF olarak. Oturum kapandıktan
+  // SONRA: gönderim hatası belge vermeyi geri almasın.
+  let emailed = 0;
+  for (const r of results) {
+    const m = await emailCertificate(`session_${sessionId}_${r.attendeeId}`);
+    if (m.ok) emailed++;
+  }
+  await sRef.update({ emailedCount: emailed }).catch(() => undefined);
+
+  return { issued: results.length, first: results[0]?.serialNo, last: results.at(-1)?.serialNo, emailed };
+  }
+);
 
 const TYPES: Record<string, string> = {
   html: "text/html; charset=utf-8",
@@ -2110,7 +2265,7 @@ export const serveScormContent = onRequest(
  * Denetim izi zorunlu: kim, ne zaman, hangi gerekçeyle kapattı hem atamaya
  * hem sertifikaya yazılır.
  */
-export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public" }, async (req) => {
+export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();

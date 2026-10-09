@@ -14,7 +14,8 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "../lib/firebase";
 import { PageHead } from "../components/PageHead";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
@@ -64,7 +65,7 @@ type Course = {
 
 type Toast = { msg: string; undo?: () => Promise<void> } | null;
 type Say = (msg: string, undo?: () => Promise<void>) => void;
-type Tab = "departments" | "scopes" | "tracked";
+type Tab = "departments" | "scopes" | "tracked" | "email";
 
 export function Settings() {
   const [tab, setTab] = useState<Tab>("departments");
@@ -101,6 +102,7 @@ export function Settings() {
     { k: "departments", t: "Departments", n: depts.length },
     { k: "scopes", t: "Authorisations", n: scopes.length },
     { k: "tracked", t: "Tracked Trainings", n: tracked.length },
+    { k: "email", t: "Email", n: 0 },
   ];
 
   return (
@@ -120,9 +122,11 @@ export function Settings() {
               }`}
             >
               {n.t}
-              <span className={`ml-auto text-[12px] ${tab === n.k ? "text-brand-700" : "text-slate-400"}`}>
-                {n.n}
-              </span>
+              {n.k !== "email" && (
+                <span className={`ml-auto text-[12px] ${tab === n.k ? "text-brand-700" : "text-slate-400"}`}>
+                  {n.n}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -131,6 +135,7 @@ export function Settings() {
           {tab === "departments" && <Departments rows={depts} say={say} />}
           {tab === "scopes" && <Authorisations rows={scopes} courses={courses} say={say} />}
           {tab === "tracked" && <TrackedTrainings rows={tracked} say={say} />}
+          {tab === "email" && <EmailSettings say={say} />}
         </div>
       </div>
 
@@ -151,6 +156,75 @@ export function Settings() {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── E-posta ───────────────────────────────────────────── */
+
+/**
+ * Sertifika e-postası: eğitim bitince belge PDF olarak kişiye gider (online
+ * eğitimde sertifika hak edilince, sınıf eğitiminde "sertifika ver" denince).
+ * Buradan şablonu denemek için ÖRNEK bir sertifika gönderilir — numarası
+ * "SAMPLE", konu satırında [ÖRNEK] yazar, kayda geçmez.
+ */
+function EmailSettings({ say }: { say: Say }) {
+  const [users, setUsers] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [uid, setUid] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(
+    () =>
+      onSnapshot(query(collection(db, "users"), orderBy("name")), (s) =>
+        setUsers(
+          s.docs
+            .map((d) => ({ id: d.id, ...(d.data() as { name?: string; email?: string; isActive?: boolean }) }))
+            .filter((u) => u.email && u.isActive !== false)
+            .map((u) => ({ id: u.id, name: u.name || u.email!, email: u.email! }))
+        )
+      ),
+    []
+  );
+  async function send() {
+    if (!uid) return;
+    setBusy(true);
+    try {
+      const r = (await httpsCallable(functions, "emailCertificateNow")({ sampleUserId: uid })).data as {
+        ok: boolean;
+        to?: string;
+        error?: string;
+      };
+      say(r.ok ? `Sample certificate sent to ${r.to}.` : `Could not send: ${r.error ?? "unknown error"}`);
+    } catch (e) {
+      say((e as Error).message || "Could not send.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="max-w-[560px]">
+      <Title
+        title="Email"
+        desc="Certificates are emailed as a PDF when an online training is completed, and to the address entered on the QR form when a class session issues certificates."
+      />
+      <div className="mt-5 rounded-xl border border-slate-200/80 bg-white p-4">
+        <div className="text-[13.5px] font-semibold text-slate-800">Send a sample certificate</div>
+        <p className="text-[12.5px] text-slate-500 mt-0.5">
+          To check how the email and the PDF look. Marked as a sample; nothing is recorded.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 mt-3">
+          <select className="input sm:flex-1" value={uid} onChange={(e) => setUid(e.target.value)}>
+            <option value="">Choose a person…</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name} — {u.email}
+              </option>
+            ))}
+          </select>
+          <button className="btn-primary" disabled={!uid || busy} onClick={send}>
+            {busy ? "Sending…" : "Send sample"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

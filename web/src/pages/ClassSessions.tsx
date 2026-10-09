@@ -622,8 +622,11 @@ export function ClassSessionDetail() {
     setErr(null);
     try {
       const res = await httpsCallable(functions, "finishClassSession")({ sessionId });
-      const d = res.data as { issued: number; first: string; last: string };
-      setToast(`${d.issued} certificate(s) issued — ${d.first} to ${d.last}.`);
+      const d = res.data as { issued: number; first: string; last: string; emailed?: number };
+      setToast(
+        `${d.issued} certificate(s) issued — ${d.first} to ${d.last}.` +
+          (d.emailed != null ? ` ${d.emailed} emailed as PDF.` : "")
+      );
       setConfirmFinish(false);
     } catch (e) {
       setErr((e as Error).message);
