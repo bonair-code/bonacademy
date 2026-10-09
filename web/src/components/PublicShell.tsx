@@ -27,6 +27,38 @@ const SKY = "radial-gradient(120% 90% at 70% 10%, #1d3260 0%, #0d1730 55%, #070d
 /** Telefon uçuşunda silinen kenarın altındaki yumuşak geçiş, px (PlaneScene ile aynı). */
 const WIPE_SOFT = 170;
 const FALLBACK_AFTER_MS = 8000;
+/** Sayfanın arkasındaki zemin (çentik altı, Safari araç çubuğu arkası, esneme). */
+const PAGE_BG = "#0b1430";
+
+/**
+ * Kabuk açıkken html/body zemini ve tarayıcı tema rengi gece mavisi olur.
+ * Yoksa iPhone Safari'de üstte ve altta uygulamanın açık gri zemini beyaz
+ * şerit olarak görünüyordu. Kabuk kapanınca eski hâline döner.
+ */
+function useDarkPageChrome() {
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prev = [html.style.background, body.style.background];
+    html.style.background = PAGE_BG;
+    body.style.background = PAGE_BG;
+    let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const created = !meta;
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.appendChild(meta);
+    }
+    const prevColor = meta.content;
+    meta.content = PAGE_BG;
+    return () => {
+      html.style.background = prev[0];
+      body.style.background = prev[1];
+      if (created) meta!.remove();
+      else meta!.content = prevColor;
+    };
+  }, []);
+}
 
 /**
  * Herkese açık ekranların ortak kabuğu: giriş, şifre sıfırlama, sertifika
@@ -90,6 +122,7 @@ export function PublicShell({
   width?: string;
 }) {
   const flight = useLoginFlight();
+  useDarkPageChrome();
   const [plane3d, setPlane3d] = useState(false);
   // Yedek çizim başta GÖRÜNMEZ: eskiden 3D yüklenene kadar çizim görünüyor,
   // sonra 3D'ye dönüyordu (iki farklı uçak). Artık yalnızca 3D başarısız
@@ -182,7 +215,7 @@ export function PublicShell({
           </div>
 
           {/* Üst şerit: kutusuz beyaz logo, sağda saat */}
-          <header className="relative z-10 flex items-center justify-between px-5 sm:px-7 pt-5">
+          <header className="relative z-10 flex items-center justify-between px-5 sm:px-7 pt-[max(1.25rem,env(safe-area-inset-top))]">
             <img
               src="/Logo.png"
               alt={ORG.name}
