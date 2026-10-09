@@ -497,15 +497,20 @@ export function UserForm({
 export function AssignPanel({
   userId,
   courses,
+  preselect,
   onDone,
   onCancel,
 }: {
   userId: string;
   courses: Ref[];
+  /** Önceden işaretli kurslar (ör. kişi detayında eksik satırın "Assign"ı). */
+  preselect?: string[];
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set((preselect ?? []).filter((id) => courses.some((c) => c.id === id)))
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
