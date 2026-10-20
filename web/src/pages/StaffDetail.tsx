@@ -308,6 +308,35 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
   const recordGroups = useRecordGroups(certs, externals, courseMetaMap(courses));
 
   /**
+   * Kurs kimliğine göre kayıt grubu — satırın altında geçmişi açmak için.
+   * `recordGroups` anahtarı ya kurs kimliği ya da `t:<başlık>`; buraya
+   * yalnız gerçek bir kursa bağlı olanlar giriyor.
+   */
+  const groupByCourse = useMemo(() => {
+    const m = new Map<string, (typeof recordGroups)[number]>();
+    for (const g of recordGroups) if (!g.key.startsWith("t:")) m.set(g.key, g);
+    return m;
+  }, [recordGroups]);
+
+  /**
+   * Hiçbir kursa bağlanmamış eski kayıtlar. Liste kurslardan kurulduğu için
+   * bunlar hiçbir satıra düşmüyordu ve yalnız Certificates sekmesinde
+   * görünüyordu — kâğıttan aktarılan belgelerin bir kısmı bu durumda
+   * (ör. "GLOBAL_ENGINE RUN-UP_TRAINING"). Bir uygunluk boşluğu kapatmazlar
+   * ama kişinin geçmişinin parçasıdırlar; listenin sonunda duruyorlar.
+   */
+  const unlinkedGroups = useMemo(() => {
+    // Kurslar henüz gelmediyse hiçbir şey "bağlantısız" sayılmaz; yoksa ilk
+    // render'da bütün kayıtlar bir an "Other records" altında görünürdü.
+    if (courses.length === 0) return [];
+    const ids = new Set(courses.map((c) => c.id));
+    return recordGroups.filter((g) => g.key.startsWith("t:") || !ids.has(g.key));
+  }, [recordGroups, courses]);
+
+  /** Geçmişi açık olan eğitim satırları. */
+  const [openHistory, setOpenHistory] = useState<Record<string, boolean>>({});
+
+  /**
    * KAYIT işlemleri: dış sertifika ekle/değiştir/sil. Kurallar müdüre kendi
    * departmanı için izin veriyor (externalTrainings create/update).
    * Kişi kendi kaydına bakarken kapalı — kimse kendi belgesini kendi giremez.
@@ -462,8 +491,15 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
         <div className="min-w-0 flex-1">{title}</div>
       );
 
+    // Bu eğitimin bütün kayıtları: güncel olan satırda zaten yazıyor,
+    // kalanlar "earlier records" altında. Tek kaydı olanda açılacak bir şey
+    // yok, o yüzden düğme de çıkmıyor.
+    const g = groupByCourse.get(l.course.id);
+    const older = g ? g.records.slice(1) : [];
+    const histOpen = !!openHistory[l.course.id];
+
     return (
-      <li key={l.course.id} className="flex items-center gap-3 pl-4 pr-2 py-2.5 min-h-[56px]">
+      <li key={l.course.id} className="flex flex-wrap items-center gap-3 pl-4 pr-2 py-2.5 min-h-[56px]">
         <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${tone}`} />
         {body}
         {(l.state === "MISSING" || exp) && canAssign ? (
@@ -483,6 +519,52 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
         ) : (
           <span className="w-7" />
         )}
+
+        {older.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setOpenHistory((p) => ({ ...p, [l.course.id]: !p[l.course.id] }))}
+            aria-expanded={histOpen}
+            className="basis-full text-left text-[11.5px] text-slate-500 hover:text-slate-800 pl-[22px] -mt-1"
+          >
+            {histOpen ? "Hide" : "Show"} {older.length} earlier record{older.length === 1 ? "" : "s"}
+          </button>
+        )}
+        {histOpen &&
+          older.map((r) => (
+            <div
+              key={r.id}
+              className="basis-full flex items-center gap-2.5 pl-[22px] pr-1 py-1.5 border-t border-slate-100 -mb-1"
+            >
+              <span className="text-[9.5px] font-bold uppercase tracking-[0.04em] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+                {r.source === "BONACADEMY" ? "BonAcademy" : r.source === "PAPER" ? "On paper" : "External"}
+              </span>
+              <span className="min-w-0 flex-1 text-[11.5px] text-slate-600 truncate">
+                {r.label}
+                {r.serialNo ? ` · ${r.serialNo}` : ""} · {fmt(r.date)}
+                {r.expiry ? ` → ${fmt(r.expiry)}` : " · no expiry"}
+              </span>
+              {r.cert && (
+                <button onClick={() => setCertView(r.cert!)} className="btn-secondary text-[11px] py-1 px-2.5">
+                  View
+                </button>
+              )}
+              {r.fileUrl && (
+                <button
+                  onClick={() =>
+                    setPreview({
+                      url: r.fileUrl!,
+                      name: r.external?.fileName ?? "certificate.pdf",
+                      title: l.course.title,
+                    })
+                  }
+                  className="btn-secondary text-[11px] py-1 px-2.5"
+                >
+                  Open
+                </button>
+              )}
+            </div>
+          ))}
       </li>
     );
   }
@@ -686,7 +768,31 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
                   : "No training linked to this person yet — assign a course or give them an authorisation scope with required training."}
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">{shown.map(renderLine)}</ul>
+              <>
+                <ul className="divide-y divide-slate-100">{shown.map(renderLine)}</ul>
+                {/* Hiçbir eğitime bağlanmamış eski belgeler. Uygunluk
+                    hesabına girmiyorlar ("closes no gap") ama kişinin
+                    geçmişinin parçası; başka hiçbir yerde görünmüyorlardı. */}
+                {filter === "all" && unlinkedGroups.length > 0 && (
+                  <div className="border-t-[6px] border-slate-100">
+                    <div className="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-[0.06em] text-slate-400">
+                      Other records · not linked to a training
+                    </div>
+                    <div className="px-3 pb-3">
+                      <RecordHistory
+                        groups={unlinkedGroups}
+                        onView={setCertView}
+                        onPreview={setPreview}
+                        onEdit={
+                          canEdit
+                            ? (r) => setDialog({ kind: "edit", row: r as unknown as ExternalRow })
+                            : undefined
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )
           ) : (
             /* Eğitim başına tek grup: geçerli kayıt üstte, geçmişi altında.
