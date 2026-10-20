@@ -2608,7 +2608,10 @@ export const undoCertificateImport = onCall({ region: REGION, invoker: "public" 
 // projenin App Check token'ı yok. Kapı, BonAir Technic'in imzalı ID
 // token'ı ve tek kullanımlık bilet. Ayrıntı: src/sso.js
 export const sso = onRequest(
-  { region: "europe-west3", timeoutSeconds: 30, maxInstances: 20 },
+  // invoker ACIKCA yaziliyor: yarim kalan bir deploy fonksiyonu invoker
+  // baglantisi olmadan birakabiliyor ve tarayici 403/CORS aliyor — bu
+  // projede bir kez oldu. serveScormContent ile ayni kalip.
+  { region: REGION, invoker: "public", timeoutSeconds: 30, maxInstances: 20 },
   makeSsoHandler({
     appId: "academy",
     idpProjectId: "bonappetit-c2db2",
