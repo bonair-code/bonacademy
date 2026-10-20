@@ -62,6 +62,9 @@ export function Users() {
         snap.docs.map((d) => ({
           id: d.id,
           name: (d.data() as any).name,
+          // Kullanici formu "bu kapsam kac egitim getiriyor" yaziyor; bu alan
+          // yoksa sayi herkeste 0 gorunur (bkz. components/user/types.ts).
+          requiredCourseIds: (d.data() as any).requiredCourseIds ?? [],
           subScopes: (d.data() as any).subScopes ?? [],
         }))
       )

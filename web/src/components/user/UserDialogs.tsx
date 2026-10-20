@@ -10,44 +10,17 @@ import { MAIL_ENABLED } from "../../lib/features";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../lib/firebase";
 import type { Role } from "../../lib/auth";
-import { MultiSelect } from "../MultiSelect";
 import { assignCourses, skipNote } from "../../lib/assign";
-import { subScopesOf, type SubScope } from "../../lib/requirements";
+import { ScopePicker } from "./ScopePicker";
+import { ROLE_LABEL as ROLE_LABEL_, type MethodCourse, type Ref, type ScopeRef, type UserRow } from "./types";
 import { ORG } from "../../lib/org";
 import { placeCase } from "../../lib/text";
 
-export type UserRow = {
-  id: string;
-  email: string;
-  name: string;
-  role: Role;
-  departmentId: string | null;
-  jobTitleIds?: string[];
-  subScopeIds?: string[];
-  /** Sertifikadaki "PLACE & DATE of BIRTH" satırı için. */
-  birthPlace?: string | null;
-  birthDate?: string | null; // YYYY-MM-DD
-  /** Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar. */
-  courseMethods?: Record<string, string[]>;
-  /** Müşteri hesabının bağlı olduğu kurum; personelde boş. */
-  company?: string | null;
-  isActive: boolean;
-  /** Davet e-postası gönderildi / kişi bağlantıyla şifresini belirledi. */
-  invitedAt?: unknown;
-  inviteAcceptedAt?: unknown;
-  inviteEmailStatus?: "SENT" | "FAILED";
-};
-export type Ref = { id: string; name: string };
-export type MethodCourse = { id: string; title: string; methods: string[] };
-export type ScopeRef = Ref & { subScopes?: SubScope[] };
-
-export const ROLE_LABEL: Record<Role, string> = {
-  ADMIN: "Admin",
-  MANAGER: "Manager",
-  INSTRUCTOR: "Instructor",
-  USER: "Employee",
-  CUSTOMER: "Customer",
-};
+// Tipler types.ts'te: ScopePicker da kullanıyor, iki bileşen birbirini
+// import etmesin diye ayrıldı. Buradan yeniden dışa veriliyor — çağıranlar
+// (Users, StaffDetail) eskisi gibi UserDialogs'tan alabilsin.
+export type { UserRow, Ref, MethodCourse, ScopeRef } from "./types";
+export { ROLE_LABEL } from "./types";
 
 export function makePassword(): string {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -209,13 +182,18 @@ export function UserForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const availableSubs = useMemo(
-    () => subScopesOf(jobTitleIds, jobTitles),
-    [jobTitleIds, jobTitles]
-  );
-  // Kapsam kaldırılınca altındaki tikler de düşmeli, yoksa görünmeyen bir
-  // alt yetki sessizce eğitim zorunlu tutmaya devam eder.
-  const validSubIds = subScopeIds.filter((id) => availableSubs.some((s) => s.id === id));
+  /**
+   * Kapsam kaldırılınca altındaki tikler de düşmeli, yoksa görünmeyen bir alt
+   * yetki sessizce eğitim zorunlu tutmaya devam eder. ScopePicker tiki anında
+   * düşürüyor; bu, kayıt anındaki son emniyet (eski kayıtlarda artık var
+   * olmayan bir alt yetki duruyor olabilir).
+   */
+  const validSubIds = useMemo(() => {
+    const ok = new Set(
+      jobTitles.filter((j) => jobTitleIds.includes(j.id)).flatMap((j) => (j.subScopes ?? []).map((x) => x.id))
+    );
+    return subScopeIds.filter((id) => ok.has(id));
+  }, [jobTitleIds, jobTitles, subScopeIds]);
 
   const canSubmit = editing
     ? name.trim().length > 0
@@ -349,9 +327,9 @@ export function UserForm({
         <div>
           <label className="label">Role</label>
           <select className="input" value={roleV} onChange={(e) => setRoleV(e.target.value as Role)}>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            {(Object.keys(ROLE_LABEL_) as Role[]).map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABEL[r]}
+                {ROLE_LABEL_[r]}
               </option>
             ))}
           </select>
@@ -393,81 +371,20 @@ export function UserForm({
             from the row menu (<b className="text-slate-700">Assign courses</b>).
           </div>
         )}
+        {/* Yetki kapsamı, alt yetkiler ve metodlar TEK yerde — hepsi aynı
+            soruyu cevaplıyor. Ayrıntı: components/user/ScopePicker.tsx */}
         <div className={isCustomer ? "hidden" : "sm:col-span-2"}>
-          <label className="label">Authorisation Scope(s)</label>
-          <MultiSelect options={jobTitles} value={jobTitleIds} onChange={setJobTitleIds} />
-
-          {/* Seçilen kapsamların alt yetkileri. Tik yoksa o alt yetkinin
-              eğitimi bu kişide zorunlu olmaz. */}
-          {availableSubs.length > 0 && (
-            <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div className="text-[11px] font-semibold text-slate-600 mb-1.5">
-                Sub-authorisations
-              </div>
-              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
-                {availableSubs.map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 text-[13px] text-slate-700">
-                    <input
-                      type="checkbox"
-                      className="accent-brand-600 h-3.5 w-3.5"
-                      checked={subScopeIds.includes(s.id)}
-                      onChange={(e) =>
-                        setSubScopeIds((prev) =>
-                          e.target.checked
-                            ? [...prev, s.id]
-                            : prev.filter((x) => x !== s.id)
-                        )
-                      }
-                    />
-                    {s.name}
-                  </label>
-                ))}
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1.5">
-                Only ticked items bring their own required training. Leave one unticked and its
-                courses show as N/A for this person.
-              </p>
-            </div>
-          )}
+          <ScopePicker
+            scopes={jobTitles}
+            methodCourses={methodCourses}
+            scopeIds={jobTitleIds}
+            setScopeIds={setJobTitleIds}
+            subScopeIds={subScopeIds}
+            setSubScopeIds={setSubScopeIds}
+            courseMethods={courseMethods}
+            setCourseMethods={setCourseMethods}
+          />
         </div>
-        {/* Metod bazlı eğitimler: kişi hangi metodlarda yetkili. Tikli olup
-            belgesi olmayan metod Follow-Up'ta eksik görünür. */}
-        {!isCustomer &&
-          methodCourses.map((mc) => (
-            <div key={mc.id} className="sm:col-span-2">
-              <label className="label">{mc.title} — methods</label>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-                {mc.methods.map((m) => {
-                  const on = (courseMethods[mc.id] ?? []).includes(m);
-                  return (
-                    <label
-                      key={m}
-                      className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-brand-600 h-3.5 w-3.5"
-                        checked={on}
-                        onChange={(e) =>
-                          setCourseMethods((prev) => {
-                            const cur = prev[mc.id] ?? [];
-                            const next = e.target.checked
-                              ? [...cur, m]
-                              : cur.filter((x) => x !== m);
-                            return { ...prev, [mc.id]: next };
-                          })
-                        }
-                      />
-                      {m}
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Each ticked method is tracked with its own certificate and expiry date.
-              </p>
-            </div>
-          ))}
 
         <div>
           <label className="label">Place of Birth</label>

@@ -143,6 +143,8 @@ export function TrainingMatrix() {
   const [fScope, setFScope] = useState("");
   const [fCourse, setFCourse] = useState("");
   const [fStatus, setFStatus] = useState("");
+  /** Departman/kapsam/eğitim paneli — normalde kapalı. */
+  const [panelOpen, setPanelOpen] = useState(false);
   /**
    * Eksik hücreden doğrudan kayıt girme. Eskiden kişi sayfasına gidip oradan
    * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
@@ -387,6 +389,8 @@ export function TrainingMatrix() {
     };
   }
 
+  // (STATUS_TABS dosyanın altında; sekme listesi ile matchesStatus aynı
+  // anahtarları kullanıyor.)
   // Departmana göre grupla — Excel'deki bölüm başlıkları gibi.
   const groups = useMemo(() => {
     // Müşteri personel değil — takip matrisinde satırı olmaz.
@@ -414,21 +418,27 @@ export function TrainingMatrix() {
     [courses, fCourse]
   );
 
-  const matchesStatus = (u: UserRow) => {
-    if (!fStatus) return true;
+  /** Kişide bu durumdan en az bir hücre var mı? Sekme sayıları da buradan. */
+  const matchesStatus = (u: UserRow, status: string) => {
+    if (!status) return true;
     return visibleCourses.some((c) => {
       const st = cellFor(u, c);
-      if (fStatus === "MISSING") return st.kind === "MISSING";
-      if (fStatus === "PLANNED") return st.kind === "PLANNED";
-      if (fStatus === "EXPIRED") return st.kind === "DONE" && st.days !== null && st.days < 0;
-      if (fStatus === "SOON")
+      if (status === "MISSING") return st.kind === "MISSING";
+      if (status === "PLANNED") return st.kind === "PLANNED";
+      if (status === "EXPIRED") return st.kind === "DONE" && st.days !== null && st.days < 0;
+      if (status === "SOON")
         return st.kind === "DONE" && st.days !== null && st.days >= 0 && st.days <= 90;
-      if (fStatus === "DONE") return st.kind === "DONE";
+      if (status === "DONE") return st.kind === "DONE";
       return true;
     });
   };
 
-  const filteredGroups = useMemo(
+  /**
+   * Durum DIŞINDAKİ filtreler uygulanmış liste. Sekmelerdeki sayılar bunun
+   * üzerinden hesaplanıyor: "Supply Department'ta eksiği olan kaç kişi var"
+   * sorusunun cevabı, departman seçiliyken 67 değil 14 üzerinden verilmeli.
+   */
+  const baseGroups = useMemo(
     () =>
       groups
         .filter((g) => !fDept || g.deptId === fDept)
@@ -437,17 +447,45 @@ export function TrainingMatrix() {
           list: g.list.filter(
             (u) =>
               (!q.trim() || norm(u.name).includes(norm(q.trim()))) &&
-              (!fScope || (u.jobTitleIds ?? []).includes(fScope)) &&
-              matchesStatus(u)
+              (!fScope || (u.jobTitleIds ?? []).includes(fScope))
           ),
         }))
         .filter((g) => g.list.length > 0),
+    [groups, q, fDept, fScope]
+  );
+
+  const statusCounts = useMemo(() => {
+    const flat = baseGroups.flatMap((g) => g.list);
+    const out: Record<string, number> = { "": flat.length };
+    for (const st of STATUS_TABS) {
+      if (!st.k) continue;
+      out[st.k] = flat.filter((u) => matchesStatus(u, st.k)).length;
+    }
+    return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [groups, q, fDept, fScope, fStatus, visibleCourses, completions, assignedSet, jobTitles]
+  }, [baseGroups, visibleCourses, completions, assignedSet, jobTitles]);
+
+  const filteredGroups = useMemo(
+    () =>
+      baseGroups
+        .map((g) => ({ ...g, list: g.list.filter((u) => matchesStatus(u, fStatus)) }))
+        .filter((g) => g.list.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [baseGroups, fStatus, visibleCourses, completions, assignedSet, jobTitles]
   );
 
   const shownStaff = filteredGroups.reduce((n, g) => n + g.list.length, 0);
+  const totalStaff = groups.reduce((n, g) => n + g.list.length, 0);
   const filtersOn = !!(q.trim() || fDept || fScope || fCourse || fStatus);
+  /** Panelin arkasındaki üç filtreden kaçı açık — düğmedeki rozet. */
+  const panelCount = (fDept ? 1 : 0) + (fScope ? 1 : 0) + (fCourse ? 1 : 0);
+  const clearAll = () => {
+    setQ("");
+    setFDept("");
+    setFScope("");
+    setFCourse("");
+    setFStatus("");
+  };
 
   if (role !== "ADMIN" && role !== "MANAGER" && role !== "INSTRUCTOR")
     return <p className="text-sm text-slate-400 py-10">Not available for your role.</p>;
@@ -459,70 +497,106 @@ export function TrainingMatrix() {
         subtitle="Personnel × training matrix. Click a name for that person's full record."
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2 no-print">
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search personnel…"
-          className="input !w-full sm:!w-52 !py-1.5 !text-xs"
-        />
-        <select
-          value={fDept}
-          onChange={(e) => setFDept(e.target.value)}
-          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
+      {/* Filtre çubuğu — "A" tasarımı (onaylandı 20.10.2026; seçenekler
+          docs/tasarim/followup-filtre.html). Eskiden beş özdeş açılır kutu
+          yan yanaydı: en çok sorulan soru ("kimde eksik var?") en derinde
+          kalıyordu ve hangisinin açık olduğu ancak tek tek bakarak
+          anlaşılıyordu. Şimdi durum sayılı sekme, geri kalanı panelde. */}
+      <div className="mb-2.5 flex flex-wrap items-center gap-2 no-print">
+        <div className="relative">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.2}
+            strokeLinecap="round"
+            aria-hidden
+            className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          >
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search personnel…"
+            className="input !w-full sm:!w-52 !py-1.5 !text-xs !pl-7"
+          />
+        </div>
+
+        {/* Durum sekmeleri: sayılar diğer filtreler uygulandıktan SONRAKİ
+            listeye ait, yani tıklamadan önce ne bulacağını söylüyor. */}
+        <div className="inline-flex bg-slate-100 rounded-[9px] p-[3px] gap-0.5 overflow-x-auto max-w-full">
+          {STATUS_TABS.map((st) => {
+            const on = fStatus === st.k;
+            const n = statusCounts[st.k] ?? 0;
+            return (
+              <button
+                key={st.k || "all"}
+                type="button"
+                aria-pressed={on}
+                onClick={() => setFStatus(st.k)}
+                className={`rounded-[7px] px-2.5 py-[5px] text-[12px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition ${
+                  on ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/5" : "text-slate-500 hover:text-slate-700"
+                }`}
+              >
+                {st.dot && (
+                  <span aria-hidden className="h-[7px] w-[7px] rounded-full" style={{ background: st.dot }} />
+                )}
+                {st.label}
+                <span
+                  className={`text-[10.5px] font-bold rounded-[5px] px-1 py-px ${
+                    on ? "bg-brand-50 text-brand-700" : "bg-slate-200 text-slate-500"
+                  }`}
+                >
+                  {n}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setPanelOpen((v) => !v)}
+          aria-expanded={panelOpen}
+          className={`h-[30px] rounded-lg border px-2.5 text-[12px] font-semibold inline-flex items-center gap-1.5 transition ${
+            panelCount > 0
+              ? "border-brand-200 bg-brand-50 text-brand-700"
+              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+          }`}
         >
-          <option value="">All departments</option>
-          {[...departments.entries()].map(([id, name]) => (
-            <option key={id} value={id}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={fScope}
-          onChange={(e) => setFScope(e.target.value)}
-          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
-        >
-          <option value="">All authorisation scopes</option>
-          {jobTitles.map((j) => (
-            <option key={j.id} value={j.id}>
-              {j.name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={fCourse}
-          onChange={(e) => setFCourse(e.target.value)}
-          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
-        >
-          <option value="">All trainings</option>
-          {courses.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.title}
-            </option>
-          ))}
-        </select>
-        <select
-          value={fStatus}
-          onChange={(e) => setFStatus(e.target.value)}
-          className="input !w-full sm:!w-auto !py-1.5 !text-xs"
-        >
-          <option value="">Any status</option>
-          <option value="MISSING">Has missing</option>
-          <option value="EXPIRED">Has expired</option>
-          <option value="SOON">Expiring within 90 days</option>
-          <option value="PLANNED">Has planned</option>
-          <option value="DONE">Has completed</option>
-        </select>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden className="h-3.5 w-3.5">
+            <path d="M3 5h18M6 12h12M10 19h4" />
+          </svg>
+          Filters
+          {panelCount > 0 && (
+            <span className="bg-brand-600 text-white rounded-full min-w-[16px] h-4 px-1 grid place-items-center text-[10px] font-bold">
+              {panelCount}
+            </span>
+          )}
+        </button>
+
+        {/* Açık filtreler rozet olarak: "neden bu kadar az kişi var"
+            sorusunu ortadan kaldırıyor, tek tıkla kalkıyorlar. */}
+        {fDept && (
+          <FilterChip label={departments.get(fDept) ?? "Department"} onClear={() => setFDept("")} />
+        )}
+        {fScope && (
+          <FilterChip
+            label={jobTitles.find((j) => j.id === fScope)?.name ?? "Scope"}
+            onClear={() => setFScope("")}
+          />
+        )}
+        {fCourse && (
+          <FilterChip
+            label={courses.find((c) => c.id === fCourse)?.title ?? "Training"}
+            onClear={() => setFCourse("")}
+          />
+        )}
         {filtersOn && (
           <button
-            onClick={() => {
-              setQ("");
-              setFDept("");
-              setFScope("");
-              setFCourse("");
-              setFStatus("");
-            }}
+            onClick={clearAll}
             className="text-[11px] font-semibold text-slate-500 hover:text-brand-700"
           >
             Clear
@@ -530,11 +604,75 @@ export function TrainingMatrix() {
         )}
       </div>
 
+      {panelOpen && (
+        <div className="mb-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm no-print">
+          <div className="grid sm:grid-cols-3 gap-2.5">
+            <div>
+              <label className="label">Department</label>
+              <select
+                value={fDept}
+                onChange={(e) => setFDept(e.target.value)}
+                className="input !w-full !py-1.5 !text-xs"
+              >
+                <option value="">All departments</option>
+                {[...departments.entries()].map(([id, name]) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Authorisation scope</label>
+              <select
+                value={fScope}
+                onChange={(e) => setFScope(e.target.value)}
+                className="input !w-full !py-1.5 !text-xs"
+              >
+                <option value="">All scopes</option>
+                {jobTitles.map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Training</label>
+              <select
+                value={fCourse}
+                onChange={(e) => setFCourse(e.target.value)}
+                className="input !w-full !py-1.5 !text-xs"
+              >
+                <option value="">All trainings ({courses.length})</option>
+                {courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 mt-2.5 pt-2.5 border-t border-slate-100">
+            <span className="text-[11px] text-slate-400">
+              Picking one training narrows the status counts above to that training only.
+            </span>
+            <button
+              type="button"
+              onClick={() => setPanelOpen(false)}
+              className="btn-secondary text-[11.5px] !py-1.5"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[12px] font-semibold text-slate-700">
             {visibleCourses.length} training{visibleCourses.length === 1 ? "" : "s"} · {shownStaff}{" "}
-            {filtersOn ? `of ${groups.reduce((n, g) => n + g.list.length, 0)} ` : ""}staff
+            {filtersOn ? `of ${totalStaff} ` : ""}staff
           </span>
         </div>
 
@@ -1360,6 +1498,37 @@ function Cell({
   return (
     <span className="block tabular-nums">
       {body}
+    </span>
+  );
+}
+
+/**
+ * Durum sekmeleri. Anahtarlar `matchesStatus` ile birebir aynı olmak
+ * zorunda; nokta renkleri de ısı haritasının aynısı, böylece sekme ile
+ * hücre aynı şeyi söylüyor.
+ */
+const STATUS_TABS: { k: string; label: string; dot?: string }[] = [
+  { k: "", label: "All" },
+  { k: "MISSING", label: "Missing", dot: HEAT.missing },
+  { k: "EXPIRED", label: "Expired", dot: HEAT.over },
+  { k: "SOON", label: "Expiring 90d", dot: HEAT.warn },
+  { k: "PLANNED", label: "Planned", dot: HEAT.planned },
+  { k: "DONE", label: "Completed", dot: HEAT.fresh },
+];
+
+/** Açık bir filtreyi gösteren, tek tıkla kalkan rozet. */
+function FilterChip({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 h-[26px] pl-2.5 pr-1 rounded-full bg-brand-50 border border-brand-100 text-brand-700 text-[11.5px] font-semibold max-w-[220px]">
+      <span className="truncate">{label}</span>
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`Remove filter: ${label}`}
+        className="opacity-60 hover:opacity-100 hover:bg-brand-100 rounded-full h-[18px] w-[18px] grid place-items-center text-[13px] leading-none"
+      >
+        ×
+      </button>
     </span>
   );
 }
