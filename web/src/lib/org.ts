@@ -29,6 +29,12 @@ export const ORG = {
   issuedBy: "BONAIR AVIATION",
   /** Eğitimler çevrimiçi veriliyor. */
   defaultLocation: "ONLINE",
+  /**
+   * YALNIZCA SERTİFİKANIN form künyesi (web ve sunucudaki PDF). Raporlarda
+   * kullanılmaz: bu numara yoklama listesinin formu, rapor çıktıları o form
+   * değil. Rapor antetinde bir süre yanlışlıkla basılıyordu, 20.10.2026'da
+   * kaldırıldı.
+   */
   footer: {
     formNo: "BON-F145-070",
     revisionNo: "01",
