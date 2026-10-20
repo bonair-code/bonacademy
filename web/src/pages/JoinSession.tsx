@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import { useParams } from "react-router-dom";
 import {
   addDoc,
@@ -246,9 +247,13 @@ export function JoinSession() {
             />
           </div>
 
+          {/* E-posta alanı kalıyor: sertifikanın sahibini tanımlıyor ve posta
+              açıldığında gönderim adresi bu. Yalnız vaat edilen şey değişiyor. */}
           <p className="text-[10.5px] mt-2 mb-4" style={{ color: "#8e8e93" }}>
-            Your place and date of birth are printed on the certificate. It is emailed to you as a
-            PDF when the training is complete.
+            Your place and date of birth are printed on the certificate.
+            {MAIL_ENABLED
+              ? " It is emailed to you as a PDF when the training is complete."
+              : " Your instructor hands it to you when the training is complete."}
           </p>
 
           {err && <PublicError>{err}</PublicError>}

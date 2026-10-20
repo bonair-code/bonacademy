@@ -1,6 +1,10 @@
 /**
  * Sertifika PDF'i — sunucuda, e-postaya eklemek için.
  *
+ * KULLANILMIYOR: e-posta kapalı (bkz. functions/src/mail.ts) ve bu çizim hâlâ
+ * CAPELLA tasarımı — lacivert + altın. E-posta açılmadan ÖNCE BonAir
+ * sertifikasına göre yeniden çizilmeli. docs/BACKLOG.md → "E-posta altyapısı".
+ *
  * web/src/components/CertificateSheet.tsx'in birebir karşılığı: yatay A4,
  * lacivert çerçeve + altın ince çizgi ve köşe süsleri, soluk uçak filigranı,
  * ortada künye, altta numara/tarih ve doğrulama QR'ı, en altta form künyesi.
@@ -32,11 +36,17 @@ export type CertData = {
   verifyUrl?: string | null;
 };
 
-/** web/src/lib/org.ts ile aynı. */
+/**
+ * web/src/lib/org.ts ile aynı olmalı.
+ *
+ * DİKKAT: bu dosyadaki ÇİZİM hâlâ CAPELLA tasarımı (lacivert + altın). Yalnızca
+ * e-posta eki için kullanılıyor ve e-posta KAPALI, yani çağrılmıyor. E-posta
+ * açılmadan önce BonAir sertifikasına göre yeniden çizilmeli — bkz. BACKLOG.
+ */
 const ORG = {
-  website: "www.capella.aero",
-  issuedBy: "Capella Aviation",
-  footer: { formNo: "CPL-TRN-FRM-002", revisionNo: "01", revisionDate: "15.08.2026" },
+  approvalLine: "Turkish DGCA SHT 145 Approval No: TR.145.118",
+  issuedBy: "BONAIR AVIATION",
+  footer: { formNo: "BON-F145-070", revisionNo: "01", revisionDate: "15.08.2026" },
 };
 
 const GOLD = "#b08d45";
@@ -102,7 +112,7 @@ export async function renderCertificatePdf(c: CertData): Promise<Buffer> {
     size: "A4",
     layout: "landscape",
     margin: 0,
-    info: { Title: `Training Certificate ${c.serialNo}`, Author: "Capella Aviation Solutions" },
+    info: { Title: `Training Certificate ${c.serialNo}`, Author: "BonAir Aviation" },
   });
   for (const [k, v] of Object.entries(A.fonts)) doc.registerFont(k, v);
   const chunks: Buffer[] = [];
@@ -234,7 +244,7 @@ export async function renderCertificatePdf(c: CertData): Promise<Buffer> {
     const lw = (img.width / img.height) * lh;
     blocks.push({ h: lh, mt: 0, draw: (top) => doc.image(A.logo, cx - lw / 2, top, { height: lh }) });
   }
-  textBlock([{ text: ORG.website, font: "sans", size: 1.05 * U, color: SLATE[500], spacing: 0.12 * 1.05 * U }], 0.4 * U);
+  textBlock([{ text: ORG.approvalLine, font: "sans", size: 1.05 * U, color: SLATE[500], spacing: 0.12 * 1.05 * U }], 0.4 * U);
   textBlock([{ text: "Training Certificate", font: "serif", size: 4.2 * U, color: NAVY_D }], 0.9 * U, 1.05);
   // ince altın çizgi + yıldız
   {

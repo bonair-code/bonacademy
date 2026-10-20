@@ -1256,7 +1256,7 @@ function CellDetail({
           {state.serialNo ? row("Certificate No", state.serialNo) : null}
           {state.durationHours != null ? row("Duration", `${state.durationHours} hours`) : null}
           {state.instructor ? row("Instructor", state.instructor) : null}
-          {row("Source", state.external ? `External — ${state.external}` : "Capella Academy")}
+          {row("Source", state.external ? `External — ${state.external}` : "BonAcademy")}
 
           {/* Dolu hücrede kaydı düzeltmenin yolu yoktu: tarih yanlış
               girildiyse ya da yeni belge geldiyse kişi sayfasına gitmek

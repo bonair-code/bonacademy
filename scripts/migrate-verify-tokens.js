@@ -25,7 +25,7 @@ const APPLY = process.argv.includes("--apply");
 const token = () => randomBytes(16).toString("base64url");
 
 async function main() {
-  initializeApp({ projectId: "capella-academy-v2" });
+  initializeApp({ projectId: "bonair-academy" });
   const db = getFirestore();
 
   const certs = await db.collection("certificates").get();

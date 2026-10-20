@@ -1,11 +1,11 @@
 [
   {
     "origin": [
-      "https://academy.capella.aero",
+      "https://academy.bonair.com.tr",
       "http://localhost:5173",
       "http://localhost:4173",
-      "https://capella-academy-v2.web.app",
-      "https://capella-academy-v2.firebaseapp.com"
+      "https://bonair-academy.web.app",
+      "https://bonair-academy.firebaseapp.com"
     ],
     "method": [
       "GET",

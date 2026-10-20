@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Capella Academy (Firebase-native) — Firestore Security Rules
+// BonAcademy (Firebase-native) — Firestore Security Rules
 // Roller: ADMIN, MANAGER (Müdür), INSTRUCTOR (Eğitmen), USER (Çalışan),
 // CUSTOMER (dışarıdan eğitim alan müşteri — yalnızca kendi kaydına erişir).
 // Rol, kullanıcının users/{uid} dokümanından okunur (Spark uyumlu — Cloud

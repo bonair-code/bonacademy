@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import {
   addDoc,
   arrayRemove,
@@ -102,7 +103,8 @@ export function Settings() {
     { k: "departments", t: "Departments", n: depts.length },
     { k: "scopes", t: "Authorisations", n: scopes.length },
     { k: "tracked", t: "Tracked Trainings", n: tracked.length },
-    { k: "email", t: "Email", n: 0 },
+    // E-posta kapalıyken sekme hiç çizilmez (bkz. lib/features).
+    ...(MAIL_ENABLED ? [{ k: "email" as Tab, t: "Email", n: 0 }] : []),
   ];
 
   return (
@@ -135,7 +137,7 @@ export function Settings() {
           {tab === "departments" && <Departments rows={depts} say={say} />}
           {tab === "scopes" && <Authorisations rows={scopes} courses={courses} say={say} />}
           {tab === "tracked" && <TrackedTrainings rows={tracked} say={say} />}
-          {tab === "email" && <EmailSettings say={say} />}
+          {MAIL_ENABLED && tab === "email" && <EmailSettings say={say} />}
         </div>
       </div>
 
@@ -149,7 +151,7 @@ export function Settings() {
                 setToast(null);
                 await u();
               }}
-              className="font-semibold text-[#9fc0ff] hover:text-white px-2 py-1"
+              className="font-semibold text-[#ff8f93] hover:text-white px-2 py-1"
             >
               Undo
             </button>
@@ -868,7 +870,7 @@ function TrackedTrainings({ rows, say }: { rows: Course[]; say: Say }) {
     <div className="max-w-[680px]">
       <Title
         title="Tracked Trainings"
-        desc="Mandatory training Capella does not deliver — staff obtain it elsewhere and we record the certificate. Add it to an authorisation to make it required."
+        desc="Mandatory training BonAir does not deliver — staff obtain it elsewhere and we record the certificate. Add it to an authorisation to make it required."
       />
       <div className="mt-5">
         <AddLine

@@ -1,10 +1,11 @@
 import { onRequest, onCall, HttpsError } from "firebase-functions/v2/https";
+import { makeSsoHandler } from "./sso";
 import { initializeApp } from "firebase-admin/app";
 import { FieldValue, Timestamp, getFirestore, type DocumentReference } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
 import { getStorage } from "firebase-admin/storage";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
-import { SMTP_PASSWORD, sendMail, inviteMail, assignmentMail, reminderMail, tempPasswordMail, certificateMail, mailLang, appUrl, type AssignedItem, type MailLang, type MailResult } from "./mail";
+import { mailEnabled, mailSecrets, sendMail, inviteMail, assignmentMail, reminderMail, tempPasswordMail, certificateMail, mailLang, appUrl, type AssignedItem, type MailLang, type MailResult } from "./mail";
 import { renderCertificatePdf, certificateFileName, type CertData } from "./certPdf";
 
 // firebase-admin v14 ad-alanlı API'yi kaldırdı (admin.firestore() vb.); modüler
@@ -59,7 +60,7 @@ const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
  * Admin, yeni bir kullanıcı (Auth hesabı + users/{uid} profili) oluşturur.
  * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
  */
-export const createUser = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const createUser = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   if (caller.data()?.role !== "ADMIN")
@@ -132,6 +133,9 @@ async function sendInviteFor(uid: string, byUid: string): Promise<MailResult> {
   const db = getFirestore();
   const u = (await db.doc(`users/${uid}`).get()).data();
   if (!u?.email) return { ok: false, error: "User has no email address." };
+  // Posta kapalıyken davet üretilmez: yeni belirteç öncekileri iptal eder,
+  // gönderilemeyen davet kişiyi bağlantısız bırakırdı.
+  if (!mailEnabled()) return { ok: false, error: "Email is turned off." };
 
   const open = await db.collection("invites").where("uid", "==", uid).where("status", "==", "OPEN").get();
   if (!open.empty) {
@@ -164,7 +168,7 @@ async function sendInviteFor(uid: string, byUid: string): Promise<MailResult> {
 
 /** Admin: daveti (yeniden) gönderir. Önceki bağlantılar geçersiz olur. */
 export const resendInvite = onCall(
-  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] },
+  { region: REGION, invoker: "public", secrets: mailSecrets() },
   async (req) => {
     await assertAdmin(req.auth?.uid);
     const uid = String(req.data?.uid || "");
@@ -592,7 +596,7 @@ export const publishCourse = onCall({ region: REGION, invoker: "public" }, async
  * yalnızca Function tarafından yazılır. Deterministik id ({userId}_{courseId})
  * → aynı eğitim ikinci kez atanmaz (idempotent).
  */
-export const assignCourses = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const assignCourses = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const caller = await getFirestore().doc(`users/${req.auth.uid}`).get();
   const callerRole = caller.data()?.role;
@@ -719,7 +723,7 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
 
   // Atama bildirimi: kişiye tek e-posta. Gönderilemezse atama yine geçerli.
   let mail: MailResult | null = null;
-  if (notifyItems.length && req.data?.notify !== false) {
+  if (mailEnabled() && notifyItems.length && req.data?.notify !== false) {
     const u = userSnap.data() || {};
     if (u.email && u.isActive !== false) {
       const link =
@@ -747,7 +751,7 @@ export const assignCourses = onCall({ region: REGION, invoker: "public", secrets
  * tutulur; liste "Reminded …" diye gösterir.
  */
 export const sendAssignmentReminder = onCall(
-  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] },
+  { region: REGION, invoker: "public", secrets: mailSecrets() },
   async (req) => {
     await assertCanManageAssignments(req.auth?.uid);
     const assignmentId = cleanId(req.data?.assignmentId);
@@ -756,6 +760,8 @@ export const sendAssignmentReminder = onCall(
     const db = getFirestore();
     const ref = db.doc(`assignments/${assignmentId}`);
     const snap = await ref.get();
+    if (!mailEnabled())
+      throw new HttpsError("failed-precondition", "Email is not enabled on this system yet.");
     if (!snap.exists) throw new HttpsError("not-found", "Assignment not found.");
     const a = snap.data() as any;
     if (a.status === "COMPLETED" || a.status === "EXAM_PASSED")
@@ -1160,7 +1166,7 @@ async function loadOwnedAssignment(uid: string, assignmentId: string) {
   if (a.accessBlocked)
     throw new HttpsError(
       "permission-denied",
-      "Your access to this training has been suspended. Please contact info@capella.aero."
+      "Your access to this training has been suspended. Please contact qualitytechnic@bonair.com.tr."
     );
   return { ref: snap.ref, a };
 }
@@ -1328,9 +1334,8 @@ async function issueCertificateFor(assignmentId: string, a: any, exam?: ExamInfo
     examScore: exam?.score ?? null,
     examPassingScore: exam?.passingScore ?? null,
     heldIn: org.trainingLocation ?? "ONLINE",
-    organisationName: org.organisationName ?? "CAPELLA AVIATION SOLUTIONS",
-    // CAPELLA SHT-145 onaylı değil — belgede onay numarası yok.
-    approvalNo: null,
+    organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
+    approvalNo: org.approvalNo ?? "TR.145.118",
     verifyToken,
     // Kişi kendi sertifikasını yalnızca blocked == false iken okur (kural +
     // sorgu). Alan HER sertifikada olmalı: eksikse kişi belgesini göremez.
@@ -1378,6 +1383,9 @@ async function sendCertificatePdf(
   lang: MailLang,
   log: { userId?: string | null; certificateId?: string | null; sample?: boolean }
 ): Promise<MailResult> {
+  // Posta kapalıyken PDF'i hiç üretme: dakikalarca CPU harcayıp çöpe atmak
+  // yerine baştan dön.
+  if (!mailEnabled()) return { ok: false, error: "Email is turned off." };
   let pdf: Buffer;
   try {
     pdf = await renderCertificatePdf(data);
@@ -1414,6 +1422,8 @@ async function emailCertificate(certId: string, toOverride?: string | null): Pro
   const ref = db.doc(`certificates/${certId}`);
   const c = (await ref.get()).data() as any;
   if (!c) return { ok: false, error: "Certificate not found." };
+  // Belgeye hata damgası basmadan dön: posta kapalı olması bir arıza değil.
+  if (!mailEnabled()) return { ok: false, error: "Email is turned off." };
   let to = (toOverride || "").trim().toLowerCase();
   let lang: MailLang = "tr";
   const user = c.userId ? ((await db.doc(`users/${c.userId}`).get()).data() as any) : null;
@@ -1441,7 +1451,7 @@ async function emailCertificate(certId: string, toOverride?: string | null): Pro
  * kayda geçmeyen "SAMPLE" numaralı, konu satırında [ÖRNEK] yazan bir belge).
  */
 export const emailCertificateNow = onCall(
-  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD], memory: "512MiB" },
+  { region: REGION, invoker: "public", secrets: mailSecrets(), memory: "512MiB" },
   async (req) => {
     await assertAdmin(req.auth?.uid);
     const db = getFirestore();
@@ -1482,7 +1492,7 @@ export const emailCertificateNow = onCall(
 
 /** Bir bölümü tamamlar (sıralı zorunluluk kontrolüyle). Hepsi bitince sınav
  *  varsa SECTIONS_DONE, yoksa COMPLETED + sertifika. */
-export const completeSection = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const completeSection = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, sectionId } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -1620,7 +1630,7 @@ export const examInfo = onCall({ region: REGION, invoker: "public" }, async (req
   };
 });
 
-export const startExam = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const startExam = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, language } = req.data || {};
   const { ref, a } = await loadOwnedAssignment(req.auth.uid, String(assignmentId));
@@ -1798,7 +1808,7 @@ async function finalizeAttempt(
  * Dil bir görüntüleme tercihi değil, kaydın parçası: denetimde "bu kişi bu
  * eğitimi hangi dilde aldı" sorusunun cevabı.
  */
-export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const setAssignmentLanguage = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const assignmentId = String(req.data?.assignmentId || "");
   if (!assignmentId) throw new HttpsError("invalid-argument", "assignmentId is required.");
@@ -1875,7 +1885,7 @@ async function claimAttempt(ref: DocumentReference, sessRef: DocumentReference) 
   });
 }
 
-export const submitExam = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const submitExam = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const { assignmentId, attemptNo, answers } = req.data || {};
   const n = Number(attemptNo);
@@ -1900,7 +1910,7 @@ export const submitExam = onCall({ region: REGION, invoker: "public", secrets: [
  */
 export const finishClassSession = onCall(
   // Katılımcı başına bir PDF + e-posta: kalabalık sınıfta süre ve bellek payı.
-  { region: REGION, invoker: "public", secrets: [SMTP_PASSWORD], timeoutSeconds: 300, memory: "512MiB" },
+  { region: REGION, invoker: "public", secrets: mailSecrets(), timeoutSeconds: 300, memory: "512MiB" },
   async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
@@ -1998,9 +2008,8 @@ export const finishClassSession = onCall(
       // Sınıf eğitiminde imza hanesi EĞİTMENİN. Bu alan yazılmadığı için
       // sınıf sertifikaları da "Online Training" olarak çıkıyordu.
       instructorName: ses.instructorName ?? null,
-      organisationName: org.organisationName ?? "CAPELLA AVIATION SOLUTIONS",
-      // CAPELLA SHT-145 onaylı değil — belgede onay numarası yok.
-      approvalNo: null,
+      organisationName: org.organisationName ?? "BONAIR AVIATION MAINTENANCE ORGANISATION",
+      approvalNo: org.approvalNo ?? "TR.145.118",
       examRequired: false,
       examScore: null,
       examPassingScore: null,
@@ -2045,12 +2054,17 @@ export const finishClassSession = onCall(
 
   // Sertifikalar QR formuna yazılan adreslere PDF olarak. Oturum kapandıktan
   // SONRA: gönderim hatası belge vermeyi geri almasın.
-  let emailed = 0;
-  for (const r of results) {
-    const m = await emailCertificate(`session_${sessionId}_${r.attendeeId}`);
-    if (m.ok) emailed++;
+  // Posta kapalıyken hiç denenmez ve `emailed: null` döner: arayüz
+  // "0 emailed" diye yanlış bir özet yazmasın.
+  let emailed: number | null = null;
+  if (mailEnabled()) {
+    emailed = 0;
+    for (const r of results) {
+      const m = await emailCertificate(`session_${sessionId}_${r.attendeeId}`);
+      if (m.ok) emailed++;
+    }
+    await sRef.update({ emailedCount: emailed }).catch(() => undefined);
   }
-  await sRef.update({ emailedCount: emailed }).catch(() => undefined);
 
   return { issued: results.length, first: results[0]?.serialNo, last: results.at(-1)?.serialNo, emailed };
   }
@@ -2239,7 +2253,7 @@ export const serveScormContent = onRequest(
       // Yalnızca uygulamanın kendi sayfaları çerçeveleyebilir.
       res.set(
         "Content-Security-Policy",
-        "frame-ancestors 'self' https://academy.capella.aero https://capella-academy-v2.web.app https://capella-academy-v2.firebaseapp.com"
+        "frame-ancestors 'self' https://academy.bonair.com.tr https://bonair-academy.web.app https://bonair-academy.firebaseapp.com"
       );
       file
         .createReadStream()
@@ -2265,7 +2279,7 @@ export const serveScormContent = onRequest(
  * Denetim izi zorunlu: kim, ne zaman, hangi gerekçeyle kapattı hem atamaya
  * hem sertifikaya yazılır.
  */
-export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -2339,7 +2353,7 @@ export const forceCompleteAssignment = onCall({ region: REGION, invoker: "public
  *
  * Kim, kime, ne zaman sıfırladı kullanıcı kaydına yazılır.
  */
-export const setUserPassword = onCall({ region: REGION, invoker: "public", secrets: [SMTP_PASSWORD] }, async (req) => {
+export const setUserPassword = onCall({ region: REGION, invoker: "public", secrets: mailSecrets() }, async (req) => {
   if (!req.auth) throw new HttpsError("unauthenticated", "Sign in required.");
   const db = getFirestore();
   const caller = (await db.doc(`users/${req.auth.uid}`).get()).data();
@@ -2369,11 +2383,11 @@ export const setUserPassword = onCall({ region: REGION, invoker: "public", secre
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  // Geçici şifre kişiye e-postayla (noreply@capella.aero) gider; ilk girişte
+  // Geçici şifre kişiye e-postayla  gider; ilk girişte
   // kendi şifresini belirlemek zorunda (mustChangePassword yukarıda).
   const t = target.data() || {};
   let mail: MailResult | null = null;
-  if (req.data?.notify !== false && t.email) {
+  if (mailEnabled() && req.data?.notify !== false && t.email) {
     const m = tempPasswordMail(mailLang(t.locale), { name: t.name || t.email, email: t.email, password });
     mail = await sendMail({ to: t.email, ...m, type: "TEMP_PASSWORD", userId: uid, meta: { sentById: req.auth.uid } });
   }
@@ -2585,10 +2599,43 @@ export const undoCertificateImport = onCall({ region: REGION, invoker: "public" 
   return { deleted, nextNo };
 });
 
-// ── Tek şifre devri (SSO) — CAPELLA'da KAPALI ─────────────────────
-// BonAcademy'de bu uç, BonAir Uygulama Merkezi'nden (BonAir Technic şifresi)
-// gelen kullanıcıya oturum devrediyordu. CAPELLA ayrı bir kurum: BonAir'in
-// kimlik kaynağına güvenmesi, başka bir şirketin kullanıcılarına bu sisteme
-// kapı açmak olurdu. CAPELLA'nın kendi launcher'ı kurulursa src/sso.js
-// olduğu gibi kullanılabilir — makeSsoHandler'a CAPELLA'nın IdP proje
-// kimliği ve adresleri verilerek burada yeniden export edilir.
+// ── Tek şifre devri (SSO) ─────────────────────────────────────────
+// Uygulama Merkezi (bonair-launcher) üzerinden BonAir Technic şifresiyle
+// giriş yapan kullanıcı, burada hesabı varsa şifre sorulmadan giriyor.
+//
+// onCall değil onRequest ve App Check zorlanmıyor: bu ucu launcher (başka
+// bir origin) ve henüz giriş yapmamış bir sekme çağırıyor, ikisinde de bu
+// projenin App Check token'ı yok. Kapı, BonAir Technic'in imzalı ID
+// token'ı ve tek kullanımlık bilet. Ayrıntı: src/sso.js
+export const sso = onRequest(
+  { region: "europe-west3", timeoutSeconds: 30, maxInstances: 20 },
+  makeSsoHandler({
+    appId: "academy",
+    idpProjectId: "bonappetit-c2db2",
+    // Bilet İSTEYEBİLEN adresler. İki istemci var: Uygulama Merkezi ve
+    // BonAir Technic portalı (ana sayfadaki Academy kartı). Mobil uygulama
+    // bu listede YOK — Origin başlığı göndermiyor, sso.js onu ayrıca
+    // ele alıyor.
+    launcherOrigins: [
+      "https://bonair-launcher.web.app",
+      "https://bonair-launcher.firebaseapp.com",
+      "https://portal.bonair.com.tr",
+      "https://bonappetit-c2db2.web.app",
+      "https://bonappetit-c2db2.firebaseapp.com",
+    ],
+    // Bileti KULLANABİLEN adresler — bu uygulamanın kendi adresleri.
+    // Yeni bir alan adı bağlanırsa buraya eklenmeli.
+    appOrigins: [
+      "https://academy.bonair.com.tr",
+      "https://bonair-academy.web.app",
+      "https://bonair-academy.firebaseapp.com",
+    ],
+    // HERKESE AÇIK: BonAcademy'de hesabı olan herkes girebilir, kişiye özel
+    // yetki aranmaz. Ayrı bir yetki listesi tutmak, "hesabı var ama yetkisi
+    // verilmemiş" gibi çalışmayan bir ara durum üretirdi.
+    requireEntitlement: false,
+    // Tek kapı bu: Auth hesabı VE users/{uid} profili. Profili olmayan
+    // kullanıcı uygulamada zaten hiçbir şey göremiyor.
+    requireProfile: { collection: "users" },
+  })
+);

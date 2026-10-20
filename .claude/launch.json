@@ -13,7 +13,7 @@
       "port": 5173
     },
     {
-      "name": "capella-web",
+      "name": "web",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
@@ -28,7 +28,7 @@
       "port": 5174
     },
     {
-      "name": "capella-dist",
+      "name": "dist",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",

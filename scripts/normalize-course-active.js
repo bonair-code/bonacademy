@@ -25,7 +25,7 @@ const { getFirestore, FieldValue } = fnRequire("firebase-admin/firestore");
 
 const APPLY = process.argv.includes("--apply");
 
-initializeApp({ projectId: "capella-academy-v2" });
+initializeApp({ projectId: "bonair-academy" });
 const db = getFirestore();
 
 /** Bölümün gerçekten materyali var mı? (functions/src/index.ts ile aynı kural) */

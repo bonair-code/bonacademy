@@ -22,7 +22,7 @@ const APPLY = process.argv.includes("--apply");
 const SERIALS = ["BA-00001", "BA-00002", "26-52", "26-131"];
 
 async function main() {
-  initializeApp({ projectId: "capella-academy-v2" });
+  initializeApp({ projectId: "bonair-academy" });
   const db = getFirestore();
 
   const snap = await db.collection("certificates").get();

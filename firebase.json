@@ -36,7 +36,7 @@
     ],
     "headers": [
       {
-        "//": "Güvenlik başlıkları (güvenlik incelemesi 08.10.2026). Tam CSP önce Report-Only: tarayıcı konsolunda ihlal görülmezse zorunluya çevrilecek. Zorunlu CSP şimdilik yalnızca çerçeveleme/eklenti/base kısıtı.",
+        "//": "Güvenlik başlıkları (güvenlik incelemesi 08.10.2026). Tam CSP önce Report-Only: tarayıcı konsolunda ihlal görülmezse zorunluya çevrilecek. Zorunlu CSP şimdilik yalnızca çerçeveleme/eklenti/base kısıtı. frame-ancestors self ve X-Frame-Options SAMEORIGIN kalabilir: SSO iframe DEĞİL yönlendirmeyle çalışıyor — launcher uygulamayı .../#sso=<bilet> adresiyle AÇIYOR, içine gömmüyor (bkz. web/src/lib/sso.ts).",
         "source": "**",
         "headers": [
           {
@@ -45,7 +45,7 @@
           },
           {
             "key": "Content-Security-Policy-Report-Only",
-            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://www.google.com https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; media-src 'self' blob: https://firebasestorage.googleapis.com; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com https://europe-west3-capella-academy-v2.cloudfunctions.net https://apis.google.com https://www.google.com; frame-src 'self' blob: https://europe-west3-capella-academy-v2.cloudfunctions.net https://firebasestorage.googleapis.com https://capella-academy-v2.firebaseapp.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://www.google.com https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; media-src 'self' blob: https://firebasestorage.googleapis.com; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com https://europe-west3-bonair-academy.cloudfunctions.net https://apis.google.com https://www.google.com; frame-src 'self' blob: https://europe-west3-bonair-academy.cloudfunctions.net https://firebasestorage.googleapis.com https://bonair-academy.firebaseapp.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
           },
           {
             "key": "X-Frame-Options",

@@ -1,4 +1,5 @@
 import { PageHead } from "../components/PageHead";
+import { ORG } from "../lib/org";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore";
@@ -177,7 +178,7 @@ function LearnerDashboard() {
           title="No training assigned yet"
           line={
             role === "CUSTOMER"
-              ? "Once Capella Academy assigns you a course it will appear here."
+              ? `Once ${ORG.productName} assigns you a course it will appear here.`
               : "Nothing is waiting on you right now."
           }
         />

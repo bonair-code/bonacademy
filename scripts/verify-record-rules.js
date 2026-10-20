@@ -17,7 +17,7 @@ const fnRequire = createRequire(path.join(__dirname, "../functions/package.json"
 const { initializeApp } = fnRequire("firebase-admin/app");
 const { getFirestore } = fnRequire("firebase-admin/firestore");
 
-initializeApp({ projectId: "capella-academy-v2" });
+initializeApp({ projectId: "bonair-academy" });
 const db = getFirestore();
 
 const DAY = 86400000;

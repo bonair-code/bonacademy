@@ -622,7 +622,8 @@ export function ClassSessionDetail() {
     setErr(null);
     try {
       const res = await httpsCallable(functions, "finishClassSession")({ sessionId });
-      const d = res.data as { issued: number; first: string; last: string; emailed?: number };
+      // emailed null gelir (posta kapalıysa sunucu hiç denemez) → yazılmaz.
+      const d = res.data as { issued: number; first: string; last: string; emailed?: number | null };
       setToast(
         `${d.issued} certificate(s) issued — ${d.first} to ${d.last}.` +
           (d.emailed != null ? ` ${d.emailed} emailed as PDF.` : "")

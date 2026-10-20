@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import { ORG } from "../lib/org";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
-import { flyAndRelease, holdLogin, releaseLogin } from "../lib/loginFlight";
 import { PasswordInput, PublicError, PublicShell, pubButton, pubLabel } from "../components/PublicShell";
 
 type Info = { valid: boolean; reason?: string; name?: string; email?: string };
@@ -40,16 +40,13 @@ export function Invite() {
     try {
       const r = await httpsCallable(functions, "acceptInvite")({ token, password: pw });
       const email = (r.data as { email: string }).email;
-      // Şifre kaydedildi; giriş ekranındaki gibi uçak uçar, panel gelir.
-      holdLogin();
+      // Şifre kaydedildi; kullanıcı doğrudan panele girer.
       try {
         await signInWithEmailAndPassword(auth, email, pw);
       } catch {
-        releaseLogin();
         nav("/login", { replace: true });
         return;
       }
-      await flyAndRelease();
       nav("/dashboard", { replace: true });
     } catch (e2) {
       setErr((e2 as Error).message.replace(/^.*?:\s*/, ""));
@@ -70,7 +67,7 @@ export function Invite() {
       info.reason === "used"
         ? "This invitation was already used — your password is set. Sign in with your email, or use “Forgot password?” on the sign-in page."
         : info.reason === "expired"
-        ? "This invitation link has expired. Please ask Capella (info@capella.aero) for a new one."
+        ? `This invitation link has expired. Please ask BonAir (${ORG.contactEmail}) for a new one.`
         : info.reason === "replaced"
         ? "A newer invitation was sent to you — please use the link in the most recent email."
         : "This invitation link is not valid. Please check that you opened the full link from the email.";

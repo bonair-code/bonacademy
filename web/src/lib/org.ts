@@ -3,28 +3,30 @@
  * ya da form/revizyon değişince yalnızca burası güncellenir. Belge metinleri
  * İngilizce.
  *
- * CAPELLA SHT-145 onaylı bir kuruluş DEĞİL: belgelerde onay numarası satırı
- * yok, kurum adının altında web adresi yazar.
+ * BonAir SHT-145 onaylı bir kuruluş: belge antetinde kurum adının altında
+ * onay satırı yazar.
  */
 export const ORG = {
   /** Uygulamanın adı — sidebar, giriş ekranı, sekme başlığı. */
-  productName: "Capella Academy",
-  name: "CAPELLA AVIATION SOLUTIONS",
+  productName: "BonAcademy",
+  name: "BONAIR AVIATION MAINTENANCE ORGANISATION",
   /** Belge antetinde kurum adının altındaki satır. */
-  website: "www.capella.aero",
-  contactEmail: "info@capella.aero",
+  approvalLine: "Turkish DGCA SHT 145 Approval No: TR.145.118",
+  /** Sertifikaya yazılan onay numarası (sunucu tarafı da bunu kullanır). */
+  approvalNo: "TR.145.118",
+  contactEmail: "qualitytechnic@bonair.com.tr",
   /** Sertifikadaki "By …" satırı. */
-  issuedBy: "Capella Aviation",
+  issuedBy: "BONAIR AVIATION",
   /** Eğitimler çevrimiçi veriliyor. */
   defaultLocation: "ONLINE",
   footer: {
-    formNo: "CPL-TRN-FRM-002",
+    formNo: "BON-F145-070",
     revisionNo: "01",
     revisionDate: "15.08.2026",
   },
   /** Örnek e-postalar ve yer tutucular bu alan adıyla yazılır. */
-  emailDomain: "capella.aero",
+  emailDomain: "bonair.com.tr",
   /** Giriş ekranının altındaki tek satırlık künye. */
-  publicFooter: "Capella Aviation Solutions · www.capella.aero",
-  legalFooter: "Capella Aviation Solutions · Capella Academy",
+  publicFooter: "BonAir Aviation · Turkish DGCA SHT-145 · TR.145.118",
+  legalFooter: "BonAir Aviation · BonAir Academy",
 } as const;

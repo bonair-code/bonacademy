@@ -4,12 +4,13 @@
 
 :root {
   color-scheme: light;
-  --brand: #2b4685;
-  /* Koyu zemin üstünde lacivert kaybolur; kenar çubuğundaki vurgu bu tonla. */
-  --brand-on-dark: #7ea2e6;
-  --sidebar-bg: #141d33;
-  --sidebar-top: #233a6f;
-  --sidebar-bot: #18284b;
+  --brand: #e31e24;
+  /* Koyu zemin üstünde kullanılan vurgu. Marka kırmızısı grafit üstünde
+     zaten okunuyor; ayrı bir ton gerekmiyor. */
+  --brand-on-dark: #e31e24;
+  --sidebar-bg: #1c1c1e;
+  --sidebar-top: #8b1013;
+  --sidebar-bot: #5c0a0d;
   --amber: #f6a609;
 }
 
@@ -59,12 +60,12 @@
      menüyle yarışmıyor. */
   .nav-item {
     @apply flex items-center gap-[9px] mx-2 px-[9px] py-[7px] rounded-lg text-[13.5px] font-medium transition;
-    color: #d3daea;
+    color: #d1d1d6;
     letter-spacing: -0.005em;
   }
   .nav-item svg {
     @apply h-4 w-4 shrink-0;
-    color: #8a98b8;
+    color: #8e8e93;
   }
   .nav-item:hover {
     color: #fff;
@@ -81,7 +82,7 @@
   }
   .nav-section {
     @apply text-[10px] font-semibold uppercase tracking-[0.06em] px-4 pt-3.5 pb-1;
-    color: #8a98b8;
+    color: #98989d;
   }
 }
 
@@ -98,25 +99,25 @@
   height: 10px;
 }
 ::-webkit-scrollbar-track {
-  background: rgba(43, 70, 133, 0.06);
+  background: rgba(227, 30, 36, 0.06);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb {
-  background-image: linear-gradient(180deg, #4469aa, #2b4685);
+  background-image: linear-gradient(180deg, #ef4444, #e31e24);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:horizontal {
-  background-image: linear-gradient(90deg, #4469aa, #2b4685);
+  background-image: linear-gradient(90deg, #ef4444, #e31e24);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background-image: linear-gradient(180deg, #5b80c4, #3a5a9e);
+  background-image: linear-gradient(180deg, #f87171, #ef4444);
 }
 ::-webkit-scrollbar-thumb:active {
-  background-image: linear-gradient(180deg, #e2c47d, #b08d45);
+  background-image: linear-gradient(180deg, #f6a609, #c07d05);
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
@@ -126,57 +127,34 @@
   margin: 8px 0;
 }
 .sidebar-scroll::-webkit-scrollbar-thumb {
-  background-image: linear-gradient(180deg, #7ea2e6, #4469aa);
+  background-image: linear-gradient(180deg, #f87171, #e31e24);
 }
 .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-  background-image: linear-gradient(180deg, #9ab7ee, #5b80c4);
+  background-image: linear-gradient(180deg, #fca5a5, #ef4444);
 }
 .sidebar-scroll::-webkit-scrollbar-thumb:active {
-  background-image: linear-gradient(180deg, #e2c47d, #b08d45);
+  background-image: linear-gradient(180deg, #f6a609, #c07d05);
 }
 @supports not selector(::-webkit-scrollbar) {
   html {
     scrollbar-width: thin;
-    scrollbar-color: #2b4685 rgba(43, 70, 133, 0.06);
+    scrollbar-color: #e31e24 rgba(227, 30, 36, 0.06);
   }
   .sidebar-scroll {
     scrollbar-width: thin;
-    scrollbar-color: #6688c0 rgba(255, 255, 255, 0.05);
-  }
-}
-
-/* Giriş ekranındaki parlak yıldızların hafif yanıp sönmesi */
-@keyframes twinkle {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.45;
-  }
-}
-
-/* Girişte uçak uçtuktan sonra panel ekranının belirişi (hafifçe aşağıdan yukarı) */
-@keyframes app-land {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+    scrollbar-color: #f87171 rgba(255, 255, 255, 0.05);
   }
 }
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(43, 70, 133, 0.55);
+    box-shadow: 0 0 0 0 rgba(227, 30, 36, 0.55);
   }
   70% {
-    box-shadow: 0 0 0 10px rgba(43, 70, 133, 0);
+    box-shadow: 0 0 0 10px rgba(227, 30, 36, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(43, 70, 133, 0);
+    box-shadow: 0 0 0 0 rgba(227, 30, 36, 0);
   }
 }
 
@@ -301,7 +279,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    border-bottom: 2px solid #2b4685;
+    border-bottom: 2px solid #8b1013;
     padding-bottom: 3mm;
   }
   body.printing-report .rh-logo {

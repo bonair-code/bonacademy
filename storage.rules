@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Capella Academy — Cloud Storage kuralları
+// BonAcademy — Cloud Storage kuralları
 // Kurs içeriği (content/, scorm/) yalnızca ADMIN, EĞİTMEN ve eğitim kendisine
 // atanmış kişiye açık. Yükleme yalnızca içeriği hazırlayan roller.
 // Sertifika PDF'leri kişiseldir → sahibi + staff okur.

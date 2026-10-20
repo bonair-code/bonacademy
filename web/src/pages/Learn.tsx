@@ -364,8 +364,8 @@ export function Learn() {
         <div className="text-[15px] font-semibold text-slate-900">Access suspended</div>
         <p className="text-[13px] text-slate-600 mt-2 leading-relaxed">
           Your access to <b>{a.courseTitle}</b> has been suspended. Please contact{" "}
-          <a href="mailto:info@capella.aero" className="text-brand-700 font-semibold hover:underline">
-            info@capella.aero
+          <a href={`mailto:${ORG.contactEmail}`} className="text-brand-700 font-semibold hover:underline">
+            {ORG.contactEmail}
           </a>
           .
         </p>
@@ -934,7 +934,7 @@ function ProgressRail({
       }}
       title={opts.hint ?? opts.title}
       className={`group relative w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition disabled:cursor-default ${
-        opts.active ? "bg-[#eef2f9]" : "hover:bg-[#f8f8fa] disabled:hover:bg-transparent"
+        opts.active ? "bg-[#fdeeee]" : "hover:bg-[#f8f8fa] disabled:hover:bg-transparent"
       } [&+&]:before:content-[''] [&+&]:before:absolute [&+&]:before:left-[46px] [&+&]:before:right-0 [&+&]:before:top-0 [&+&]:before:h-px [&+&]:before:bg-[#e5e5ea]`}
     >
       {icon(opts.kind, opts.label)}

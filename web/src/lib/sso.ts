@@ -17,8 +17,8 @@ import { auth, FUNCTIONS_BASE } from "./firebase";
  * Bilet 90 saniye yaşar ve ilk kullanımda sunucuda silinir.
  */
 
-// CAPELLA'da sunucu tarafındaki `sso` ucu KAPALI (bkz. functions/src/index.ts).
-// Adreste #sso= bileti yoksa bu modül hiçbir şey yapmaz.
+// Adreste #sso= bileti yoksa bu modül hiçbir şey yapmaz; olağan giriş akışı
+// bundan etkilenmez.
 const SSO_ENDPOINT = `${FUNCTIONS_BASE}/sso`;
 
 /* Bilet MODÜL YÜKLENİRKEN okunur ve adresten hemen silinir.

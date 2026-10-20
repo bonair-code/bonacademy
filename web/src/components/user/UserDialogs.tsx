@@ -6,6 +6,7 @@
  * eklenip diğerinde eksik kalması demekti.
  */
 import { useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../../lib/features";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../lib/firebase";
 import type { Role } from "../../lib/auth";
@@ -76,8 +77,8 @@ export function PasswordReset({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  /** Geçici şifre kişiye e-postayla gitsin (noreply@capella.aero). */
-  const [notify, setNotify] = useState(true);
+  /** Geçici şifre kişiye e-postayla gitsin. Posta kapalıyken seçenek yok. */
+  const [notify, setNotify] = useState(MAIL_ENABLED);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -138,10 +139,12 @@ export function PasswordReset({
         At least 8 characters. Copy it before saving — it is not shown again.
       </p>
 
-      <label className="flex items-center gap-2 mt-3 text-[12.5px] text-slate-700 cursor-pointer">
-        <input type="checkbox" className="accent-brand-600" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
-        Email it to <b className="font-semibold">{user.email}</b>
-      </label>
+      {MAIL_ENABLED && (
+        <label className="flex items-center gap-2 mt-3 text-[12.5px] text-slate-700 cursor-pointer">
+          <input type="checkbox" className="accent-brand-600" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+          Email it to <b className="font-semibold">{user.email}</b>
+        </label>
+      )}
 
       <p className="text-[12px] text-slate-700 mt-3 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-2">
         Temporary password. {user.name} is forced to set their own the next time they sign in.
@@ -195,7 +198,8 @@ export function UserForm({
    * belirler — varsayılan) ya da admin geçici şifre yazar (e-postası olmayan
    * ya da mail gitmeyen durumlar için yedek).
    */
-  const [access, setAccess] = useState<"invite" | "password">("invite");
+  // Posta kapalıyken davet gönderilemez: tek yol geçici şifre.
+  const [access, setAccess] = useState<"invite" | "password">(MAIL_ENABLED ? "invite" : "password");
   /**
    * Müşteri personel değil: departmanı ve yetki kapsamı yok. Bu alanları
    * göstermek, müşteriye zorunlu eğitim atanması gibi yanlış bir sonuç
@@ -295,30 +299,38 @@ export function UserForm({
         {!editing && (
           <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3">
             <label className="label !mb-2">Sign-in</label>
-            <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer">
-              <input
-                type="radio"
-                className="mt-0.5 accent-brand-600"
-                checked={access === "invite"}
-                onChange={() => setAccess("invite")}
-              />
-              <span>
-                <b className="font-semibold">Email an invitation</b>{" "}
-                <span className="text-slate-500">(recommended) — they set their own password from the link.</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer mt-2">
-              <input
-                type="radio"
-                className="mt-0.5 accent-brand-600"
-                checked={access === "password"}
-                onChange={() => setAccess("password")}
-              />
-              <span>
-                <b className="font-semibold">Set a temporary password</b>{" "}
-                <span className="text-slate-500">— you pass it on yourself; they change it at first sign-in.</span>
-              </span>
-            </label>
+            {MAIL_ENABLED ? (
+              <>
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer">
+                  <input
+                    type="radio"
+                    className="mt-0.5 accent-brand-600"
+                    checked={access === "invite"}
+                    onChange={() => setAccess("invite")}
+                  />
+                  <span>
+                    <b className="font-semibold">Email an invitation</b>{" "}
+                    <span className="text-slate-500">(recommended) — they set their own password from the link.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer mt-2">
+                  <input
+                    type="radio"
+                    className="mt-0.5 accent-brand-600"
+                    checked={access === "password"}
+                    onChange={() => setAccess("password")}
+                  />
+                  <span>
+                    <b className="font-semibold">Set a temporary password</b>{" "}
+                    <span className="text-slate-500">— you pass it on yourself; they change it at first sign-in.</span>
+                  </span>
+                </label>
+              </>
+            ) : (
+              <p className="text-[12.5px] text-slate-600">
+                Set a temporary password and pass it on yourself. They change it at first sign-in.
+              </p>
+            )}
             {access === "password" && (
               <div className="mt-2.5 pl-6">
                 <input

@@ -4,7 +4,6 @@ import { useAuth, type Role } from "../lib/auth";
 import { PageHeadProvider, usePageHead } from "./PageHead";
 import { ReportFootnote, ReportLetterhead } from "./ReportSheet";
 import { ORG } from "../lib/org";
-import { clearLanded, useLoginFlight } from "../lib/loginFlight";
 
 /**
  * Menü ikonları. Tek çizgi kalınlığı (1.8) ve aynı 24'lük kutu — SF Symbols
@@ -164,12 +163,6 @@ export function Shell({ children }: { children: ReactNode }) {
 
 function ShellLayout({ children }: { children: ReactNode }) {
   // Giriş uçuşundan gelindiyse panel yumuşak belirir; bir kez oynar.
-  const { landed } = useLoginFlight();
-  useEffect(() => {
-    if (!landed) return;
-    const h = setTimeout(clearLanded, 800);
-    return () => clearTimeout(h);
-  }, [landed]);
   const { profile, role, signOut } = useAuth();
   const head = usePageHead();
   const r = role ?? "USER";
@@ -208,7 +201,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
   }, [navOpen]);
 
   return (
-    <div className={`min-h-screen flex bg-[#f4f6f9] ${landed ? "animate-[app-land_.7s_cubic-bezier(.2,.7,.2,1)]" : ""}`}>
+    <div className="min-h-screen flex bg-[#f4f6f9]">
       {/* Telefonda menü ekranın dışında bekler. Eskiden 232px sabit ve
           shrink-0'dı: 375px genişlikte içeriğe 111px kalıyordu, yani hiçbir
           sayfa kullanılabilir değildi. */}
@@ -230,7 +223,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
         style={{
-          background: "linear-gradient(180deg, #16213d 0%, var(--sidebar-bg) 60%)",
+          background: "linear-gradient(180deg, #2a2a2e 0%, var(--sidebar-bg) 60%)",
           borderRight: "1px solid rgba(255,255,255,.07)",
         }}
       >
@@ -250,7 +243,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
             className="mt-4 h-px w-full"
             style={{
               background:
-                "linear-gradient(90deg, transparent, rgba(126,162,230,.65) 30%, rgba(126,162,230,.65) 70%, transparent)",
+                "linear-gradient(90deg, transparent, rgba(227,30,36,.75) 30%, rgba(227,30,36,.75) 70%, transparent)",
             }}
             aria-hidden
           />
@@ -367,15 +360,15 @@ function AccountRow({
       >
         <div
           className="h-6 w-6 rounded-full grid place-items-center text-[9.5px] font-bold shrink-0"
-          style={{ background: "rgba(126,162,230,.22)", color: "#a9c1ef" }}
+          style={{ background: "rgba(227,30,36,.22)", color: "#ff6b6f" }}
         >
           {initials}
         </div>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="text-[12px] font-semibold truncate" style={{ color: "#e8edf7" }}>
+          <div className="text-[12px] font-semibold truncate" style={{ color: "#f2f2f7" }}>
             {name}
           </div>
-          <div className="text-[10px] truncate" style={{ color: "#8a98b8" }}>
+          <div className="text-[10px] truncate" style={{ color: "#98989d" }}>
             {role}
           </div>
         </div>
@@ -384,7 +377,7 @@ function AccountRow({
           onClick={() => setAsk(true)}
           title="Sign out"
           aria-label="Sign out"
-          className="shrink-0 h-[26px] w-[26px] grid place-items-center rounded-full transition text-[#8a98b8] hover:text-[#ff9b96] hover:bg-[rgba(224,51,44,.18)]"
+          className="shrink-0 h-[26px] w-[26px] grid place-items-center rounded-full transition text-[#98989d] hover:text-[#ff6b6f] hover:bg-[rgba(227,30,36,.22)]"
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-[15px] w-[15px]" aria-hidden>
             <path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" />
@@ -398,14 +391,14 @@ function AccountRow({
           className={`absolute inset-x-0 inset-y-1 flex items-center gap-1.5 px-1.5 rounded-[10px] transition-opacity duration-150 ${
             ask ? "opacity-100" : "opacity-0 pointer-events-none"
           }`}
-          style={{ background: "#1e2a4a" }}
+          style={{ background: "#2c2c2e" }}
         >
           <span className="flex-1 pl-1 text-[12px] font-semibold text-white">Sign out?</span>
           <button
             type="button"
             onClick={() => setAsk(false)}
             className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold transition hover:bg-white/15"
-            style={{ background: "rgba(255,255,255,.08)", color: "#d3daea" }}
+            style={{ background: "rgba(255,255,255,.08)", color: "#d1d1d6" }}
             tabIndex={ask ? 0 : -1}
           >
             Cancel
@@ -413,7 +406,7 @@ function AccountRow({
           <button
             type="button"
             onClick={onSignOut}
-            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold text-white bg-[#e0332c] hover:bg-[#c92a24] transition"
+            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold text-white bg-[#e31e24] hover:bg-[#c0171c] transition"
             tabIndex={ask ? 0 : -1}
           >
             Sign out

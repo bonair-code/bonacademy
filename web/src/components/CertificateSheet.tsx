@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import type { Timestamp } from "firebase/firestore";
 import QRCode from "qrcode";
 import { ORG } from "../lib/org";
@@ -10,7 +10,7 @@ export type Cert = {
   /** Eğitimin alındığı kurs revizyonu — belgeyi denetlenebilir kılar. */
   courseRevisionNo?: string | null;
   courseRevisionDate?: string | null;
-  /** Sınıf eğitiminin eğitmeni. Sertifikaya BASILMAZ (CAPELLA: imza yok, yalnızca QR); kayıt ekranlarında görünür. */
+  /** İmza hanesi. Sınıf eğitiminde eğitmen; online eğitimde boş. */
   instructorName?: string | null;
   userName: string;
   issuedAt?: Timestamp | null;
@@ -35,7 +35,8 @@ export type Cert = {
 export function fmtTs(ts?: Timestamp | string | null) {
   // Sınıf oturumu tarihleri metin ("YYYY-MM-DD") — eskiden "—" dönüyor,
   // sınıf sertifikasında eğitim tarihi hiç basılmıyordu.
-  if (typeof ts === "string") return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? ts.split("-").reverse().join(".") : "—";
+  if (typeof ts === "string")
+    return /^\d{4}-\d{2}-\d{2}$/.test(ts) ? ts.split("-").reverse().join(".") : "—";
   return ts?.toDate?.().toLocaleDateString("tr-TR") ?? "—";
 }
 
@@ -84,6 +85,13 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
     : null;
 
   /**
+   * İmza hanesi yalnızca sınıf eğitiminde var. Online eğitimde imzalayacak
+   * kimse yok; boş imza çizgisi bırakmak "imzalanmamış belge" izlenimi
+   * veriyordu. Kalite müdürü hanesi kaldırıldı, yerini doğrulama QR'ı aldı.
+   */
+  const isSigned = !!cert.instructorName?.trim();
+
+  /**
    * QR herkese açık doğrulama sayfasına gider ve tahmin edilemez bir anahtar
    * taşır. Adres numaraya dayansaydı (26-001, 26-002…) sayfadan sırayla
    * girilip bütün personelin adı ve eğitimi dökülebilirdi.
@@ -97,52 +105,43 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
       setQr("");
       return;
     }
-    QRCode.toDataURL(verifyUrl, { width: 240, margin: 0, color: { dark: "#18284b", light: "#ffffff" } })
+    QRCode.toDataURL(verifyUrl, { width: 240, margin: 0 })
       .then(setQr)
       .catch(() => setQr(""));
   }, [verifyUrl]);
 
-  // Sınav notu sertifikaya BASILMAZ (CAPELLA kararı). Not kayıtta duruyor:
-  // examScore alanı ve doğrulama/kayıt ekranları onu göstermeye devam eder.
-
-  /** Altın ince çizgi ve köşe süsleri — lacivert çerçevenin içinde. */
-  const GOLD = "#b08d45";
-  const NAVY = "#2b4685";
-  const NAVY_D = "#18284b";
-  const corner = (pos: CSSProperties): CSSProperties => ({
-    position: "absolute",
-    width: "3.2cqw",
-    height: "3.2cqw",
-    borderColor: GOLD,
-    borderStyle: "solid",
-    borderWidth: 0,
-    pointerEvents: "none",
-    ...pos,
-  });
-  const cw = "0.25cqw";
+  const examText =
+    cert.issuedVia === "IMPORT"
+      ? null
+      : cert.examRequired === false
+      ? "Exam: Not required"
+      : cert.examScore != null
+      ? `Exam Score: ${cert.examScore}%${
+          cert.examPassingScore != null ? ` (pass mark ${cert.examPassingScore}%)` : ""
+        }`
+      : null;
 
   return (
     <div
       className="cert-print bg-white"
       style={{ aspectRatio: "297 / 210", containerType: "inline-size" }}
     >
-      <div className="h-full w-full" style={{ padding: "1.4cqw" }}>
+      <div className="h-full w-full" style={{ padding: "1.2cqw" }}>
         <div
           className="h-full w-full"
-          style={{ border: `0.55cqw solid ${NAVY}`, padding: "0.45cqw" }}
+          style={{ border: "0.7cqw solid #1f3f6e", padding: "0.5cqw" }}
         >
           <div
             className="h-full w-full flex flex-col"
-            style={{ border: `0.1cqw solid ${GOLD}`, position: "relative" }}
+            style={{ border: "0.12cqw solid #1f3f6e", position: "relative" }}
           >
-            <span style={corner({ top: "0.8cqw", left: "0.8cqw", borderTopWidth: cw, borderLeftWidth: cw })} />
-            <span style={corner({ top: "0.8cqw", right: "0.8cqw", borderTopWidth: cw, borderRightWidth: cw })} />
-            <span style={corner({ bottom: "0.8cqw", left: "0.8cqw", borderBottomWidth: cw, borderLeftWidth: cw })} />
-            <span style={corner({ bottom: "0.8cqw", right: "0.8cqw", borderBottomWidth: cw, borderRightWidth: cw })} />
-
             {/* Filigran. CSS background-image değil gerçek <img>: index.css'teki
                 baskı kuralı `visibility` ile çalışıyor ve ata elemanların
-                arkaplan görselini çıktıya almıyor. Dosya yoksa gizlenir. */}
+                arkaplan görselini çıktıya almıyor. Boyut cqw ile, yani ekranda
+                ve A4'te aynı oranda.
+
+                Dosya yoksa gizlenir — sertifika filigransız, eskisi gibi
+                basılır; eksik bir görsel yüzünden belge bozulmaz. */}
             <img
               src={WATERMARK_SRC}
               alt=""
@@ -155,13 +154,15 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
                 left: "50%",
                 top: "52%",
                 transform: "translate(-50%, -50%)",
-                width: "66cqw",
-                maxHeight: "66%",
+                width: "68cqw",
+                maxHeight: "68%",
                 objectFit: "contain",
-                // Çizim beyaz zeminli: multiply ile zemin kayboluyor. Baskıda
-                // blend mode'a güvenilmediği için opaklık tek başına da yeterli.
+                // Çizim beyaz zeminli: multiply ile zemin kayboluyor, yalnızca
+                // kurşun kalem çizgileri kalıyor. Baskıda blend mode'a
+                // güvenilmediği için opaklık tek başına da çalışacak kadar
+                // düşük — zemin beyaz kâğıdın üstünde görünmez.
                 mixBlendMode: "multiply",
-                opacity: 0.1,
+                opacity: 0.12,
                 pointerEvents: "none",
                 userSelect: "none",
               }}
@@ -170,54 +171,53 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
             {/* Gövde — dikeyde ortalı. Filigranın üstünde kalmalı. */}
             <div
               className="flex-1 flex flex-col items-center justify-center text-center"
-              style={{ padding: "1.4cqw 6cqw 0", position: "relative", zIndex: 1 }}
+              style={{ padding: "1.6cqw 6cqw 0.6cqw", position: "relative", zIndex: 1 }}
             >
               <img
                 src="/Logo.png"
-                alt={cert.organisationName || ORG.name}
-                style={{ height: "5.4cqw", width: "auto" }}
+                alt="BonAir"
+                style={{ height: "5.2cqw", width: "auto", marginBottom: "1.1cqw" }}
               />
+
               <div
-                className="text-slate-500"
-                style={{ fontSize: "1.05cqw", letterSpacing: "0.12em", marginTop: "0.4cqw" }}
+                className="font-bold text-slate-800"
+                style={{ fontSize: "1.7cqw", letterSpacing: "0.02em" }}
               >
-                {ORG.website}
+                {cert.organisationName || ORG.name}
+              </div>
+              <div className="text-slate-600" style={{ fontSize: "1.35cqw", marginTop: "0.8cqw" }}>
+                {cert.approvalNo
+                  ? `Turkish DGCA SHT 145 Approval No: ${cert.approvalNo}`
+                  : ORG.approvalLine}
               </div>
 
               <h2
+                className="text-slate-900"
                 style={{
                   fontFamily: SERIF,
                   fontWeight: 400,
-                  fontSize: "4.2cqw",
+                  fontSize: "4.1cqw",
                   lineHeight: 1.05,
-                  marginTop: "0.9cqw",
-                  color: NAVY_D,
+                  marginTop: "0.7cqw",
+                  letterSpacing: "0.01em",
                 }}
               >
                 Training Certificate
               </h2>
-              <div
-                className="flex items-center"
-                style={{ gap: "1cqw", width: "24cqw", margin: "0.6cqw 0 0.5cqw", color: GOLD, fontSize: "1.2cqw" }}
-                aria-hidden="true"
-              >
-                <span style={{ flex: 1, height: "0.1cqw", background: GOLD }} />★
-                <span style={{ flex: 1, height: "0.1cqw", background: GOLD }} />
-              </div>
 
-              <div className="text-slate-600" style={{ fontSize: "1.4cqw" }}>
+              <div className="text-slate-600" style={{ fontSize: "1.4cqw", marginTop: "0.6cqw" }}>
                 This is to certify that
               </div>
               <div
                 lang="tr"
+                className="text-slate-900"
                 style={{
                   fontFamily: SERIF,
                   fontWeight: 700,
-                  fontSize: "3cqw",
-                  marginTop: "0.3cqw",
+                  fontSize: "2.9cqw",
+                  marginTop: "0.4cqw",
                   letterSpacing: "0.05em",
                   textTransform: "uppercase",
-                  color: NAVY_D,
                 }}
               >
                 {cert.userName}
@@ -226,28 +226,29 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
               {birth && (
                 <>
                   <div
-                    className="font-semibold text-slate-500"
-                    style={{ fontSize: "1cqw", marginTop: "0.5cqw", letterSpacing: "0.08em" }}
+                    className="font-semibold text-slate-600"
+                    style={{ fontSize: "1.15cqw", marginTop: "0.8cqw", letterSpacing: "0.04em" }}
                   >
-                    PLACE &amp; DATE OF BIRTH
+                    PLACE &amp; DATE of BIRTH
                   </div>
-                  <div lang="tr" className="text-slate-700" style={{ fontSize: "1.3cqw" }}>
+                  <div className="text-slate-700" style={{ fontSize: "1.35cqw" }}>
                     {birth}
                   </div>
                 </>
               )}
 
-              <div className="text-slate-600" style={{ fontSize: "1.4cqw", marginTop: "0.8cqw" }}>
-                has successfully completed
+              <div className="text-slate-600" style={{ fontSize: "1.4cqw", marginTop: "0.6cqw" }}>
+                Has successfully completed.
               </div>
+
               <div
                 className="text-slate-900"
                 style={{
                   fontFamily: SERIF,
                   fontWeight: 600,
-                  fontSize: "2.4cqw",
+                  fontSize: "2.3cqw",
                   lineHeight: 1.2,
-                  marginTop: "0.6cqw",
+                  marginTop: "1cqw",
                   maxWidth: "88%",
                 }}
               >
@@ -255,7 +256,7 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
               </div>
 
               {cert.courseRevisionNo && (
-                <div className="text-slate-500" style={{ fontSize: "1.1cqw", marginTop: "0.3cqw" }}>
+                <div className="text-slate-500" style={{ fontSize: "1.15cqw", marginTop: "0.6cqw" }}>
                   Training Revision {cert.courseRevisionNo}
                   {cert.courseRevisionDate
                     ? ` · ${cert.courseRevisionDate.split("-").reverse().join(".")}`
@@ -263,47 +264,98 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
                 </div>
               )}
 
-              {(cert.durationHours != null || heldText) && (
-                <div className="text-slate-700" style={{ fontSize: "1.3cqw", marginTop: "0.8cqw" }}>
-                  {[cert.durationHours != null ? `Duration: ${cert.durationHours} Hours` : null, heldText]
-                    .filter(Boolean)
-                    .join(" · ")}
+              {cert.durationHours != null && (
+                <div
+                  className="text-slate-700"
+                  style={{ fontSize: "1.35cqw", marginTop: "0.9cqw" }}
+                >
+                  Duration: {cert.durationHours} Hours
                 </div>
               )}
-              <div className="text-slate-700" style={{ fontSize: "1.3cqw" }}>
+              {heldText && (
+                <div className="text-slate-700" style={{ fontSize: "1.35cqw" }}>
+                  {heldText}
+                </div>
+              )}
+              <div className="text-slate-700" style={{ fontSize: "1.35cqw" }}>
                 By {ORG.issuedBy}
               </div>
+              {examText && (
+                <div
+                  className="font-semibold text-slate-800"
+                  style={{ fontSize: "1.35cqw", marginTop: "0.5cqw" }}
+                >
+                  {examText}
+                </div>
+              )}
             </div>
 
-            {/* Alt şerit: ortada belge künyesi, sağda doğrulama QR'ı. İmza
-                hanesi YOK — belgeyi kimin verdiğini QR doğruluyor. Soldaki boş
-                sütun künyeyi tam ortada tutmak için. */}
+            {/* Alt şerit — tek satırda üç sütun:
+                solda imza hanesi, ortada belge künyesi, sağda doğrulama QR'ı.
+                Eskiden imza satırı ve künye ayrı bloklardı; ikisi birlikte
+                sayfayı taşırıyor ve numara kesiliyordu. */}
             <div
               className="flex items-end justify-between"
               style={{ padding: "0 5cqw 1cqw", gap: "2cqw", position: "relative", zIndex: 1 }}
             >
-              <div style={{ width: "26%" }} />
+              {/* Sınıf eğitiminde eğitmen imzalar → boş satır + çizgi.
+                  Online eğitimde imzalayacak kimse yok; çizgi bırakmak
+                  "imzalanmamış belge" izlenimi veriyordu, o yüzden yalnızca
+                  belgeyi kimin ürettiğini yazıyoruz. */}
+              <div className="text-center" style={{ width: "27%" }}>
+                {isSigned ? (
+                  <>
+                    <div style={{ height: "4.2cqw" }} />
+                    <div className="border-t border-slate-400" />
+                    <div
+                      className="font-semibold text-slate-800"
+                      style={{ fontSize: "1.3cqw", marginTop: "0.4cqw", lineHeight: 1.25 }}
+                    >
+                      {cert.instructorName}
+                    </div>
+                    <div className="text-slate-600" style={{ fontSize: "1.1cqw", lineHeight: 1.25 }}>
+                      Instructor
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ height: "3.4cqw" }} />
+                    <div
+                      className="font-semibold text-slate-700"
+                      style={{ fontSize: "1.2cqw", lineHeight: 1.3 }}
+                    >
+                      Created by BonAcademy
+                    </div>
+                  </>
+                )}
+              </div>
 
-              <div className="text-center text-slate-800" style={{ flex: 1, fontSize: "1.35cqw", lineHeight: 1.55 }}>
-                <div>
-                  Certificate No: <b>{cert.serialNo}</b>
+              <div className="text-center" style={{ flex: 1 }}>
+                <div
+                  className="font-semibold text-slate-800"
+                  style={{ fontSize: "1.4cqw", lineHeight: 1.5 }}
+                >
+                  Certificate No: {cert.serialNo}
                 </div>
-                <div>
-                  Certificate Date: <b>{fmtTs(cert.issuedAt)}</b>
+                <div
+                  className="font-semibold text-slate-800"
+                  style={{ fontSize: "1.4cqw", lineHeight: 1.5 }}
+                >
+                  Certificate Date: {fmtTs(cert.issuedAt)}
                 </div>
               </div>
 
-              <div className="flex flex-col items-center" style={{ width: "26%" }}>
+              <div className="flex flex-col items-center" style={{ width: "27%" }}>
                 {qr && (
                   <img
                     src={qr}
                     alt="Verification QR code"
-                    style={{ width: "6.6cqw", height: "6.6cqw" }}
+                    style={{ width: "7cqw", height: "7cqw" }}
                   />
                 )}
                 <div
                   className="text-slate-500 text-center"
-                  style={{ fontSize: "0.9cqw", marginTop: "0.3cqw", lineHeight: 1.25 }}
+                  style={{ fontSize: "0.95cqw", marginTop: "0.3cqw", lineHeight: 1.25 }}
                 >
                   Scan to verify
                 </div>
@@ -312,8 +364,8 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
 
             {/* Form künyesi */}
             <div
-              className="border-t border-slate-300 flex items-center justify-between text-slate-500"
-              style={{ padding: "0.5cqw 5.5cqw", fontSize: "0.95cqw", position: "relative", zIndex: 1 }}
+              className="border-t border-slate-300 flex items-center justify-between text-slate-600"
+              style={{ padding: "0.5cqw 3cqw", fontSize: "1cqw", position: "relative", zIndex: 1 }}
             >
               <span>Form No: {ORG.footer.formNo}</span>
               <span>Revision No: {ORG.footer.revisionNo}</span>

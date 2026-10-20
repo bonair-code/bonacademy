@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import { Link } from "react-router-dom";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -509,7 +510,7 @@ function UserRowView({
               { label: "Reset password", icon: "🔑", onClick: onPassword },
               // Davet: kişi şifresini e-postadaki bağlantıyla belirler. Eski
               // ortak şifreyle açılmış hesaplara da gönderilebilir.
-              ...(isAdmin && !u.inviteAcceptedAt
+              ...(MAIL_ENABLED && isAdmin && !u.inviteAcceptedAt
                 ? [{ label: u.invitedAt ? "Resend invitation" : "Send invitation", icon: "✉", onClick: onInvite }]
                 : []),
               // Eğitim atamak admin ve eğitmenin işi; müdür personelini

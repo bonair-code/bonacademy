@@ -76,7 +76,7 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
     HEADERS,
     [
       "Mehmet DEMİR",
-      "mdemir@capella.aero",
+      "mdemir@bonair.com.tr",
       "Manager",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles.slice(0, 2).map((j) => j.name).join(", ") ||
@@ -84,11 +84,11 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
       "",
       "İstanbul",
       "1985-04-12",
-      "Capella2026!",
+      "BonAir2026!",
     ],
     [
       "Ayşe YILMAZ",
-      "ayilmaz@capella.aero",
+      "ayilmaz@bonair.com.tr",
       "Employee",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles[0]?.name ?? "Technician",
@@ -145,7 +145,7 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
   help["!cols"] = [{ wch: 95 }];
   XLSX.utils.book_append_sheet(wb, help, SHEET_HELP);
 
-  XLSX.writeFile(wb, "capella-academy-users-template.xlsx");
+  XLSX.writeFile(wb, "bonacademy-users-template.xlsx");
 }
 
 /** Excel'in tarih hücresi Date, metin hücresi string gelir; ikisini de kabul et. */

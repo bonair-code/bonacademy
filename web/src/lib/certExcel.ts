@@ -88,7 +88,7 @@ export function downloadCertTemplate(courseTitles: string[]) {
     [
       "26-001",
       "ALİ KAYA",
-      "akaya@capella.aero",
+      "akaya@bonair.com.tr",
       "İSTANBUL",
       "23.10.2007",
       courseTitles[0] ?? "Fuel Tank Safety Training (Phase 2) | Initial Training",
@@ -136,7 +136,7 @@ export function downloadCertTemplate(courseTitles: string[]) {
   lws["!cols"] = [{ wch: 60 }];
   XLSX.utils.book_append_sheet(wb, lws, "Valid Trainings");
 
-  XLSX.writeFile(wb, "capella-academy-certificates-template.xlsx");
+  XLSX.writeFile(wb, "bonacademy-certificates-template.xlsx");
 }
 
 export async function parseCertWorkbook(file: File): Promise<CertParseResult> {

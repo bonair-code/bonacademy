@@ -79,7 +79,7 @@ export function Onboarding() {
       <div className="w-full max-w-[440px]">
         <div className="flex flex-col items-center mb-5">
           <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Capella Aviation Solutions" className="h-12 w-auto" />
+            <img src="/Logo.png" alt="BonAir Aviation" className="h-12 w-auto" />
           </div>
           <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-4">
             Welcome, {profile?.name}
@@ -89,7 +89,7 @@ export function Onboarding() {
         <div className="bg-white rounded-xl shadow-2xl overflow-hidden">
           <span
             className="block h-1"
-            style={{ background: "linear-gradient(90deg,#2b4685,#6688c0 60%,transparent)" }}
+            style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
           />
 
           {/* Adım göstergesi */}

@@ -1,16 +1,13 @@
 import { useState } from "react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../lib/firebase";
-import { flyAndRelease, holdLogin, releaseLogin } from "../lib/loginFlight";
 import {
-  PasswordInput,
   PublicError,
   PublicShell,
   pubButton,
   pubInput,
   pubLabel,
 } from "../components/PublicShell";
-import { ORG } from "../lib/org";
 
 export function Login() {
   const [mode, setMode] = useState<"signin" | "reset">("signin");
@@ -24,18 +21,10 @@ export function Login() {
     e.preventDefault();
     setErr(null);
     setBusy(true);
-    // Giriş ekranı açık kalsın: başarılıysa önce uçak uçar, sonra panel gelir.
-    holdLogin();
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (e2) {
-      releaseLogin();
       setErr(readable(e2));
-      setBusy(false);
-      return;
-    }
-    try {
-      await flyAndRelease();
     } finally {
       setBusy(false);
     }
@@ -95,7 +84,7 @@ export function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={`ad.soyad@${ORG.emailDomain}`}
+              placeholder="ad.soyad@bonair.com.tr"
               autoComplete="username"
               autoFocus
             />
@@ -118,7 +107,7 @@ export function Login() {
   }
 
   return (
-    <PublicShell title="Welcome back" subtitle="Sign in to continue your training.">
+    <PublicShell title="Sign in" subtitle="Compliance in aviation starts with training.">
       <form onSubmit={emailLogin}>
         <label className={pubLabel}>Email</label>
         <input
@@ -126,11 +115,11 @@ export function Login() {
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder={`ad.soyad@${ORG.emailDomain}`}
+          placeholder="ad.soyad@bonair.com.tr"
           autoComplete="username"
         />
 
-        <div className="flex items-baseline justify-between mt-4">
+        <div className="flex items-baseline justify-between mt-3.5">
           <label className={pubLabel}>Password</label>
           <button
             type="button"
@@ -138,18 +127,20 @@ export function Login() {
               setMode("reset");
               setErr(null);
             }}
-            className="text-[12.5px] font-medium text-[#a9c1ef] hover:text-white mb-1.5"
+            className="text-[10.5px] font-semibold text-brand-500 hover:text-brand-400 mb-1.5"
           >
-            Forgot?
+            Forgot password?
           </button>
         </div>
-        <PasswordInput
+        <input
+          className={pubInput}
+          type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
         />
 
-        <div className="mt-6" />
+        <div className="mt-3.5" />
         {err && <PublicError>{err}</PublicError>}
 
         <button type="submit" disabled={busy} className={pubButton}>
@@ -163,8 +154,12 @@ export function Login() {
 function readable(e: unknown): string {
   const code = (e as { code?: string })?.code ?? "";
   if (code.includes("invalid-email")) return "That does not look like a valid email address.";
-  // Hesabın var olup olmadığı sızdırılmaz: "kullanıcı yok" ayrı söylenmiyor.
-  if (code.includes("invalid-credential") || code.includes("wrong-password") || code.includes("user-not-found"))
+  // Hesabın var olup olmadığını SIZDIRMA: ikisi de aynı mesajı döndürür.
+  if (
+    code.includes("invalid-credential") ||
+    code.includes("wrong-password") ||
+    code.includes("user-not-found")
+  )
     return "Incorrect email or password.";
   if (code.includes("too-many-requests"))
     return "Too many attempts — wait a moment and try again.";

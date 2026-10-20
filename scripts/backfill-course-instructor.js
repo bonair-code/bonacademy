@@ -17,7 +17,7 @@ const { getFirestore } = fnRequire("firebase-admin/firestore");
 const APPLY = process.argv.includes("--apply");
 
 async function main() {
-  initializeApp({ projectId: "capella-academy-v2" });
+  initializeApp({ projectId: "bonair-academy" });
   const db = getFirestore();
 
   const users = new Map(

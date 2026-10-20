@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../lib/firebase";
+import { MAIL_ENABLED } from "../lib/features";
 import {
   downloadUserTemplate,
   parseUserWorkbook,
@@ -66,8 +67,9 @@ export function UserImport({
     for (const u of parsed.users) {
       try {
         // Dosyada şifresi olmayana davet e-postası gider: şifresini kendisi
-        // belirler. Eskiden rastgele şifre üretilip bir kez gösteriliyordu,
-        // admin bunları tek tek iletmek zorundaydı.
+        // belirler. Posta KAPALIYKEN davet gidemez; o satırlar üretilen geçici
+        // şifreyle açılır ve şifreler aşağıda listelenir — yoksa hesap ne
+        // davet alır ne şifresi olur, yani hiç girilemez.
         const r = await fn({
           email: u.email,
           name: u.name,
@@ -77,7 +79,7 @@ export function UserImport({
           company: u.company,
           birthPlace: u.birthPlace,
           birthDate: u.birthDate,
-          ...(u.generatedPassword ? { invite: true } : { password: u.password }),
+          ...(u.generatedPassword && MAIL_ENABLED ? { invite: true } : { password: u.password }),
         });
         const inv = (r.data as { invite?: { ok: boolean } | null }).invite;
         out.push({ user: u, ok: true, invited: inv ? inv.ok : undefined });
@@ -98,6 +100,9 @@ export function UserImport({
     const failed = results.filter((r) => !r.ok);
     const invited = ok.filter((r) => r.invited === true);
     const inviteFailed = ok.filter((r) => r.invited === false);
+    // Posta kapalıyken dosyada şifresi olmayanlara üretilen şifreler: admin
+    // bunları elden iletmek zorunda, bir daha gösterilmez.
+    const generated = MAIL_ENABLED ? [] : ok.filter((r) => r.user.generatedPassword);
     // Dosyadan okunan toplam satır — "25 / 65" gibi ilerleme gösterebilmek için.
     const total = parsed?.users.length ?? results.length;
     const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
@@ -116,7 +121,7 @@ export function UserImport({
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div
               className="h-full rounded-full transition-[width] duration-200"
-              style={{ width: `${pct}%`, background: busy ? "#2b4685" : "#10b981" }}
+              style={{ width: `${pct}%`, background: busy ? "#e31e24" : "#10b981" }}
             />
           </div>
 
@@ -143,6 +148,36 @@ export function UserImport({
               {failed.map((r) => (
                 <li key={r.user.email} className="text-[11px] text-red-700">
                   {r.user.email}: {r.error}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {generated.length > 0 && (
+          <div className="mb-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="label">Passwords to pass on</div>
+              <button
+                type="button"
+                onClick={() =>
+                  navigator.clipboard.writeText(
+                    generated.map((r) => `${r.user.email}\t${r.user.password}`).join("\n")
+                  )
+                }
+                className="text-[11px] font-semibold text-brand-700 hover:text-brand-800"
+              >
+                Copy all
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-500 mb-1">
+              Email is off, so no invitations were sent. These are shown once — copy them now. Each
+              person is asked to choose their own password at first sign-in.
+            </p>
+            <ul className="max-h-40 overflow-auto rounded-md bg-slate-50 border border-slate-200 p-2 space-y-0.5">
+              {generated.map((r) => (
+                <li key={r.user.email} className="text-[11px] font-mono text-slate-700 tabular-nums">
+                  {r.user.email} — {r.user.password}
                 </li>
               ))}
             </ul>
@@ -276,7 +311,7 @@ export function UserImport({
                         )}
                       </td>
                       <td className="px-3 py-1 text-slate-400">
-                        {u.generatedPassword ? "email invitation" : "from file"}
+                        {u.generatedPassword ? (MAIL_ENABLED ? "email invitation" : "auto password") : "from file"}
                       </td>
                     </tr>
                   ))}

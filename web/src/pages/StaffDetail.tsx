@@ -50,7 +50,7 @@ type CourseRow = {
  *   all  — kişinin ilgili olduğu her eğitim (en acili üstte)
  *   att  — dikkat: eksik, süresi dolmuş, SOON_DAYS içinde dolacak
  *   next — süresi olan geçerli eğitimler, en yakın bitiş üstte
- *   cert — Capella sertifikaları + TÜM dış kayıtlar
+ *   cert — BonAir sertifikaları + TÜM dış kayıtlar
  */
 type Filter = "all" | "att" | "next" | "cert";
 const FILTER_TITLE: Record<Filter, string> = {
@@ -375,11 +375,11 @@ export function StaffDetail() {
         : l.state === "PLANNED"
         ? `${assignedLabel(a?.status)}${a?.dueDate ? ` · due ${fmt(a.dueDate.toDate?.())}` : ""}`
         : [
-            l.external ? `External · ${l.external.provider}` : cert?.serialNo ? `Certificate ${cert.serialNo}` : "Capella",
+            l.external ? `External · ${l.external.provider}` : cert?.serialNo ? `Certificate ${cert.serialNo}` : "BonAir",
             until,
           ].join(" · ");
 
-    // Satıra basınca belgesi açılır: Capella sertifikası ya da dış kaydın dosyası.
+    // Satıra basınca belgesi açılır: BonAir sertifikası ya da dış kaydın dosyası.
     const title = (
       <>
         <div className="text-[14px] font-medium text-slate-900 truncate">{l.course.title}</div>
@@ -494,7 +494,7 @@ export function StaffDetail() {
       big: certs.length,
       small: externals.length
         ? `+${externals.length} external record${externals.length === 1 ? "" : "s"}`
-        : "issued by Capella",
+        : "issued by BonAir",
     },
   ];
 
@@ -510,7 +510,7 @@ export function StaffDetail() {
           <div className="flex items-center gap-3.5 min-w-0">
             <div
               className="h-[52px] w-[52px] shrink-0 rounded-full grid place-items-center text-white text-[19px] font-semibold"
-              style={{ background: "linear-gradient(160deg,#6d8fd6,#2b4685)" }}
+              style={{ background: "linear-gradient(160deg,#c9393d,#8b1013)" }}
               aria-hidden
             >
               {initials}
@@ -817,14 +817,14 @@ export function StaffDetail() {
         <div className={`card`}>
           <div
             className="px-5 py-3 relative"
-            style={{ background: "linear-gradient(180deg,#233a6f 0%,#18284b 100%)" }}
+            style={{ background: "linear-gradient(180deg,#8b1013 0%,#6d0d11 100%)" }}
           >
             <div className="text-[13px] font-bold text-white">
               Training <span className="text-white/60 font-normal">({lines.length})</span>
             </div>
             <span
               className="absolute bottom-0 left-0 right-0 h-0.5"
-              style={{ background: "linear-gradient(90deg,#2b4685,#6688c0 60%,transparent)" }}
+              style={{ background: "linear-gradient(90deg,#e31e24,#e8630a 60%,transparent)" }}
             />
           </div>
 
@@ -912,10 +912,10 @@ export function StaffDetail() {
                             to={`/certificate/${l.certificateId}`}
                             className="text-brand-700 hover:underline text-[12px] font-medium"
                           >
-                            Capella · view certificate
+                            BonAir · view certificate
                           </Link>
                         ) : l.state === "DONE" ? (
-                          <span className="text-[12px] text-slate-500">Capella</span>
+                          <span className="text-[12px] text-slate-500">BonAir</span>
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
@@ -1109,19 +1109,19 @@ export function StaffDetail() {
           )}
         </div>
 
-        {/* Sertifikalar — bu kişiye sistemden verilen Capella sertifikaları.
+        {/* Sertifikalar — bu kişiye sistemden verilen BonAir sertifikaları.
             Eskiden yalnızca kişinin kendi "My Certificates" sayfasında
             görünüyordu; müdür bir personelin sertifikasını göremiyordu. */}
         <div className={`card mt-4`}>
           <div className="px-5 py-3 border-b border-slate-100">
             <span className="text-[13px] font-bold text-slate-800">
-              Capella Certificates{" "}
+              BonAir Certificates{" "}
               <span className="text-slate-400 font-normal">({certs.length})</span>
             </span>
           </div>
           {certs.length === 0 ? (
             <p className="px-5 py-6 text-center text-[13px] text-slate-400">
-              No certificate issued by Capella yet.
+              No certificate issued by BonAir yet.
             </p>
           ) : (
             <div className="overflow-x-auto">

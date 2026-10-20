@@ -1,33 +1,49 @@
 /**
- * E-posta gönderimi — CAPELLA'nın kendi posta sunucusu üzerinden (SMTP).
+ * E-posta gönderimi (SMTP).
  *
- * Sağlayıcı: Brevo SMTP relay (smtp-relay.brevo.com:587, STARTTLS).
- * capella.aero'nun kendi posta sağlayıcısı (isimtescil / mailmatik) şifreli
- * gönderim sunmuyor — 465 kapalı, 587'de STARTTLS yok; o yoldan kutu şifresi
- * ve mail içeriği açık metin giderdi (08.10.2026'da denendi). Brevo için
- * capella.aero'ya SPF/DKIM kayıtları eklenir; gönderen yine
- * noreply@capella.aero görünür. Kod sağlayıcıdan bağımsız: yalnız ayar değişir.
+ * ŞU AN KAPALI. `MAIL_ENABLED` ayarlanmadıkça hiçbir e-posta çıkmaz:
+ * gönderen adres, SPF/DKIM kayıtları ve sertifika PDF'inin BonAir tasarımı
+ * (functions/src/certPdf.ts) hazır olmadan posta açılmamalı. Kod tam, yalnız
+ * anahtar kapalı — açmak için aşağıdaki ayarlar girilir ve MAIL_ENABLED=true
+ * yazılır. Ayrıntı: docs/BACKLOG.md → "E-posta altyapısı".
  *
- * Ayarlar (gizli olmayan): functions/.env → SMTP_HOST, SMTP_PORT, SMTP_USER
- * (sağlayıcının giriş adı), MAIL_FROM (görünen gönderen), APP_URL.
- * Şifre / SMTP anahtarı Secret Manager'da: SMTP_PASSWORD
- *   npx firebase functions:secrets:set SMTP_PASSWORD --project capella-academy-v2
- * Mail gönderen her fonksiyon `secrets: [SMTP_PASSWORD]` taşımalı.
+ * Ayarlar (gizli olmayan): functions/.env → MAIL_ENABLED, SMTP_HOST,
+ * SMTP_PORT, SMTP_USER (sağlayıcının giriş adı), MAIL_FROM (görünen
+ * gönderen), APP_URL. Şifre / SMTP anahtarı Secret Manager'da:
+ *   npx firebase functions:secrets:set SMTP_PASSWORD --project bonair-academy
+ *
+ * Sır, posta KAPALIYKEN hiçbir fonksiyona bağlanmaz (bkz. mailSecrets):
+ * yoksa sır tanımlı olmadığı için deploy düşerdi. Mail gönderen her
+ * fonksiyon `secrets: mailSecrets()` taşır.
  *
  * Gönderim hatası asıl işlemi BOZMAZ (kullanıcı açılır, atama yapılır);
  * sonuç `notifications` koleksiyonuna yazılır ve çağırana döner.
- */
-import nodemailer from "nodemailer";
+ */import nodemailer from "nodemailer";
 import { defineSecret } from "firebase-functions/params";
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 
-export const SMTP_PASSWORD = defineSecret("SMTP_PASSWORD");
+/**
+ * Posta açık mı? Varsayılan KAPALI: değer yoksa ya da "true" değilse
+ * hiçbir şey gönderilmez. Yanlış tarafa düşmek yerine sessiz kalır.
+ */
+const MAIL_ENABLED = String(process.env.MAIL_ENABLED ?? "").trim().toLowerCase() === "true";
+export const mailEnabled = () => MAIL_ENABLED;
+
+/**
+ * SMTP şifresi yalnızca posta açıkken tanımlanır. Kapalıyken `defineSecret`
+ * hiç çağrılmaz; böylece Secret Manager'da SMTP_PASSWORD olmadan da deploy
+ * edilebilir.
+ */
+const SMTP_PASSWORD = MAIL_ENABLED ? defineSecret("SMTP_PASSWORD") : null;
+
+/** `onCall`/`onRequest` için: açıkken [sır], kapalıyken boş liste. */
+export const mailSecrets = () => (SMTP_PASSWORD ? [SMTP_PASSWORD] : []);
 
 const env = (k: string, d: string) => (process.env[k] || d).trim();
-export const appUrl = () => env("APP_URL", "https://academy.capella.aero").replace(/\/+$/, "");
+export const appUrl = () => env("APP_URL", "https://academy.bonair.com.tr").replace(/\/+$/, "");
 /** Görünen gönderen. Brevo gibi sağlayıcılarda giriş adı (SMTP_USER) farklıdır. */
-const fromAddress = () => env("MAIL_FROM", "noreply@capella.aero");
-const REPLY_TO = "info@capella.aero";
+const fromAddress = () => env("MAIL_FROM", "noreply@bonair.com.tr");
+const REPLY_TO = "qualitytechnic@bonair.com.tr";
 
 let transport: ReturnType<typeof nodemailer.createTransport> | null = null;
 function getTransport() {
@@ -39,7 +55,7 @@ function getTransport() {
     secure: port === 465, // 465: doğrudan TLS; 587: STARTTLS
     // Şifresiz bağlantıya asla düşme: şifre ve içerik açık metin gitmesin.
     requireTLS: port !== 465,
-    auth: { user: env("SMTP_USER", ""), pass: SMTP_PASSWORD.value() },
+    auth: { user: env("SMTP_USER", ""), pass: SMTP_PASSWORD?.value() ?? "" },
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
   });
@@ -59,6 +75,9 @@ export async function sendMail(m: {
   meta?: Record<string, unknown>;
   attachments?: { filename: string; content: Buffer; contentType: string }[];
 }): Promise<MailResult> {
+  // Posta kapalıyken bağlantı da kurulmaz, kayıt da yazılmaz. Çağıranlar
+  // zaten mailEnabled() ile eleniyor; bu son emniyet.
+  if (!MAIL_ENABLED) return { ok: false, error: "Email is turned off." };
   const log = getFirestore().collection("notifications").doc();
   const base = {
     channel: "EMAIL",
@@ -71,7 +90,7 @@ export async function sendMail(m: {
   };
   try {
     await getTransport().sendMail({
-      from: { name: "Capella Academy", address: fromAddress() },
+      from: { name: "BonAcademy", address: fromAddress() },
       replyTo: REPLY_TO,
       to: m.to,
       subject: m.subject,
@@ -91,7 +110,7 @@ export async function sendMail(m: {
 
 /* ── Şablonlar ──────────────────────────────────────────────
  * Tablo + satır içi stil: e-posta istemcileri (Outlook dahil) CSS dosyası ve
- * çoğu modern CSS'i okumaz. Tasarım CAPELLA/eposta-sablonlari.html'de onaylandı.
+ * çoğu modern CSS'i okumaz. Tasarım docs/eposta-sablonlari.html'de onaylandı.
  */
 
 export type MailLang = "tr" | "en";
@@ -111,14 +130,14 @@ function shell(inner: string, lang: MailLang) {
 <body style="margin:0;padding:0;background:#f4f6f9">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;border:1px solid #e2e8f0;font-family:${FONT};color:#1e293b">
-<tr><td style="padding:26px 32px 18px;border-bottom:1px solid #eef2f7"><img src="${appUrl()}/Logo.png" alt="Capella Aviation Solutions" height="38" style="display:block;height:38px;border:0"></td></tr>
+<tr><td style="padding:26px 32px 18px;border-bottom:1px solid #eef2f7"><img src="${appUrl()}/Logo.png" alt="BonAir Aviation" height="38" style="display:block;height:38px;border:0"></td></tr>
 <tr><td style="padding:26px 32px 30px;font-size:15px;line-height:1.6">${inner}</td></tr>
-<tr><td style="padding:16px 32px 22px;border-top:1px solid #eef2f7;font-size:12px;line-height:1.6;color:#94a3b8">Capella Aviation Solutions · <a href="https://www.capella.aero" style="color:#94a3b8">www.capella.aero</a><br>${foot}</td></tr>
+<tr><td style="padding:16px 32px 22px;border-top:1px solid #eef2f7;font-size:12px;line-height:1.6;color:#94a3b8">BonAir Aviation · <a href="https://www.bonair.com.tr" style="color:#94a3b8">www.bonair.com.tr</a><br>${foot}</td></tr>
 </table></td></tr></table></body></html>`;
 }
 
 const button = (href: string, text: string) =>
-  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px"><tr><td style="background:#2b4685;border-radius:10px"><a href="${esc(href)}" style="display:inline-block;padding:13px 26px;color:#ffffff;font-weight:600;font-size:15px;text-decoration:none;font-family:${FONT}">${esc(text)}</a></td></tr></table>`;
+  `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0 8px"><tr><td style="background:#e31e24;border-radius:10px"><a href="${esc(href)}" style="display:inline-block;padding:13px 26px;color:#ffffff;font-weight:600;font-size:15px;text-decoration:none;font-family:${FONT}">${esc(text)}</a></td></tr></table>`;
 
 /**
  * Butonun altında linkin açık hali. Kişi nereye gideceğini görür; spam
@@ -134,30 +153,30 @@ const fmtDate = (d: Date | null | undefined) =>
 export function inviteMail(lang: MailLang, p: { name: string; email: string; link: string; days: number }) {
   const host = appUrl().replace(/^https?:\/\//, "");
   if (lang === "en") {
-    const subject = "Your Capella Academy account has been created";
+    const subject = "Your BonAcademy account has been created";
     const html = shell(
       `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 14px">An account has been created for you on <b>Capella Academy</b>, the training platform of Capella Aviation Solutions.</p>
+<p style="margin:0 0 14px">An account has been created for you on <b>BonAcademy</b>, the training platform of BonAir Aviation.</p>
 <p style="margin:0">Your sign-in email: <b>${esc(p.email)}</b></p>
 ${button(p.link, "Activate my account")}
 ${plainLink(p.link, "If the button does not work, copy this address into your browser:")}
-<p style="margin:14px 0 0;font-size:13px;color:#64748b">The link is valid for ${p.days} days and can be used once. Afterwards you can sign in at <a href="${appUrl()}" style="color:#2b4685">${host}</a>.</p>`,
+<p style="margin:14px 0 0;font-size:13px;color:#64748b">The link is valid for ${p.days} days and can be used once. Afterwards you can sign in at <a href="${appUrl()}" style="color:#e31e24">${host}</a>.</p>`,
       lang
     );
-    const text = `Dear ${p.name},\n\nAn account has been created for you on Capella Academy, the training platform of Capella Aviation Solutions.\nYour sign-in email: ${p.email}\n\nActivate your account: ${p.link}\n\nThe link is valid for ${p.days} days and can be used once.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nAn account has been created for you on BonAcademy, the training platform of BonAir Aviation.\nYour sign-in email: ${p.email}\n\nActivate your account: ${p.link}\n\nThe link is valid for ${p.days} days and can be used once.\n\nBonAir Aviation · ${REPLY_TO}`;
     return { subject, html, text };
   }
-  const subject = "Capella Academy hesabınız oluşturuldu";
+  const subject = "BonAcademy hesabınız oluşturuldu";
   const html = shell(
     `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 14px">Capella Aviation Solutions eğitim platformu <b>Capella Academy</b>'de sizin için bir hesap oluşturulmuştur.</p>
+<p style="margin:0 0 14px">BonAir Aviation eğitim platformu <b>BonAcademy</b>'de sizin için bir hesap oluşturulmuştur.</p>
 <p style="margin:0">Giriş e-postanız: <b>${esc(p.email)}</b></p>
 ${button(p.link, "Hesabımı etkinleştir")}
 ${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırın:")}
-<p style="margin:14px 0 0;font-size:13px;color:#64748b">Bağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir. Sonrasında <a href="${appUrl()}" style="color:#2b4685">${host}</a> adresinden giriş yapabilirsiniz.</p>`,
+<p style="margin:14px 0 0;font-size:13px;color:#64748b">Bağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir. Sonrasında <a href="${appUrl()}" style="color:#e31e24">${host}</a> adresinden giriş yapabilirsiniz.</p>`,
     lang
   );
-  const text = `Sayın ${p.name},\n\nCapella Aviation Solutions eğitim platformu Capella Academy'de sizin için bir hesap oluşturulmuştur.\nGiriş e-postanız: ${p.email}\n\nHesabınızı etkinleştirin: ${p.link}\n\nBağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\nBonAir Aviation eğitim platformu BonAcademy'de sizin için bir hesap oluşturulmuştur.\nGiriş e-postanız: ${p.email}\n\nHesabınızı etkinleştirin: ${p.link}\n\nBağlantı ${p.days} gün geçerlidir ve bir kez kullanılabilir.\n\nBonAir Aviation · ${REPLY_TO}`;
   return { subject, html, text };
 }
 
@@ -181,25 +200,25 @@ export function assignmentMail(lang: MailLang, p: { name: string; items: Assigne
     const subject = one ? `New training: ${p.items[0].title}` : `${p.items.length} new trainings assigned`;
     const html = shell(
       `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 16px">The following training ${one ? "has" : "have"} been assigned to you on Capella Academy:</p>
+<p style="margin:0 0 16px">The following training ${one ? "has" : "have"} been assigned to you on BonAcademy:</p>
 ${list}
 ${button(p.link, "Start training")}
 <p style="margin:0;font-size:13px;color:#64748b">You can stop at any time and continue where you left off.</p>`,
       lang
     );
-    const text = `Dear ${p.name},\n\nThe following training has been assigned to you on Capella Academy:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (due ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nStart: ${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nThe following training has been assigned to you on BonAcademy:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (due ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nStart: ${p.link}\n\nBonAir Aviation · ${REPLY_TO}`;
     return { subject, html, text };
   }
   const subject = one ? `Yeni eğitim: ${p.items[0].title}` : `${p.items.length} yeni eğitim atandı`;
   const html = shell(
     `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 16px">Capella Academy'de size aşağıdaki ${one ? "eğitim" : "eğitimler"} atanmıştır:</p>
+<p style="margin:0 0 16px">BonAcademy'de size aşağıdaki ${one ? "eğitim" : "eğitimler"} atanmıştır:</p>
 ${list}
 ${button(p.link, "Eğitime başla")}
 <p style="margin:0;font-size:13px;color:#64748b">Eğitimi istediğiniz zaman bırakıp kaldığınız yerden devam edebilirsiniz.</p>`,
     lang
   );
-  const text = `Sayın ${p.name},\n\nCapella Academy'de size aşağıdaki eğitim atanmıştır:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (son tarih ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nBaşlamak için: ${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\nBonAcademy'de size aşağıdaki eğitim atanmıştır:\n${p.items.map((it) => `- ${it.title}${it.dueDate ? ` (son tarih ${fmtDate(it.dueDate)})` : ""}`).join("\n")}\n\nBaşlamak için: ${p.link}\n\nBonAir Aviation · ${REPLY_TO}`;
   return { subject, html, text };
 }
 
@@ -236,25 +255,25 @@ export function reminderMail(
     const subject = late ? `Overdue training: ${p.title}` : `Reminder: ${p.title}`;
     const html = shell(
       `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 16px">This is a reminder that the following training assigned to you on Capella Academy has not been completed yet:</p>
+<p style="margin:0 0 16px">This is a reminder that the following training assigned to you on BonAcademy has not been completed yet:</p>
 ${card}
 ${button(p.link, p.started ? "Continue training" : "Start training")}
 ${plainLink(p.link, "If the button does not work, copy this address into your browser:")}`,
       lang
     );
-    const text = `Dear ${p.name},\n\nReminder: the training "${p.title}" assigned to you on Capella Academy has not been completed yet.${p.dueDate ? ` Due: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nReminder: the training "${p.title}" assigned to you on BonAcademy has not been completed yet.${p.dueDate ? ` Due: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nBonAir Aviation · ${REPLY_TO}`;
     return { subject, html, text };
   }
   const subject = late ? `Son tarihi geçen eğitim: ${p.title}` : `Hatırlatma: ${p.title}`;
   const html = shell(
     `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 16px">Capella Academy'de size atanan aşağıdaki eğitim henüz tamamlanmamıştır:</p>
+<p style="margin:0 0 16px">BonAcademy'de size atanan aşağıdaki eğitim henüz tamamlanmamıştır:</p>
 ${card}
 ${button(p.link, p.started ? "Eğitime devam et" : "Eğitime başla")}
 ${plainLink(p.link, "Buton çalışmazsa bu adresi tarayıcınıza yapıştırın:")}`,
     lang
   );
-  const text = `Sayın ${p.name},\n\nHatırlatma: Capella Academy'de size atanan "${p.title}" eğitimi henüz tamamlanmamıştır.${p.dueDate ? ` Son tarih: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\nHatırlatma: BonAcademy'de size atanan "${p.title}" eğitimi henüz tamamlanmamıştır.${p.dueDate ? ` Son tarih: ${fmtDate(p.dueDate)}.` : ""}\n\n${p.link}\n\nBonAir Aviation · ${REPLY_TO}`;
   return { subject, html, text };
 }
 
@@ -282,7 +301,7 @@ ${button(p.verifyUrl, "Verify certificate")}
 ${plainLink(p.verifyUrl, "Anyone can check the certificate at this address (the QR code on the certificate opens it too):")}`,
       lang
     );
-    const text = `Dear ${p.name},\n\nYou have successfully completed "${p.courseTitle}". Your certificate (No ${p.serialNo}) is attached as a PDF.\n\nVerify: ${p.verifyUrl}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nYou have successfully completed "${p.courseTitle}". Your certificate (No ${p.serialNo}) is attached as a PDF.\n\nVerify: ${p.verifyUrl}\n\nBonAir Aviation · ${REPLY_TO}`;
     return { subject, html, text };
   }
   const subject = `${tag}Sertifikanız: ${p.courseTitle}`;
@@ -294,7 +313,7 @@ ${button(p.verifyUrl, "Sertifikayı doğrula")}
 ${plainLink(p.verifyUrl, "Sertifika bu adresten herkes tarafından doğrulanabilir (sertifikadaki QR kod da bu adresi açar):")}`,
     lang
   );
-  const text = `Sayın ${p.name},\n\n"${p.courseTitle}" eğitimini başarıyla tamamladınız. Sertifikanız (No ${p.serialNo}) ekte PDF olarak yer almaktadır.\n\nDoğrulama: ${p.verifyUrl}\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\n"${p.courseTitle}" eğitimini başarıyla tamamladınız. Sertifikanız (No ${p.serialNo}) ekte PDF olarak yer almaktadır.\n\nDoğrulama: ${p.verifyUrl}\n\nBonAir Aviation · ${REPLY_TO}`;
   return { subject, html, text };
 }
 
@@ -307,10 +326,10 @@ export function tempPasswordMail(lang: MailLang, p: { name: string; email: strin
   const login = `${appUrl()}/login`;
   const pwBox = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0"><tr><td style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:10px 16px;font-family:Menlo,Consolas,monospace;font-size:17px;letter-spacing:.04em;color:#0f172a">${esc(p.password)}</td></tr></table>`;
   if (lang === "en") {
-    const subject = "Your temporary Capella Academy password";
+    const subject = "Your temporary BonAcademy password";
     const html = shell(
       `<p style="margin:0 0 14px">Dear <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 14px">A temporary password has been set for your <b>Capella Academy</b> account.</p>
+<p style="margin:0 0 14px">A temporary password has been set for your <b>BonAcademy</b> account.</p>
 <p style="margin:0">Sign-in email: <b>${esc(p.email)}</b></p>
 <p style="margin:12px 0 0">Temporary password:</p>
 ${pwBox}
@@ -318,13 +337,13 @@ ${button(login, "Sign in")}
 <p style="margin:0;font-size:13px;color:#64748b">When you sign in you will be asked to choose your own password; the temporary one stops working then. If you did not expect this email, please write to ${REPLY_TO}.</p>`,
       lang
     );
-    const text = `Dear ${p.name},\n\nA temporary password has been set for your Capella Academy account.\nSign-in email: ${p.email}\nTemporary password: ${p.password}\n\nSign in: ${login}\nYou will be asked to choose your own password when you sign in.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+    const text = `Dear ${p.name},\n\nA temporary password has been set for your BonAcademy account.\nSign-in email: ${p.email}\nTemporary password: ${p.password}\n\nSign in: ${login}\nYou will be asked to choose your own password when you sign in.\n\nBonAir Aviation · ${REPLY_TO}`;
     return { subject, html, text };
   }
-  const subject = "Capella Academy geçici şifreniz";
+  const subject = "BonAcademy geçici şifreniz";
   const html = shell(
     `<p style="margin:0 0 14px">Sayın <b>${esc(p.name)}</b>,</p>
-<p style="margin:0 0 14px"><b>Capella Academy</b> hesabınız için geçici bir şifre oluşturulmuştur.</p>
+<p style="margin:0 0 14px"><b>BonAcademy</b> hesabınız için geçici bir şifre oluşturulmuştur.</p>
 <p style="margin:0">Giriş e-postanız: <b>${esc(p.email)}</b></p>
 <p style="margin:12px 0 0">Geçici şifreniz:</p>
 ${pwBox}
@@ -332,6 +351,6 @@ ${button(login, "Giriş yap")}
 <p style="margin:0;font-size:13px;color:#64748b">Giriş yaptığınızda kendi şifrenizi belirlemeniz istenecektir; geçici şifre o anda geçersiz olur. Bu e-postayı beklemiyorsanız lütfen ${REPLY_TO} adresine yazınız.</p>`,
     lang
   );
-  const text = `Sayın ${p.name},\n\nCapella Academy hesabınız için geçici bir şifre oluşturulmuştur.\nGiriş e-postanız: ${p.email}\nGeçici şifreniz: ${p.password}\n\nGiriş: ${login}\nGiriş yaptığınızda kendi şifrenizi belirlemeniz istenecektir.\n\nCapella Aviation Solutions · ${REPLY_TO}`;
+  const text = `Sayın ${p.name},\n\nBonAcademy hesabınız için geçici bir şifre oluşturulmuştur.\nGiriş e-postanız: ${p.email}\nGeçici şifreniz: ${p.password}\n\nGiriş: ${login}\nGiriş yaptığınızda kendi şifrenizi belirlemeniz istenecektir.\n\nBonAir Aviation · ${REPLY_TO}`;
   return { subject, html, text };
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import { Link } from "react-router-dom";
 import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
@@ -468,7 +469,7 @@ export function Assignments() {
                             ? [{ label: "Change due date", icon: "📅", onClick: () => setDueEdit(a) }]
                             : []),
                           // Bitmemiş, açık eğitim için hatırlatma e-postası.
-                          ...(!isDone(a.status) && a.status !== "CANCELLED" && !a.accessBlocked
+                          ...(MAIL_ENABLED && !isDone(a.status) && a.status !== "CANCELLED" && !a.accessBlocked
                             ? [
                                 {
                                   label: reminding === a.id ? "Sending…" : "Send reminder",
@@ -532,7 +533,7 @@ export function Assignments() {
       {open && (
         <Modal title="Assign Training" onClose={() => setOpen(false)} width="max-w-3xl">
           <AssignForm
-            // CAPELLA: müşteriler de buradan atanır (BonAcademy'de yalnızca
+            // Müşteriler de buradan atanır (eskiden yalnızca
             // Users → Assign Training yolu vardı).
             users={users.filter((u) => u.isActive !== false)}
             courses={assignable}
@@ -823,7 +824,7 @@ function AssignForm({
   const [err, setErr] = useState<string | null>(null);
 
   const byCourse = mode === "BY_COURSE";
-  const [notify, setNotify] = useState(true);
+  const [notify, setNotify] = useState(MAIL_ENABLED);
   /** Son tarih (isteğe bağlı). Boş = son tarih yok. */
   const [dueDate, setDueDate] = useState("");
 
@@ -1114,16 +1115,18 @@ function AssignForm({
           )}
         </label>
         {/* Kişiye "yeni eğitim atandı" e-postası (varsayılan açık). */}
-        <label className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer select-none shrink-0">
-          <input
-            type="checkbox"
-            className="accent-brand-600 h-3.5 w-3.5"
-            checked={notify}
-            onChange={(e) => setNotify(e.target.checked)}
-            disabled={busy}
-          />
-          Notify by email
-        </label>
+        {MAIL_ENABLED && (
+          <label className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer select-none shrink-0">
+            <input
+              type="checkbox"
+              className="accent-brand-600 h-3.5 w-3.5"
+              checked={notify}
+              onChange={(e) => setNotify(e.target.checked)}
+              disabled={busy}
+            />
+            Notify by email
+          </label>
+        )}
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>

@@ -362,7 +362,7 @@ export function PdfReader({
         <div className="h-1 w-full rounded-full bg-slate-100 overflow-hidden mb-2 shrink-0">
           <div
             className="h-full rounded-full transition-[width] duration-200"
-            style={{ width: `${pct}%`, background: pct === 100 ? "#10b981" : "#2b4685" }}
+            style={{ width: `${pct}%`, background: pct === 100 ? "#10b981" : "#e31e24" }}
           />
         </div>
       )}
