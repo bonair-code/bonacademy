@@ -142,6 +142,21 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
   useEffect(() => {
     if (!userId || !profile) return;
     const onErr = (e: { message: string }) => setErr(e.message);
+    /**
+     * Sorgunun süzgeci KURALA uymak zorunda: Firestore kuralı bir süzgeç
+     * değil — sorgunun tamamını ya kabul eder ya reddeder.
+     *  - admin / eğitmen: koşulsuz okuyabiliyor,
+     *  - müdür: yalnız kendi departmanı, yani `userDepartmentId` süzgeci ŞART.
+     *    Bu olmadan müdür başka birinin sayfasını açınca sorgu komple
+     *    reddediliyor ve ekran boş kalıyordu,
+     *  - kişinin kendisi: sertifikada ayrıca `blocked == false` şart.
+     * Hepsi eşitlik süzgeci; bileşik indeks gerekmiyor.
+     */
+    const openly = role === "ADMIN" || role === "INSTRUCTOR";
+    const asManager = !openly && role === "MANAGER";
+    const deptScope = asManager
+      ? [where("userDepartmentId", "==", profile.departmentId ?? null)]
+      : [];
     const subs = [
       onSnapshot(doc(db, "users", userId), (d) =>
         setUser(d.exists() ? ({ id: d.id, ...(d.data() as any) }) : null), onErr),
@@ -151,17 +166,19 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
         setJobTitles(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) })))),
       onSnapshot(collection(db, "departments"), (s) =>
         setDepartments(new Map(s.docs.map((d) => [d.id, (d.data() as any).name])))),
-      // Yönetici/eğitmen dışındakiler (kendi sayfasına bakan müdür) yalnızca
-      // engellenmemiş belgeleri okuyabilir — kural bu süzgeci şart koşuyor.
       onSnapshot(
-        role === "ADMIN" || role === "INSTRUCTOR"
-          ? query(collection(db, "certificates"), where("userId", "==", userId))
-          : query(collection(db, "certificates"), where("userId", "==", userId), where("blocked", "==", false)),
-        (s) =>
-        setCerts(s.docs.map((d) => ({ __id: d.id, ...(d.data() as any) }))), onErr),
-      onSnapshot(query(collection(db, "assignments"), where("userId", "==", userId)), (s) =>
+        query(
+          collection(db, "certificates"),
+          where("userId", "==", userId),
+          ...(openly || asManager ? [] : [where("blocked", "==", false)]),
+          ...deptScope
+        ),
+        (s) => setCerts(s.docs.map((d) => ({ __id: d.id, ...(d.data() as any) }))), onErr),
+      onSnapshot(
+        query(collection(db, "assignments"), where("userId", "==", userId), ...deptScope), (s) =>
         setAssignments(s.docs.map((d) => d.data())), onErr),
-      onSnapshot(query(collection(db, "externalTrainings"), where("userId", "==", userId)), (s) =>
+      onSnapshot(
+        query(collection(db, "externalTrainings"), where("userId", "==", userId), ...deptScope), (s) =>
         setExternals(s.docs.map((d) => ({ id: d.id, ...(d.data() as any) }))), onErr),
     ];
     return () => subs.forEach((u) => u());
@@ -351,6 +368,15 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
    * hatası yemesi demekti.
    */
   const canManageAccount = !self && role === "ADMIN";
+
+  /**
+   * PDF raporu. Antetli bir kurum kaydı dökümü, tek tek sertifikadan farklı:
+   * denetimde gösterilen şey bu. Admin ve müdür hem KENDİ kaydını hem
+   * baktıkları kişininkini basabilir (müdür kendi departmanıyla sınırlı,
+   * sayfa zaten ona göre açılıyor). Sıradan personel kendi kaydını basamaz;
+   * belgesi gerekiyorsa tek tek "View certificate"ten alır.
+   */
+  const canPrint = !self || role === "ADMIN" || role === "MANAGER";
 
   /**
    * Eğitim atamak kişiyi yönetmekten ayrı yetki: eğitimi veren atar. Müdür
@@ -684,10 +710,14 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
               </button>
             )}
             {/* Kişiyle ilgili bütün işlemler tek menüde. Kendi kaydında
-                hiçbiri yok: PDF raporu da yok — o bir kurum kaydı dökümü,
-                antetli ve form numaralı; kişinin kendi adına üretmesi doğru
-                değil. Belgesi gereken "View certificate"ten alır. */}
-            {self ? null : (
+                yönetim eylemi yok; yalnız yetkisi varsa PDF düğmesi kalır. */}
+            {self ? (
+              canPrint && (
+                <button onClick={() => printReport()} className="btn-secondary rounded-xl">
+                  PDF report
+                </button>
+              )
+            ) : (
             <RowMenu
               variant="round"
               label={`Manage ${user.name}`}
@@ -817,9 +847,9 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
           Ekranda görünmez. Rapor bir uygunluk belgesi: kimlik, özet sayılar
           ve bütün tablolar (eğitim, dış kayıtlar, sertifikalar, atamalar)
           eksiksiz basılır — ekranda neyin süzülü olduğundan bağımsız. */}
-      {/* Kendi kaydinda HIC basilmaz: dugmeyi gizlemek Ctrl+P yi
-          engellemiyordu, antetli kurum belgesi yine cikiyordu. */}
-      <div className={self ? "hidden" : "hidden print:block"}>
+      {/* Basma yetkisi yoksa bölüm hiç çizilmez: yalnız düğmeyi gizlemek
+          Ctrl+P'yi engellemiyordu, antetli kurum belgesi yine çıkıyordu. */}
+      <div className={canPrint ? "hidden print:block" : "hidden"}>
   <Link to="/follow-up" className="text-xs text-slate-500 hover:text-slate-800 no-print">
           ← Training Follow-Up
         </Link>

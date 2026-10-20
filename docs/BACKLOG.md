@@ -42,8 +42,6 @@
 - **Konsol ayarları (BonAir):** e-posta numaralandırma koruması, şifre
   politikası (en az 8), Browser key'in web sitesi kısıtlaması — CAPELLA'da
   yapıldı, BonAir projesinde 20.10.2026'da ele alınıyor.
-- **Müdür kişi sayfası:** müdür başka bir personelin sayfasını açınca sorgular kuralca
-  reddediliyor (userDepartmentId süzgeci eksik) — StaffDetail.tsx.
 
 ### Canlı (gözetimli) toplu sınav — istendi 07.10.2026
 Birden fazla kişinin (ör. 10 kişi) **aynı anda, admin'in başlattığı** bir
