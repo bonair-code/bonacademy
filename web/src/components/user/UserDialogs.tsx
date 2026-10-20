@@ -6,41 +6,21 @@
  * eklenip diğerinde eksik kalması demekti.
  */
 import { useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../../lib/features";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../lib/firebase";
 import type { Role } from "../../lib/auth";
-import { MultiSelect } from "../MultiSelect";
 import { assignCourses, skipNote } from "../../lib/assign";
-import { subScopesOf, type SubScope } from "../../lib/requirements";
+import { ScopePicker } from "./ScopePicker";
+import { ROLE_LABEL as ROLE_LABEL_, type MethodCourse, type Ref, type ScopeRef, type UserRow } from "./types";
+import { ORG } from "../../lib/org";
+import { placeCase } from "../../lib/text";
 
-export type UserRow = {
-  id: string;
-  email: string;
-  name: string;
-  role: Role;
-  departmentId: string | null;
-  jobTitleIds?: string[];
-  subScopeIds?: string[];
-  /** Sertifikadaki "PLACE & DATE of BIRTH" satırı için. */
-  birthPlace?: string | null;
-  birthDate?: string | null; // YYYY-MM-DD
-  /** Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar. */
-  courseMethods?: Record<string, string[]>;
-  /** Müşteri hesabının bağlı olduğu kurum; personelde boş. */
-  company?: string | null;
-  isActive: boolean;
-};
-export type Ref = { id: string; name: string };
-export type MethodCourse = { id: string; title: string; methods: string[] };
-export type ScopeRef = Ref & { subScopes?: SubScope[] };
-
-export const ROLE_LABEL: Record<Role, string> = {
-  ADMIN: "Admin",
-  MANAGER: "Manager",
-  INSTRUCTOR: "Instructor",
-  USER: "Employee",
-  CUSTOMER: "Customer",
-};
+// Tipler types.ts'te: ScopePicker da kullanıyor, iki bileşen birbirini
+// import etmesin diye ayrıldı. Buradan yeniden dışa veriliyor — çağıranlar
+// (Users, StaffDetail) eskisi gibi UserDialogs'tan alabilsin.
+export type { UserRow, Ref, MethodCourse, ScopeRef } from "./types";
+export { ROLE_LABEL } from "./types";
 
 export function makePassword(): string {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ";
@@ -70,15 +50,24 @@ export function PasswordReset({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  /** Geçici şifre kişiye e-postayla gitsin. Posta kapalıyken seçenek yok. */
+  const [notify, setNotify] = useState(MAIL_ENABLED);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (pw.length < 6) return;
+    if (pw.length < 8) return;
     setBusy(true);
     setErr(null);
     try {
-      await httpsCallable(functions, "setUserPassword")({ uid: user.id, password: pw });
-      onDone(`Password reset for ${user.name}.`);
+      const r = await httpsCallable(functions, "setUserPassword")({ uid: user.id, password: pw, notify });
+      const mail = (r.data as { mail?: { ok: boolean } | null }).mail;
+      onDone(
+        !notify
+          ? `Password reset for ${user.name}.`
+          : mail?.ok
+          ? `Password reset — the temporary password was emailed to ${user.email}.`
+          : `Password reset, but the email could not be sent. Pass the password on yourself.`
+      );
     } catch (e2) {
       setErr((e2 as Error).message);
       setBusy(false);
@@ -120,21 +109,28 @@ export function PasswordReset({
         </button>
       </div>
       <p className="text-[10px] text-slate-500 mt-1">
-        At least 6 characters. Copy it before saving — it is not shown again.
+        At least 8 characters. Copy it before saving — it is not shown again.
       </p>
+
+      {MAIL_ENABLED && (
+        <label className="flex items-center gap-2 mt-3 text-[12.5px] text-slate-700 cursor-pointer">
+          <input type="checkbox" className="accent-brand-600" checked={notify} onChange={(e) => setNotify(e.target.checked)} />
+          Email it to <b className="font-semibold">{user.email}</b>
+        </label>
+      )}
 
       <p className="text-[12px] text-slate-700 mt-3 rounded-md bg-amber-50 border border-amber-200 px-2.5 py-2">
         Temporary password. {user.name} is forced to set their own the next time they sign in.
       </p>
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-        <button type="submit" disabled={busy || pw.length < 6} className="btn-primary text-xs py-2">
+        <button type="submit" disabled={busy || pw.length < 8} className="btn-primary text-xs py-2">
           {busy ? "Saving…" : "Reset Password"}
         </button>
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -171,6 +167,13 @@ export function UserForm({
   );
   const [password, setPassword] = useState("");
   /**
+   * Yeni kullanıcıya şifre nasıl verilir: davet e-postası (kişi kendisi
+   * belirler — varsayılan) ya da admin geçici şifre yazar (e-postası olmayan
+   * ya da mail gitmeyen durumlar için yedek).
+   */
+  // Posta kapalıyken davet gönderilemez: tek yol geçici şifre.
+  const [access, setAccess] = useState<"invite" | "password">(MAIL_ENABLED ? "invite" : "password");
+  /**
    * Müşteri personel değil: departmanı ve yetki kapsamı yok. Bu alanları
    * göstermek, müşteriye zorunlu eğitim atanması gibi yanlış bir sonuç
    * doğuruyordu — kapsam seçilirse Follow-Up onu personel gibi sayardı.
@@ -179,17 +182,22 @@ export function UserForm({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const availableSubs = useMemo(
-    () => subScopesOf(jobTitleIds, jobTitles),
-    [jobTitleIds, jobTitles]
-  );
-  // Kapsam kaldırılınca altındaki tikler de düşmeli, yoksa görünmeyen bir
-  // alt yetki sessizce eğitim zorunlu tutmaya devam eder.
-  const validSubIds = subScopeIds.filter((id) => availableSubs.some((s) => s.id === id));
+  /**
+   * Kapsam kaldırılınca altındaki tikler de düşmeli, yoksa görünmeyen bir alt
+   * yetki sessizce eğitim zorunlu tutmaya devam eder. ScopePicker tiki anında
+   * düşürüyor; bu, kayıt anındaki son emniyet (eski kayıtlarda artık var
+   * olmayan bir alt yetki duruyor olabilir).
+   */
+  const validSubIds = useMemo(() => {
+    const ok = new Set(
+      jobTitles.filter((j) => jobTitleIds.includes(j.id)).flatMap((j) => (j.subScopes ?? []).map((x) => x.id))
+    );
+    return subScopeIds.filter((id) => ok.has(id));
+  }, [jobTitleIds, jobTitles, subScopeIds]);
 
   const canSubmit = editing
     ? name.trim().length > 0
-    : name.trim().length > 0 && email.trim().length > 0 && password.length >= 6;
+    : name.trim().length > 0 && email.trim().length > 0 && (access === "invite" || password.length >= 8);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -201,31 +209,41 @@ export function UserForm({
         await httpsCallable(functions, "updateUser")({
           uid: existing!.id,
           name: name.trim(),
+          // Giriş adresi de buradan değişir (sunucu Auth hesabını da günceller).
+          email: email.trim().toLowerCase(),
           role: roleV,
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
-          birthPlace: birthPlace.trim() || null,
+          birthPlace: placeCase(birthPlace) || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
           courseMethods: isCustomer ? {} : courseMethods,
         });
         onDone(`${name.trim()} updated.`);
       } else {
-        await httpsCallable(functions, "createUser")({
+        const res = await httpsCallable(functions, "createUser")({
           email: email.trim(),
           name: name.trim(),
           role: roleV,
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
-          birthPlace: birthPlace.trim() || null,
+          birthPlace: placeCase(birthPlace) || null,
           birthDate: birthDate || null,
           company: isCustomer ? company.trim() || null : null,
           courseMethods: isCustomer ? {} : courseMethods,
-          password,
+          invite: access === "invite",
+          password: access === "password" ? password : undefined,
         });
-        onDone(`${name.trim()} created.`);
+        const inv = (res.data as { invite?: { ok: boolean; error?: string } | null }).invite;
+        onDone(
+          access === "invite"
+            ? inv?.ok
+              ? `${name.trim()} created — invitation emailed to ${email.trim()}.`
+              : `${name.trim()} created, but the invitation email could not be sent. Use “Send invitation” on the user later.`
+            : `${name.trim()} created.`
+        );
       }
     } catch (e2) {
       setErr((e2 as Error).message);
@@ -247,34 +265,71 @@ export function UserForm({
             className="input disabled:bg-slate-50 disabled:text-slate-500"
             type="email"
             value={email}
-            disabled={editing}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="first.last@bonair.com.tr"
+            placeholder={`first.last@${ORG.emailDomain}`}
           />
           {editing && (
-            <p className="text-[10px] text-slate-400 mt-1">Email cannot be changed here.</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              This is also their sign-in address. If you change it, they sign in with the new one.
+            </p>
           )}
         </div>
         {!editing && (
-          <div>
-            <label className="label">Temporary Password</label>
-            <input
-              className="input"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-            />
-            {password.length > 0 && password.length < 6 && (
-              <p className="text-[10px] text-brand-700 mt-1">Must be at least 6 characters.</p>
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3">
+            <label className="label !mb-2">Sign-in</label>
+            {MAIL_ENABLED ? (
+              <>
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer">
+                  <input
+                    type="radio"
+                    className="mt-0.5 accent-brand-600"
+                    checked={access === "invite"}
+                    onChange={() => setAccess("invite")}
+                  />
+                  <span>
+                    <b className="font-semibold">Email an invitation</b>{" "}
+                    <span className="text-slate-500">(recommended) — they set their own password from the link.</span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2.5 text-[13px] text-slate-800 cursor-pointer mt-2">
+                  <input
+                    type="radio"
+                    className="mt-0.5 accent-brand-600"
+                    checked={access === "password"}
+                    onChange={() => setAccess("password")}
+                  />
+                  <span>
+                    <b className="font-semibold">Set a temporary password</b>{" "}
+                    <span className="text-slate-500">— you pass it on yourself; they change it at first sign-in.</span>
+                  </span>
+                </label>
+              </>
+            ) : (
+              <p className="text-[12.5px] text-slate-600">
+                Set a temporary password and pass it on yourself. They change it at first sign-in.
+              </p>
+            )}
+            {access === "password" && (
+              <div className="mt-2.5 pl-6">
+                <input
+                  className="input"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                />
+                {password.length > 0 && password.length < 8 && (
+                  <p className="text-[10px] text-red-700 mt-1">Must be at least 8 characters.</p>
+                )}
+              </div>
             )}
           </div>
         )}
         <div>
           <label className="label">Role</label>
           <select className="input" value={roleV} onChange={(e) => setRoleV(e.target.value as Role)}>
-            {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+            {(Object.keys(ROLE_LABEL_) as Role[]).map((r) => (
               <option key={r} value={r}>
-                {ROLE_LABEL[r]}
+                {ROLE_LABEL_[r]}
               </option>
             ))}
           </select>
@@ -316,87 +371,27 @@ export function UserForm({
             from the row menu (<b className="text-slate-700">Assign courses</b>).
           </div>
         )}
+        {/* Yetki kapsamı, alt yetkiler ve metodlar TEK yerde — hepsi aynı
+            soruyu cevaplıyor. Ayrıntı: components/user/ScopePicker.tsx */}
         <div className={isCustomer ? "hidden" : "sm:col-span-2"}>
-          <label className="label">Authorisation Scope(s)</label>
-          <MultiSelect options={jobTitles} value={jobTitleIds} onChange={setJobTitleIds} />
-
-          {/* Seçilen kapsamların alt yetkileri. Tik yoksa o alt yetkinin
-              eğitimi bu kişide zorunlu olmaz. */}
-          {availableSubs.length > 0 && (
-            <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <div className="text-[11px] font-semibold text-slate-600 mb-1.5">
-                Sub-authorisations
-              </div>
-              <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1">
-                {availableSubs.map((s) => (
-                  <label key={s.id} className="flex items-center gap-2 text-[13px] text-slate-700">
-                    <input
-                      type="checkbox"
-                      className="accent-brand-600 h-3.5 w-3.5"
-                      checked={subScopeIds.includes(s.id)}
-                      onChange={(e) =>
-                        setSubScopeIds((prev) =>
-                          e.target.checked
-                            ? [...prev, s.id]
-                            : prev.filter((x) => x !== s.id)
-                        )
-                      }
-                    />
-                    {s.name}
-                  </label>
-                ))}
-              </div>
-              <p className="text-[10px] text-slate-500 mt-1.5">
-                Only ticked items bring their own required training. Leave one unticked and its
-                courses show as N/A for this person.
-              </p>
-            </div>
-          )}
+          <ScopePicker
+            scopes={jobTitles}
+            methodCourses={methodCourses}
+            scopeIds={jobTitleIds}
+            setScopeIds={setJobTitleIds}
+            subScopeIds={subScopeIds}
+            setSubScopeIds={setSubScopeIds}
+            courseMethods={courseMethods}
+            setCourseMethods={setCourseMethods}
+          />
         </div>
-        {/* Metod bazlı eğitimler: kişi hangi metodlarda yetkili. Tikli olup
-            belgesi olmayan metod Follow-Up'ta eksik görünür. */}
-        {!isCustomer &&
-          methodCourses.map((mc) => (
-            <div key={mc.id} className="sm:col-span-2">
-              <label className="label">{mc.title} — methods</label>
-              <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
-                {mc.methods.map((m) => {
-                  const on = (courseMethods[mc.id] ?? []).includes(m);
-                  return (
-                    <label
-                      key={m}
-                      className="flex items-center gap-2 text-[13px] text-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="checkbox"
-                        className="accent-brand-600 h-3.5 w-3.5"
-                        checked={on}
-                        onChange={(e) =>
-                          setCourseMethods((prev) => {
-                            const cur = prev[mc.id] ?? [];
-                            const next = e.target.checked
-                              ? [...cur, m]
-                              : cur.filter((x) => x !== m);
-                            return { ...prev, [mc.id]: next };
-                          })
-                        }
-                      />
-                      {m}
-                    </label>
-                  );
-                })}
-              </div>
-              <p className="text-[10px] text-slate-400 mt-1">
-                Each ticked method is tracked with its own certificate and expiry date.
-              </p>
-            </div>
-          ))}
 
         <div>
           <label className="label">Place of Birth</label>
           <input
             className="input"
             value={birthPlace}
+            onBlur={() => setBirthPlace(placeCase(birthPlace))}
             onChange={(e) => setBirthPlace(e.target.value)}
             placeholder="e.g. İstanbul"
           />
@@ -422,7 +417,7 @@ export function UserForm({
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -431,15 +426,20 @@ export function UserForm({
 export function AssignPanel({
   userId,
   courses,
+  preselect,
   onDone,
   onCancel,
 }: {
   userId: string;
   courses: Ref[];
+  /** Önceden işaretli kurslar (ör. kişi detayında eksik satırın "Assign"ı). */
+  preselect?: string[];
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set((preselect ?? []).filter((id) => courses.some((c) => c.id === id)))
+  );
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -502,7 +502,7 @@ export function AssignPanel({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -550,7 +550,7 @@ export function DeleteConfirm({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );

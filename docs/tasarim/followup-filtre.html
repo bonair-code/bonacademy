@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Training Follow-Up — filtre tasarımı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --brand:#e31e24; --brand-dark:#c0171c; --brand-50:#fdeeee; --brand-700:#b3171c;
+    --ink:#0f172a; --ink-2:#334155; --mut:#64748b; --mut-2:#94a3b8;
+    --line:#e2e8f0; --line-2:#eef2f7; --bg:#f4f6f9; --card:#fff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:400 14px/1.5 Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 16px 80px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:13px;margin:0 0 28px}
+
+  .opt{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    margin-bottom:26px;overflow:hidden}
+  .opt > header{display:flex;align-items:flex-start;gap:12px;
+    padding:14px 18px;border-bottom:1px solid var(--line-2);background:#fcfdfe}
+  .tag{flex:none;width:26px;height:26px;border-radius:8px;background:var(--brand);
+    color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+  .opt h2{font-size:15px;font-weight:700;margin:1px 0 2px}
+  .opt header p{margin:0;font-size:12.5px;color:var(--mut);line-height:1.55}
+  .demo{padding:18px}
+  .note{padding:0 18px 16px;font-size:12px;color:var(--mut)}
+  .note b{color:var(--ink-2);font-weight:600}
+  .note ul{margin:6px 0 0;padding-left:18px}
+  .note li{margin:3px 0}
+
+  /* ortak kontroller */
+  .inp{height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;
+    padding:0 10px;font:inherit;font-size:12.5px;color:var(--ink-2);outline:none}
+  .inp:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-50)}
+  select.inp{padding-right:26px;appearance:none;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%2394a3b8' stroke-width='1.6' fill='none' stroke-linecap='round'/></svg>");
+    background-repeat:no-repeat;background-position:right 9px center}
+  .srch{position:relative;display:inline-flex}
+  .srch svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);pointer-events:none}
+  .srch .inp{padding-left:28px}
+
+  /* durum sekmeleri */
+  .segs{display:inline-flex;background:#f1f5f9;border-radius:9px;padding:3px;gap:2px}
+  .seg{border:0;background:transparent;border-radius:7px;padding:5px 11px;cursor:pointer;
+    font:inherit;font-size:12.5px;font-weight:600;color:var(--mut);display:flex;align-items:center;gap:6px}
+  .seg:hover{color:var(--ink-2)}
+  .seg[aria-pressed="true"]{background:#fff;color:var(--ink);
+    box-shadow:0 1px 2px rgba(15,23,42,.1),0 0 0 1px rgba(15,23,42,.05)}
+  .seg .n{font-size:11px;font-weight:700;padding:1px 5px;border-radius:5px;
+    background:#e2e8f0;color:var(--mut)}
+  .seg[aria-pressed="true"] .n{background:var(--brand-50);color:var(--brand-700)}
+  .seg .dot{width:7px;height:7px;border-radius:50%}
+
+  .btn{height:32px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    padding:0 11px;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);
+    cursor:pointer;display:inline-flex;align-items:center;gap:7px}
+  .btn:hover{border-color:#cbd5e1;background:#fcfdfe}
+  .btn .cnt{font-size:11px;font-weight:700;background:var(--brand);color:#fff;
+    border-radius:999px;min-width:16px;height:16px;padding:0 4px;display:grid;place-items:center}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--mut);font-weight:600}
+  .btn.ghost:hover{color:var(--brand-700);background:transparent}
+
+  /* kaldırılabilir rozet */
+  .chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 4px 0 10px;
+    border-radius:999px;background:var(--brand-50);color:var(--brand-700);
+    font-size:12px;font-weight:600;border:1px solid #f7d4d5}
+  .chip button{border:0;background:transparent;cursor:pointer;color:inherit;opacity:.65;
+    font-size:14px;line-height:1;padding:3px 5px;border-radius:50%}
+  .chip button:hover{opacity:1;background:rgba(227,30,36,.1)}
+  .chip.neutral{background:#f1f5f9;color:var(--ink-2);border-color:var(--line)}
+
+  .bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .rowmeta{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;
+    gap:12px;margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2)}
+  .count{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+  .count em{font-style:normal;color:var(--mut);font-weight:400}
+  .legend{display:flex;flex-wrap:wrap;gap:9px;font-size:11px;color:var(--mut);align-items:center}
+  .legend span{display:inline-flex;align-items:center;gap:4px}
+  .legend i{width:9px;height:9px;border-radius:3px;display:block}
+
+  /* panel */
+  .panel{margin-top:10px;border:1px solid var(--line);border-radius:11px;background:#fff;
+    padding:13px 14px;box-shadow:0 8px 24px -12px rgba(15,23,42,.2)}
+  .panel .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+  .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--mut-2);margin-bottom:5px}
+  .panel .inp{width:100%}
+  .panel footer{display:flex;justify-content:space-between;align-items:center;
+    margin-top:12px;padding-top:11px;border-top:1px solid var(--line-2)}
+
+  /* sol ray */
+  .rail{display:grid;grid-template-columns:208px 1fr;gap:16px;align-items:start}
+  .rail aside{border:1px solid var(--line);border-radius:11px;background:#fff;padding:12px}
+  .rail aside + div{border:1px dashed var(--line);border-radius:11px;min-height:188px;
+    display:grid;place-items:center;color:var(--mut-2);font-size:12.5px;background:#fcfdfe}
+  .grp{margin-bottom:13px}
+  .grp:last-child{margin-bottom:0}
+  .opts{display:flex;flex-direction:column;gap:1px}
+  .o{display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:5px 7px;border-radius:7px;cursor:pointer;font-size:12.5px;color:var(--ink-2)}
+  .o:hover{background:#f8fafc}
+  .o[aria-pressed="true"]{background:var(--brand-50);color:var(--brand-700);font-weight:600}
+  .o .n{font-size:11px;color:var(--mut-2);font-variant-numeric:tabular-nums}
+  .o[aria-pressed="true"] .n{color:var(--brand-700)}
+
+  .mini{font-size:11.5px;color:var(--mut-2);margin:9px 0 0}
+  @media(max-width:760px){
+    .panel .grid{grid-template-columns:1fr}
+    .rail{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Training Follow-Up — filtre çubuğu</h1>
+  <p class="sub">
+    Üç seçenek, gerçek verinle: 5 departman · 6 yetki kapsamı · 17 eğitim · 67 personel.
+    Hepsi aynı filtreleri sunuyor; fark, <b>ilk bakışta ne gördüğün</b> ve
+    <b>neyin açık olduğunu anlayıp anlamadığın</b>.
+  </p>
+
+  <!-- ─────────────── A ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">A</span>
+      <div>
+        <h2>Durum sekmeleri + katlanmış filtreler</h2>
+        <p>En çok sorulan soru önde: “kimde eksik var?”. Durum artık açılır liste
+           değil, sayılı sekme — tek tıkla cevap. Departman/kapsam/eğitim arkada,
+           düğmede kaç tanesinin açık olduğu yazıyor.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <div class="bar">
+        <span class="srch">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input class="inp" style="width:188px" placeholder="Personel ara…">
+        </span>
+
+        <div class="segs">
+          <button class="seg" aria-pressed="true">Tümü <span class="n">67</span></button>
+          <button class="seg"><i class="dot" style="background:#6b7280"></i>Eksik <span class="n">31</span></button>
+          <button class="seg"><i class="dot" style="background:#b91c1c"></i>Süresi geçmiş <span class="n">8</span></button>
+          <button class="seg"><i class="dot" style="background:#f59e0b"></i>90 gün içinde <span class="n">14</span></button>
+          <button class="seg"><i class="dot" style="background:#fde68a"></i>Planlı <span class="n">6</span></button>
+        </div>
+
+        <button class="btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 5h18M6 12h12M10 19h4"/></svg>
+          Filtreler <span class="cnt">1</span>
+        </button>
+        <span class="chip">Supply Department <button aria-label="Kaldır">×</button></span>
+        <button class="btn ghost">Temizle</button>
+      </div>
+
+      <div class="panel">
+        <div class="grid">
+          <div>
+            <label class="lbl">Departman</label>
+            <select class="inp"><option>Supply Department</option><option>Technical Quality &amp; Safety</option><option>Maintenance Department</option><option>Engineering Department</option><option>Planning Department</option></select>
+          </div>
+          <div>
+            <label class="lbl">Yetki kapsamı</label>
+            <select class="inp"><option>Hepsi</option><option>Certifying Staff</option><option>Technician</option><option>Mechanic Technician</option><option>Auditor</option><option>NDT Staff</option><option>Technical Quality &amp; Safety Engineer</option></select>
+          </div>
+          <div>
+            <label class="lbl">Eğitim</label>
+            <select class="inp"><option>Hepsi (17)</option><option>Safety Training (Include Human Factors)</option><option>SHT-145 | Initial Training</option><option>Fuel Tank Safety Training (Phase 2)</option><option>NDT training on the related testing type</option></select>
+          </div>
+        </div>
+        <footer>
+          <span class="mini" style="margin:0">Panel yalnızca “Filtreler”e basınca açılır; normalde kapalı.</span>
+          <button class="btn" style="border-color:var(--brand);background:var(--brand);color:#fff">Uygula</button>
+        </footer>
+      </div>
+
+      <div class="rowmeta">
+        <span class="count">17 eğitim · <b>12</b> personel <em>(67 içinden)</em></span>
+        <div class="legend">
+          <span><i style="background:#15803d"></i>1 yıl+</span><span><i style="background:#4ade80"></i>90–365</span>
+          <span><i style="background:#f59e0b"></i>90–60</span><span><i style="background:#fb923c"></i>60–30</span>
+          <span><i style="background:#ef4444"></i>30–0</span><span><i style="background:#b91c1c"></i>Geçmiş</span>
+          <span><i style="background:#6b7280"></i>Hiç alınmamış</span><span><i style="background:#fde68a"></i>Planlı</span>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>“Kimde eksik var” tek tıkla — en çok yapılan iş, açılır listenin içinden çıktı.</li>
+        <li>Sekmelerdeki sayılar filtreyi açmadan durumu söylüyor.</li>
+        <li>Ekranda 3 kontrol kalıyor (5 yerine); açık filtre rozet olarak görünüp tek tıkla kalkıyor.</li>
+      </ul>
+      <b>Eksisi:</b> departman seçmek için bir tık fazla.
+    </div>
+  </section>
+
+  <!-- ─────────────── B ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">B</span>
+      <div>
+        <h2>Tek satır + etkin filtre rozetleri</h2>
+        <p>Bugünkü düzen duruyor, iki şey ekleniyor: her seçenekte <b>kaç kişi</b>
+           olduğu yazıyor ve seçtiklerin altta kaldırılabilir rozete dönüyor.
+           En az alışkanlık bozan seçenek.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <div class="bar">
+        <span class="srch">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          <input class="inp" style="width:176px" placeholder="Personel ara…">
+        </span>
+        <select class="inp"><option>Departman · hepsi</option><option>Supply Department (14)</option><option>Technical Quality &amp; Safety (9)</option><option>Maintenance Department (28)</option><option>Engineering Department (11)</option><option>Planning Department (5)</option></select>
+        <select class="inp"><option>Kapsam · hepsi</option><option>Certifying Staff (22)</option><option>Technician (18)</option><option>Mechanic Technician (12)</option><option>Auditor (4)</option><option>NDT Staff (6)</option></select>
+        <select class="inp"><option>Eğitim · hepsi (17)</option><option>Safety Training (Include HF)</option><option>SHT-145 | Initial</option><option>Fuel Tank Safety (Phase 2)</option></select>
+        <select class="inp" style="border-color:var(--brand);color:var(--brand-700);font-weight:600"><option>Eksiği olanlar (31)</option><option>Herhangi bir durum</option><option>Süresi geçmiş (8)</option><option>90 gün içinde (14)</option><option>Planlı (6)</option><option>Tamamlanmış (52)</option></select>
+      </div>
+
+      <div class="bar" style="margin-top:10px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mut-2)">Etkin</span>
+        <span class="chip">Eksiği olanlar <button aria-label="Kaldır">×</button></span>
+        <span class="chip neutral">Supply Department <button aria-label="Kaldır">×</button></span>
+        <button class="btn ghost">Hepsini temizle</button>
+      </div>
+
+      <div class="rowmeta">
+        <span class="count">17 eğitim · <b>12</b> personel <em>(67 içinden)</em></span>
+        <div class="legend">
+          <span><i style="background:#15803d"></i>1 yıl+</span><span><i style="background:#4ade80"></i>90–365</span>
+          <span><i style="background:#f59e0b"></i>90–60</span><span><i style="background:#fb923c"></i>60–30</span>
+          <span><i style="background:#ef4444"></i>30–0</span><span><i style="background:#b91c1c"></i>Geçmiş</span>
+          <span><i style="background:#6b7280"></i>Hiç alınmamış</span><span><i style="background:#fde68a"></i>Planlı</span>
+        </div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>Alışkanlık bozulmuyor; bugünkü ekranı bilen hemen kullanır.</li>
+        <li>Seçenek yanındaki sayı, boş sonuç almadan önce ne bulacağını söylüyor.</li>
+        <li>Açık filtre rozetten belli; “neden bu kadar az kişi var” sorusu kalkıyor.</li>
+      </ul>
+      <b>Eksisi:</b> ekranda hâlâ 5 kontrol var, dar ekranda alt satıra kırılıyor.
+    </div>
+  </section>
+
+  <!-- ─────────────── C ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">C</span>
+      <div>
+        <h2>Sol ray — hepsi açık, tıkla-seç</h2>
+        <p>Filtreler açılır liste değil; solda duran, sayılı bir liste.
+           Hiçbir şey saklı değil, seçim tek tıkla açılıp kapanıyor ve
+           aynı anda birden fazla departman seçilebiliyor.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <div class="rail">
+        <aside>
+          <span class="srch" style="display:flex;margin-bottom:11px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <input class="inp" style="width:100%" placeholder="Personel ara…">
+          </span>
+
+          <div class="grp">
+            <span class="lbl">Durum</span>
+            <div class="opts">
+              <div class="o" aria-pressed="true">Eksiği olanlar <span class="n">31</span></div>
+              <div class="o">Süresi geçmiş <span class="n">8</span></div>
+              <div class="o">90 gün içinde <span class="n">14</span></div>
+              <div class="o">Planlı <span class="n">6</span></div>
+              <div class="o">Tamamlanmış <span class="n">52</span></div>
+            </div>
+          </div>
+
+          <div class="grp">
+            <span class="lbl">Departman</span>
+            <div class="opts">
+              <div class="o" aria-pressed="true">Supply <span class="n">14</span></div>
+              <div class="o">Tech. Quality &amp; Safety <span class="n">9</span></div>
+              <div class="o">Maintenance <span class="n">28</span></div>
+              <div class="o">Engineering <span class="n">11</span></div>
+              <div class="o">Planning <span class="n">5</span></div>
+            </div>
+          </div>
+
+          <div class="grp">
+            <span class="lbl">Yetki kapsamı</span>
+            <div class="opts">
+              <div class="o">Certifying Staff <span class="n">22</span></div>
+              <div class="o">Technician <span class="n">18</span></div>
+              <div class="o">Mechanic Technician <span class="n">12</span></div>
+              <div class="o">Auditor <span class="n">4</span></div>
+              <div class="o">NDT Staff <span class="n">6</span></div>
+            </div>
+          </div>
+
+          <div class="grp">
+            <span class="lbl">Eğitim</span>
+            <select class="inp" style="width:100%"><option>Hepsi (17)</option><option>Safety Training (Include HF)</option><option>SHT-145 | Initial</option></select>
+          </div>
+
+          <button class="btn ghost" style="padding:0;margin-top:11px">Hepsini temizle</button>
+        </aside>
+        <div>matris burada — 17 eğitim × 12 personel</div>
+      </div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>Her seçenek ve her sayı hep görünür; hiçbir şeyi açmadan durumu okursun.</li>
+        <li>Birden fazla departmanı aynı anda seçebilme (bugün yapılamıyor).</li>
+        <li>Seçim ve kaldırma tek tık.</li>
+      </ul>
+      <b>Eksisi:</b> matrise 208px daha dar yer kalıyor — 17 kolonlu tabloda bu hissedilir.
+      Telefonda ray üstte katlanır kutuya dönmek zorunda.
+    </div>
+  </section>
+
+  <p class="mini" style="text-align:center">
+    Hangisini seçersen onu uygularım; parçalarını karıştırmak da olur
+    (ör. A’nın sekmeleri + C’nin çoklu departman seçimi).
+  </p>
+</div>
+</body>
+</html>

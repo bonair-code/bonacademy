@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { updatePassword } from "firebase/auth";
-import { doc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "../lib/firebase";
 import { useAuth, profileIncomplete } from "../lib/auth";
 import { ORG } from "../lib/org";
+import { placeCase } from "../lib/text";
 
 /**
  * İlk giriş akışı. İki adım: geçici şifreyi değiştir, eksik profil bilgilerini
@@ -19,12 +20,15 @@ export function Onboarding() {
 
   const [pw1, setPw1] = useState("");
   const [pw2, setPw2] = useState("");
+  // Ad-soyadı yönetici yazıyor, bazen yanlış: kişi burada düzeltir, onun
+  // yazdığı esas alınır (yalnızca bu ilk adımda — sonrası yöneticide).
+  const [name, setName] = useState(profile?.name ?? "");
   const [birthPlace, setBirthPlace] = useState(profile?.birthPlace ?? "");
   const [birthDate, setBirthDate] = useState(profile?.birthDate ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const pwOk = pw1.length >= 6 && pw1 === pw2;
+  const pwOk = pw1.length >= 8 && pw1 === pw2;
 
   async function savePassword(e: React.FormEvent) {
     e.preventDefault();
@@ -32,22 +36,16 @@ export function Onboarding() {
     setBusy(true);
     setErr(null);
     try {
-      await updatePassword(auth.currentUser, pw1);
-      await updateDoc(doc(db, "users", profile!.uid), {
-        mustChangePassword: false,
-        updatedAt: serverTimestamp(),
-      });
+      // Şifre ve "değiştirmeli" işareti SUNUCUDA birlikte değişir — işaret
+      // istemciden kapatılamaz (geçici şifre kalıcı yapılamasın).
+      const r = await httpsCallable(functions, "changeTempPassword")({ password: pw1 });
+      // Şifre sunucuda değişince oturum yenilenir: yeni şifreyle tekrar gir.
+      const email = (r.data as { email?: string }).email || auth.currentUser.email || "";
+      await signInWithEmailAndPassword(auth, email, pw1).catch(() => undefined);
       // Profil de eksikse ikinci adıma geç; değilse akış biter.
       if (profileIncomplete(profile)) setStep("profile");
     } catch (e2) {
-      const code = (e2 as { code?: string })?.code ?? "";
-      setErr(
-        code.includes("requires-recent-login")
-          ? "For security, sign in again and then set your password."
-          : code.includes("weak-password")
-          ? "Password is too weak — use at least 6 characters."
-          : "Could not set the password. Please try again."
-      );
+      setErr((e2 as Error).message.replace(/^.*?:\s*/, "") || "Could not set the password. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -55,18 +53,19 @@ export function Onboarding() {
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
-    if (!birthPlace.trim() || !birthDate || !profile) return;
+    if (!name.trim() || !birthPlace.trim() || !birthDate || !profile) return;
     setBusy(true);
     setErr(null);
     try {
-      await updateDoc(doc(db, "users", profile.uid), {
-        birthPlace: birthPlace.trim(),
+      // Sunucuda: kişi kendi adını kurala göre yazamıyor; ad yalnızca ilk
+      // girişte değişebilir ve varsa sertifikalara da işlenir.
+      await httpsCallable(functions, "completeProfile")({
+        name: name.replace(/\s+/g, " ").trim(),
+        birthPlace: placeCase(birthPlace),
         birthDate,
-        profileCompletedAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
     } catch (e2) {
-      setErr((e2 as Error).message);
+      setErr((e2 as Error).message.replace(/^.*?:\s*/, ""));
     } finally {
       setBusy(false);
     }
@@ -75,12 +74,12 @@ export function Onboarding() {
   return (
     <div
       className="min-h-screen flex items-center justify-center px-4 py-10"
-      style={{ background: "linear-gradient(160deg,#8b1013 0%,#5c0a0d 100%)" }}
+      style={{ background: "linear-gradient(160deg,var(--sidebar-top) 0%,var(--sidebar-bot) 100%)" }}
     >
       <div className="w-full max-w-[440px]">
         <div className="flex flex-col items-center mb-5">
           <div className="bg-white rounded-2xl px-8 py-5 shadow-lg">
-            <img src="/Logo.png" alt="Bon Air" className="h-11 w-auto" />
+            <img src="/Logo.png" alt="BonAir Aviation" className="h-12 w-auto" />
           </div>
           <p className="text-white/60 text-[11px] tracking-[0.16em] uppercase mt-4">
             Welcome, {profile?.name}
@@ -129,11 +128,11 @@ export function Onboarding() {
                     autoComplete="new-password"
                   />
                   <p className="text-[10px] text-slate-400 mb-4">
-                    {pw1 && pw1.length < 6
-                      ? "At least 6 characters."
+                    {pw1 && pw1.length < 8
+                      ? "At least 8 characters."
                       : pw2 && pw1 !== pw2
                       ? "The two passwords do not match."
-                      : "At least 6 characters."}
+                      : "At least 8 characters."}
                   </p>
 
                   {err && <ErrorBox>{err}</ErrorBox>}
@@ -146,34 +145,55 @@ export function Onboarding() {
               <>
                 <h2 className="text-lg font-extrabold text-slate-900">Complete your details</h2>
                 <p className="text-xs text-slate-500 mt-1 mb-5">
-                  Your place and date of birth are printed on every training certificate we issue,
-                  so we need them before you start.
+                  Your name, place and date of birth are printed on every training certificate we
+                  issue. Please check them carefully before you start.
                 </p>
 
                 <form onSubmit={saveProfile}>
                   <label className="label">Full Name</label>
-                  <input className="input mb-3 bg-slate-50 text-slate-500" value={profile?.name ?? ""} disabled />
+                  <input
+                    className="input"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    autoComplete="name"
+                    autoFocus
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1 mb-3">
+                    Exactly as it should appear on your certificates.
+                  </p>
 
                   <label className="label">Place of Birth *</label>
                   <input
                     className="input mb-3"
                     value={birthPlace}
+                    onBlur={() => setBirthPlace(placeCase(birthPlace))}
                     onChange={(e) => setBirthPlace(e.target.value)}
                     placeholder="İstanbul"
-                    autoFocus
                   />
                   <label className="label">Date of Birth *</label>
-                  <input
-                    className="input mb-4"
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                  />
+                  {/* iPhone'da tarih kutusu boşken hiçbir şey yazmıyor ve kendi
+                      genişliğini dayatıp karttan taşıyordu: görünüm sıfırlanır,
+                      boşken "Select a date" yazısı üstüne bindirilir. */}
+                  <div className="relative mb-4">
+                    <input
+                      className="input block w-full min-w-0 min-h-[44px] text-left"
+                      style={{ WebkitAppearance: "none", appearance: "none" }}
+                      type="date"
+                      value={birthDate}
+                      max={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                    />
+                    {!birthDate && IOS && (
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[14px] text-slate-400">
+                        Select a date
+                      </span>
+                    )}
+                  </div>
 
                   {err && <ErrorBox>{err}</ErrorBox>}
                   <button
                     type="submit"
-                    disabled={busy || !birthPlace.trim() || !birthDate}
+                    disabled={busy || !name.trim() || !birthPlace.trim() || !birthDate}
                     className="btn-primary w-full"
                   >
                     {busy ? "Saving…" : "Save & Continue"}
@@ -196,6 +216,9 @@ export function Onboarding() {
   );
 }
 
+/** iPhone/iPad Safari: boş tarih kutusu hiçbir şey göstermiyor. */
+const IOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent);
+
 function Dot({ on, label }: { on: boolean; label: string }) {
   return (
     <span
@@ -210,7 +233,7 @@ function Dot({ on, label }: { on: boolean; label: string }) {
 
 function ErrorBox({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-xs text-brand-700 mb-3 rounded-md bg-brand-50 border border-brand-100 px-2.5 py-2">
+    <p className="text-xs text-red-700 mb-3 rounded-md bg-red-50 border border-red-100 px-2.5 py-2">
       {children}
     </p>
   );

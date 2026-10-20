@@ -36,6 +36,40 @@
     ],
     "headers": [
       {
+        "//": "Güvenlik başlıkları (güvenlik incelemesi 08.10.2026). Tam CSP önce Report-Only: tarayıcı konsolunda ihlal görülmezse zorunluya çevrilecek. Zorunlu CSP şimdilik yalnızca çerçeveleme/eklenti/base kısıtı. frame-ancestors self ve X-Frame-Options SAMEORIGIN kalabilir: SSO iframe DEĞİL yönlendirmeyle çalışıyor — launcher uygulamayı .../#sso=<bilet> adresiyle AÇIYOR, içine gömmüyor (bkz. web/src/lib/sso.ts).",
+        "source": "**",
+        "headers": [
+          {
+            "key": "Content-Security-Policy",
+            "value": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+          },
+          {
+            "key": "Content-Security-Policy-Report-Only",
+            "value": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://apis.google.com https://www.google.com https://www.gstatic.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://firebasestorage.googleapis.com; media-src 'self' blob: https://firebasestorage.googleapis.com; connect-src 'self' https://firestore.googleapis.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firebasestorage.googleapis.com https://europe-west3-bonair-academy.cloudfunctions.net https://apis.google.com https://www.google.com; frame-src 'self' blob: https://europe-west3-bonair-academy.cloudfunctions.net https://firebasestorage.googleapis.com https://bonair-academy.firebaseapp.com https://www.google.com; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "SAMEORIGIN"
+          },
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), browsing-topics=()"
+          },
+          {
+            "key": "Strict-Transport-Security",
+            "value": "max-age=31536000; includeSubDomains"
+          }
+        ]
+      },
+      {
         "source": "**/*.@(js|css)",
         "headers": [
           {
@@ -48,13 +82,29 @@
         "//": "index.html ASLA önbelleğe alınmamalı. Paket adları içerik özetiyle değişiyor ve immutable olarak 1 yıl saklanıyor; hangi paketin yükleneceğini söyleyen tek yer index.html. Firebase varsayılanı olan max-age=3600 ile, dağıtımdan sonra kullanıcılar bir saat boyunca ESKİ sayfayı ve eski paketi kullanmaya devam ediyordu — SSO kodu eklendiği halde tarayıcıya hiç ulaşmadı. Kural İSTEK YOLUNA göre eşleştiği için kök yol ayrıca yazılıyor.",
         "source": "/",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       },
       {
         "source": "/index.html",
         "headers": [
-          { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "//": "Uygulama içi derin bağlantılar (/dashboard vb.) da index.html döndürür; onlar da önbelleğe alınmasın.",
+        "source": "**/!(*.*)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
         ]
       }
     ]

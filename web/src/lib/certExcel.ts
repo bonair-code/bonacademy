@@ -1,8 +1,9 @@
 import * as XLSX from "xlsx";
+import { placeCase } from "./text";
 
 /**
  * Geçmiş sertifikaların Excel şablonu ve okuyucusu.
- * Sütun adları BonAir'in kâğıt sicilindekiyle birebir aynı — mevcut dosyadan
+ * Sütun adları devralınan kâğıt sicil şablonundakiyle birebir aynı — mevcut dosyadan
  * kopyala-yapıştır yapılabilsin diye.
  */
 
@@ -86,12 +87,12 @@ export function downloadCertTemplate(courseTitles: string[]) {
     HEADERS as unknown as string[],
     [
       "26-001",
-      "OĞUZ KAAN ALPAYDIN",
-      "oalpaydin@bonair.com.tr",
+      "ALİ KAYA",
+      "akaya@bonair.com.tr",
       "İSTANBUL",
       "23.10.2007",
       courseTitles[0] ?? "Fuel Tank Safety Training (Phase 2) | Initial Training",
-      "Cevdet Berkan ÖZBAY",
+      "Ahmet YILMAZ",
       "8 Hours",
       "19.09.2025",
       "19.09.2025",
@@ -169,7 +170,7 @@ export async function parseCertWorkbook(file: File): Promise<CertParseResult> {
       serialNo,
       name,
       email: String(r["Email"] ?? "").trim() || null,
-      birthPlace: String(r["Birth Place"] ?? "").trim() || null,
+      birthPlace: placeCase(String(r["Birth Place"] ?? "")) || null,
       birthDate: toISODate(r["Birth Date"]),
       courseTitle: String(r["Training Name"] ?? "").trim(),
       instructorName: String(r["Instructor"] ?? "").trim() || null,

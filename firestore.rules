@@ -16,7 +16,9 @@ service cloud.firestore {
     function myRole()    { return prof().role; }
     function myDept()    { return prof().departmentId; }
     function isAdmin()      { return signedIn() && myRole() == 'ADMIN'; }
-    function isManager()    { return signedIn() && myRole() == 'MANAGER'; }
+    // Departmansız müdür hiçbir departmanı görmez: null == null eşleşmesi
+    // departmansız bütün kayıtları (müşteriler dahil) açıyordu.
+    function isManager()    { return signedIn() && myRole() == 'MANAGER' && myDept() != null; }
     function isInstructor() { return signedIn() && myRole() == 'INSTRUCTOR'; }
     function isSelf(uid)    { return signedIn() && request.auth.uid == uid; }
     // CUSTOMER = dışarıdan eğitim alan müşteri. Personel değil: kurum yapısını
@@ -24,6 +26,13 @@ service cloud.firestore {
     function isStaff()      { return signedIn() && myRole() != 'CUSTOMER'; }
     function courseData(cid){ return get(/databases/$(database)/documents/courses/$(cid)).data; }
     function ownsCourse(cid){ return isInstructor() && courseData(cid).ownerInstructorId == request.auth.uid; }
+    // Kursun İÇERİĞİNE erişim: kişiye atanmış ve erişimi engellenmemiş olmalı.
+    // Atama id'si belirlenimci (`${userId}_${courseId}`); atama kaldırılınca
+    // (cancelAssignment) belge silinir ve içerik kapanır, sertifika kalır.
+    function hasCourseAccess(cid) {
+      let a = /databases/$(database)/documents/assignments/$(request.auth.uid + '_' + cid);
+      return signedIn() && exists(a) && get(a).data.get('accessBlocked', false) != true;
+    }
 
     // ---- USERS ----
     match /users/{uid} {
@@ -32,23 +41,20 @@ service cloud.firestore {
                   || isAdmin()
                   || isInstructor()
                   || (isManager() && resource.data.departmentId == myDept());
-      // Kullanıcı yalnızca kendi dilini; admin profili yönetir. Auth kullanıcısı
-      // oluşturma ayrı (şimdilik konsol, ileride Function).
-      // Kullanıcı kendi profilinde YALNIZCA bu alanları değiştirebilir.
-      // Rol, departman, unvan ve aktiflik listede yok — kimse kendini
-      // yetkilendiremesin ya da pasifken aktifleştiremesin.
+      // Kullanıcı kendi profilinde YALNIZCA dil ve telefonunu değiştirebilir.
+      // Ad, doğum yeri/tarihi (sertifikaya basılır), "şifre değiştirmeli" ve
+      // "profil tamamlandı" işaretleri SUNUCUDAN geçer (completeProfile,
+      // changeTempPassword): eskiden kişi profileCompletedAt'i silip adını
+      // istediği zaman değiştirebiliyor, mustChangePassword'ü kapatıp geçici
+      // şifreyi kalıcı yapabiliyordu (güvenlik incelemesi, 08.10.2026).
       allow update: if isAdmin()
                     || (isSelf(uid)
                         && request.resource.data.diff(resource.data)
-                             .affectedKeys().hasOnly([
-                               'locale',
-                               'birthPlace',
-                               'birthDate',
-                               'phone',
-                               'mustChangePassword',
-                               'profileCompletedAt',
-                               'updatedAt'
-                             ]));
+                             .affectedKeys().hasOnly(['locale', 'phone', 'updatedAt'])
+                        && request.resource.data.get('locale', 'tr') in ['tr', 'en', 'TR', 'EN']
+                        && (request.resource.data.get('phone', null) == null
+                            || (request.resource.data.phone is string
+                                && request.resource.data.phone.size() < 40)));
       allow create, delete: if isAdmin();
     }
 
@@ -61,8 +67,12 @@ service cloud.firestore {
     // ---- COURSES (Eğitmen hazırlar; Admin her kursa) ----
     match /courses/{cid} {
       allow read: if signedIn(); // yalnızca meta (sorular ayrı alt-koleksiyonda)
+      // Eğitmen kursu yayında olarak AÇAMAZ: yayın kontrolleri publishCourse'ta.
       allow create: if isAdmin()
-                    || (isInstructor() && request.resource.data.ownerInstructorId == request.auth.uid);
+                    || (isInstructor()
+                        && request.resource.data.ownerInstructorId == request.auth.uid
+                        && request.resource.data.get('isActive', false) == false
+                        && !('publishedLangs' in request.resource.data));
       // isActive ve publishedLangs'e istemci DOKUNAMAZ — yayın kararı
       // publishCourse Function'ından geçer, çünkü içeriği olmayan bir dil
       // sürümü yayınlanmamalı (atanan kişi /learn'de hiç ilerleyemiyor).
@@ -72,11 +82,14 @@ service cloud.firestore {
                           .hasAny(['isActive', 'publishedLangs']));
       allow delete: if isAdmin() || ownsCourse(cid);
 
-      // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). İçerik kurs
-      // materyalidir → çalışan okuyabilir (sıra/başlık/SCORM yolu); yalnızca
-      // ADMIN veya sahibi EĞİTMEN düzenler.
+      // Eğitim içeriği bölümleri (Bölüm 1, 2, ... — sıralı). Dosya adresleri
+      // (PDF/video indirme URL'si, SCORM yolu) burada → yalnızca ADMIN,
+      // EĞİTMEN ve eğitim kendisine atanmış (erişimi engellenmemiş) kişi
+      // okur; müdür de yalnızca kendi atamasıyla. Kurs meta dokümanı listeler
+      // (pano kartı, matris, sertifika) için açık kalıyor.
+      // Yalnızca ADMIN veya sahibi EĞİTMEN düzenler.
       match /sections/{sid} {
-        allow read: if signedIn();
+        allow read: if isAdmin() || isInstructor() || hasCourseAccess(cid);
         allow write: if isAdmin() || ownsCourse(cid);
       }
 
@@ -92,9 +105,9 @@ service cloud.firestore {
     }
 
     // ---- PLANS (atama planı — Admin/Müdür) ----
+    // Kullanılmıyor (ekranı yok) — açık bırakılmasın.
     match /plans/{pid} {
-      allow read: if isAdmin() || isManager();
-      allow write: if isAdmin() || isManager(); // Müdür kapsamı Function/uygulamada
+      allow read, write: if false;
     }
 
     // ---- ASSIGNMENTS (atama döngüsü — durum geçişleri Function) ----
@@ -104,9 +117,14 @@ service cloud.firestore {
                   || isSelf(resource.data.userId)
                   || (isManager() && resource.data.userDepartmentId == myDept());
       allow write: if false; // yalnızca Function
+      // SCORM ilerlemesi: yalnızca atamanın SAHİBİ yazar (eskiden herkes
+      // başkasının atamasına kendi userId'siyle kayıt açabiliyordu).
       match /scorm/{rev} {
         allow read: if isAdmin() || isSelf(resource.data.userId);
-        allow create, update: if isSelf(request.resource.data.userId);
+        allow create, update: if signedIn()
+          && get(/databases/$(database)/documents/assignments/$(aid)).data.userId == request.auth.uid
+          && request.resource.data.userId == request.auth.uid
+          && (resource == null || resource.data.userId == request.auth.uid);
       }
       match /examSessions/{n} { allow read, write: if false; }
       match /examAttempts/{n} {
@@ -116,7 +134,7 @@ service cloud.firestore {
     }
 
     // ---- EXTERNAL TRAINING (dışarıdan alınan eğitim kayıtları) ----
-    // BonAir'in vermediği eğitimler. Sertifika ÜRETİLMEZ; personelin getirdiği
+    // Kurumun vermediği eğitimler. Sertifika ÜRETİLMEZ; personelin getirdiği
     // belge Storage'a iliştirilir. Admin herkese, müdür yalnızca kendi
     // departmanındaki personele kayıt girebilir.
     match /externalTrainings/{id} {
@@ -130,12 +148,26 @@ service cloud.firestore {
                   || isInstructor()
                   || isSelf(resource.data.userId)
                   || (isManager() && resource.data.userDepartmentId == myDept());
-      allow create: if isAdmin()
+      // Belge adresi yalnızca Firebase Storage olabilir (javascript: gibi bir
+      // adres, yönetici tıklayınca uygulamada kod çalıştırırdı).
+      function fileUrlOk() {
+        return request.resource.data.get('fileUrl', null) == null
+          || (request.resource.data.fileUrl is string
+              && request.resource.data.fileUrl.matches('^https://firebasestorage[.]googleapis[.]com/.*'));
+      }
+      allow create: if fileUrlOk() && (isAdmin()
                     || (isManager()
                         && targetDept(request.resource.data.userId) == myDept()
-                        && request.resource.data.userDepartmentId == myDept());
-      allow update, delete: if isAdmin()
-                            || (isManager() && resource.data.userDepartmentId == myDept());
+                        && request.resource.data.userDepartmentId == myDept()));
+      // Müdür kaydı başka departmana TAŞIYAMAZ (eskiden kendi departmanında
+      // açıp sonra başkasının adına çevirebiliyordu).
+      allow update: if fileUrlOk() && (isAdmin()
+                    || (isManager()
+                        && resource.data.userDepartmentId == myDept()
+                        && request.resource.data.userDepartmentId == myDept()
+                        && targetDept(request.resource.data.userId) == myDept()));
+      allow delete: if isAdmin()
+                    || (isManager() && resource.data.userDepartmentId == myDept());
     }
 
     // ---- CLASS SESSIONS (yüz yüze eğitim + QR yoklama) ----
@@ -147,32 +179,82 @@ service cloud.firestore {
       function session() {
         return get(/databases/$(database)/documents/classSessions/$(sid)).data;
       }
-      allow read: if true;
-      allow create, update, delete: if isAdmin() || isInstructor();
+      // Linki bilen TEK oturumu okur; oturumların LİSTESİ yalnızca personele
+      // (eskiden girişsiz biri bütün oturum id'lerini — yani "parolaları" —
+      // listeleyebiliyordu).
+      allow get: if true;
+      allow list: if isAdmin() || isInstructor();
+      // Eğitmen yalnızca KENDİ oturumunu açar/değiştirir (CAPELLA kararı).
+      // Kursa bağlı oturum yalnızca eğitmenin KENDİ kursu için ("Other" serbest).
+      function ownCourseOrNone() {
+        return request.resource.data.get('courseId', null) == null
+          || request.resource.data.courseId == 'OTHER'
+          || ownsCourse(request.resource.data.courseId);
+      }
+      allow create: if isAdmin()
+                    || (isInstructor()
+                        && request.resource.data.createdById == request.auth.uid
+                        && ownCourseOrNone());
+      allow update: if isAdmin()
+                    || (isInstructor()
+                        && resource.data.createdById == request.auth.uid
+                        && request.resource.data.createdById == request.auth.uid
+                        && ownCourseOrNone());
+      allow delete: if isAdmin()
+                    || (isInstructor() && resource.data.createdById == request.auth.uid);
 
       match /attendees/{aid} {
-        // Katılımcı kendi kaydını yazar; oturum kapandıysa yazamaz.
+        // Katılımcı kendi kaydını yazar; oturum kapandıysa yazamaz. YALNIZCA
+        // formdaki alanlar: eskiden userId / email / rejected gibi alanlar da
+        // yazılıp sertifikanın başkasına bağlanması sağlanabiliyordu.
         allow create: if session().status == 'OPEN'
+                      && request.resource.data.keys().hasOnly(
+                           ['fullName', 'firstName', 'lastName', 'birthPlace', 'birthDate', 'email', 'userId', 'signedAt'])
+                      // Sertifika PDF'i bu adrese gider; eşleştirmede KULLANILMAZ.
+                      && (request.resource.data.get('email', null) == null
+                          || (request.resource.data.email is string
+                              && request.resource.data.email.size() < 200
+                              && request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$')))
+                      && request.resource.data.get('userId', null) == null
+                      && request.resource.data.signedAt == request.time
                       && request.resource.data.fullName is string
                       && request.resource.data.fullName.size() > 1
-                      && request.resource.data.fullName.size() < 120;
-        allow read, update, delete: if isAdmin() || isInstructor();
+                      && request.resource.data.fullName.size() < 120
+                      && request.resource.data.get('firstName', '') is string
+                      && request.resource.data.get('firstName', '').size() < 60
+                      && request.resource.data.get('lastName', '') is string
+                      && request.resource.data.get('lastName', '').size() < 60
+                      && (request.resource.data.get('birthPlace', null) == null
+                          || (request.resource.data.birthPlace is string
+                              && request.resource.data.birthPlace.size() < 80))
+                      && (request.resource.data.get('birthDate', null) == null
+                          || (request.resource.data.birthDate is string
+                              && request.resource.data.birthDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')));
+        // Katılımcı listesi (kişisel bilgiler) yalnızca oturumun sahibine ve admine.
+        allow read, update, delete: if isAdmin()
+                                    || (isInstructor() && session().createdById == request.auth.uid);
       }
     }
 
     // ---- CERTIFICATES ----
     match /certificates/{id} {
+      // Kişi kendi belgesini yalnızca erişimi engellenmemişken görür
+      // (setAssignmentAccess). Kendi sorgusu da where("blocked","==",false)
+      // içermeli — kural süzgeç değil, sorgu bunu garanti etmeli.
       allow read: if isAdmin()
                   || isInstructor()
-                  || isSelf(resource.data.userId)
+                  || (isSelf(resource.data.userId) && resource.data.blocked == false)
                   || (isManager() && resource.data.userDepartmentId == myDept());
       allow write: if false; // yalnızca issueCertificate Function
     }
     // Doğrulama kaydı tahmin edilemez bir anahtarla adreslenir; anahtar
     // yalnızca belgedeki QR kodunda. Numarayla adreslenseydi (26-001,
     // 26-002…) sırayla girilip bütün personelin adı dökülebilirdi.
+    // Tek tek okunur (QR'daki anahtarla); LİSTELENEMEZ — eskiden bütün
+    // sertifika sahiplerinin adı tek sorguyla indirilebiliyordu.
     match /certVerify/{verifyToken} {
-      allow read: if true;   // QR public doğrulama
+      allow get: if true;
+      allow list: if false;
       allow write: if false;
     }
 

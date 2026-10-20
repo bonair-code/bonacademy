@@ -3,23 +3,23 @@ import {
   setPersistence,
   browserSessionPersistence,
 } from "firebase/auth";
-import { auth } from "./firebase";
+import { auth, FUNCTIONS_BASE } from "./firebase";
 
 /**
- * Uygulama Merkezi'nden (bonair-launcher) gelen tek kullanımlık bileti
+ * Uygulama Merkezi'nden (launcher) gelen tek kullanımlık bileti
  * oturuma çevirir.
  *
- * Akış: launcher, BonAir Technic şifresiyle giriş yapmış kullanıcı için bu
- * projenin `sso` ucundan bir bilet alır ve BonAcademy'yi  .../#sso=<bilet>
+ * Akış: launcher, kendi şifresiyle giriş yapmış kullanıcı için bu
+ * projenin `sso` ucundan bir bilet alır ve uygulamayı  .../#sso=<bilet>
  * adresiyle açar. Burada bilet custom token'a, custom token da oturuma
  * dönüşür. Ayrıntılı gerekçe: functions/src/sso.js
  *
  * Bilet 90 saniye yaşar ve ilk kullanımda sunucuda silinir.
  */
 
-// Fonksiyonlar europe-west3'te — diğer BonAir projeleri farklı bölgelerde,
-// adresi elle yazarken bölgeyi karıştırmak kolay.
-const SSO_ENDPOINT = "https://europe-west3-bonair-academy.cloudfunctions.net/sso";
+// Adreste #sso= bileti yoksa bu modül hiçbir şey yapmaz; olağan giriş akışı
+// bundan etkilenmez.
+const SSO_ENDPOINT = `${FUNCTIONS_BASE}/sso`;
 
 /* Bilet MODÜL YÜKLENİRKEN okunur ve adresten hemen silinir.
  *

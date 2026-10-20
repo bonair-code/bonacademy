@@ -6,6 +6,14 @@ import { consumeSsoTicket } from "./lib/sso";
 import { App } from "./App";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
+import { reloadOnceForStaleChunk } from "./lib/staleChunk";
+
+/* Yayından önce açılmış sekmede tembel yüklenen bir parça (ya da onun bağımlı
+   olduğu dosya) bulunamazsa Vite bu olayı yayar: sayfayı bir kez yenile.
+   Ayrıntı: lib/staleChunk.ts */
+window.addEventListener("vite:preloadError", (e) => {
+  if (reloadOnceForStaleChunk()) e.preventDefault();
+});
 
 /* Launcher'dan gelen oturum devri, uygulama MONTE EDİLMEDEN ÖNCE tamamlanır.
  *

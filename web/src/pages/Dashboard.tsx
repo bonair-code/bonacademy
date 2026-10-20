@@ -1,4 +1,5 @@
 import { PageHead } from "../components/PageHead";
+import { ORG } from "../lib/org";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { collection, doc, getDoc, getDocs, onSnapshot, query, where } from "firebase/firestore";
@@ -70,7 +71,12 @@ function useMyAssignments(uid?: string) {
     return onSnapshot(
       query(collection(db, "assignments"), where("userId", "==", uid)),
       (snap) => {
-        setRows(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Assignment, "id">) })));
+        // Erişimi engellenen eğitim kişinin panosunda görünmez.
+        setRows(
+          snap.docs
+            .filter((d) => !d.data().accessBlocked)
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<Assignment, "id">) }))
+        );
         setLoading(false);
       },
       () => setLoading(false)
@@ -114,12 +120,14 @@ function useAssignmentCards(rows: Assignment[]) {
       await Promise.all(
         ids.map(async (id) => {
           try {
+            // Bölümler yalnızca erişimi açık atamada okunabilir (kural); o okuma
+            // düşerse kurs bilgisi de kaybolmasın diye ayrı yakalanıyor.
             const [c, secs] = await Promise.all([
               getDoc(doc(db, "courses", id)),
-              getDocs(collection(db, "courses", id, "sections")),
+              getDocs(collection(db, "courses", id, "sections")).catch(() => null),
             ]);
             if (c.exists()) found[id] = { id: c.id, ...(c.data() as Omit<Course, "id">) };
-            counts[id] = secs.size;
+            if (secs) counts[id] = secs.size;
           } catch {
             // Kurs okunamazsa kart yine basılır; yalnızca açıklama/eğitmen boş kalır.
           }
@@ -147,7 +155,7 @@ function LearnerDashboard() {
     () =>
       rows
         .filter((r) => !isDone(r.status))
-        .sort((a, b) => (a.dueDate?.toMillis?.() ?? 0) - (b.dueDate?.toMillis?.() ?? 0)),
+        .sort((a, b) => (a.dueDate?.toMillis?.() ?? Infinity) - (b.dueDate?.toMillis?.() ?? Infinity)),
     [rows]
   );
   const done = useMemo(() => rows.filter((r) => isDone(r.status)), [rows]);
@@ -170,7 +178,7 @@ function LearnerDashboard() {
           title="No training assigned yet"
           line={
             role === "CUSTOMER"
-              ? "Once BonAir Academy assigns you a course it will appear here."
+              ? `Once ${ORG.productName} assigns you a course it will appear here.`
               : "Nothing is waiting on you right now."
           }
         />
@@ -208,16 +216,22 @@ function LearnerDashboard() {
                 }
               />
               <div className="card divide-y divide-slate-100">
+                {/* Biten eğitime tekrar girilir: içerik okunabilir (ilerleme
+                    ve sertifika değişmez). */}
                 {done.map((a) => (
-                  <div key={a.id} className="flex items-center gap-3 px-5 py-3">
+                  <Link
+                    key={a.id}
+                    to={`/learn/${a.id}`}
+                    className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50/80 transition"
+                  >
                     <span className="h-7 w-7 rounded-full bg-emerald-50 text-emerald-700 grid place-items-center shrink-0">
                       <IconCheck />
                     </span>
                     <span className="flex-1 min-w-0 text-[13px] font-semibold text-slate-900 truncate">
                       {a.courseTitle}
                     </span>
-                    <span className="text-[11px] text-slate-400 shrink-0">Completed</span>
-                  </div>
+                    <span className="text-[11.5px] font-semibold text-brand-700 shrink-0">Review content ›</span>
+                  </Link>
                 ))}
               </div>
             </section>
@@ -263,11 +277,10 @@ function CourseCard({
       >
         {!course?.coverUrl && (
           <img
-            src="/Logo.png"
+            src="/Logo-mono.png"
             alt=""
             aria-hidden="true"
             className="absolute right-3 top-3 h-4 w-auto opacity-25"
-            style={{ filter: "brightness(0) invert(1)" }}
           />
         )}
       </div>
@@ -381,7 +394,7 @@ function StaffDashboard() {
     () =>
       mineRows
         .filter((r) => !isDone(r.status))
-        .sort((a, b) => (a.dueDate?.toMillis?.() ?? 0) - (b.dueDate?.toMillis?.() ?? 0)),
+        .sort((a, b) => (a.dueDate?.toMillis?.() ?? Infinity) - (b.dueDate?.toMillis?.() ?? Infinity)),
     [mineRows]
   );
   const mineDone = useMemo(() => mineRows.filter((r) => isDone(r.status)), [mineRows]);

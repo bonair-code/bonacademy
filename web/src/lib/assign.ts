@@ -14,20 +14,41 @@ export type AssignResult = {
   created: number;
   /** Atlananların sebepleri (yayında değil, içeriği yok, zaten atanmış…). */
   skipped: string[];
+  /** Bildirim e-postası: gönderildi / gönderilemedi / hiç denenmedi (null). */
+  mailed: boolean | null;
 };
 
 export async function assignCourses(
   userId: string,
   courseIds: string[],
-  dueDays?: number
+  opts: {
+    /** Son tarih "YYYY-MM-DD". Boşsa son tarih YOK (CAPELLA kararı). */
+    dueDate?: string | null;
+    /** Kişiye "yeni eğitim atandı" e-postası gitsin mi (varsayılan evet). */
+    notify?: boolean;
+  } = {}
 ): Promise<AssignResult> {
   const res = await httpsCallable(functions, "assignCourses")({
     userId,
     courseIds,
-    ...(dueDays ? { dueDays } : {}),
+    notify: opts.notify !== false,
+    dueDate: opts.dueDate || null,
   });
-  const d = res.data as { created?: number; skipped?: { reason: string }[] };
-  return { created: d?.created ?? 0, skipped: (d?.skipped ?? []).map((s) => s.reason) };
+  const d = res.data as { created?: number; skipped?: { reason: string }[]; mail?: { ok: boolean } | null };
+  return {
+    created: d?.created ?? 0,
+    skipped: (d?.skipped ?? []).map((s) => s.reason),
+    mailed: d?.mail ? d.mail.ok : null,
+  };
+}
+
+/** Toplu atamanın e-posta özeti: "Email sent." / "2 emails could not be sent." */
+export function mailNote(results: AssignResult[]): string {
+  const tried = results.filter((r) => r.mailed !== null);
+  if (tried.length === 0) return "";
+  const failed = tried.filter((r) => !r.mailed).length;
+  if (failed === 0) return tried.length === 1 ? " Email sent." : ` ${tried.length} emails sent.`;
+  return ` ${failed} email${failed === 1 ? "" : "s"} could not be sent.`;
 }
 
 /**

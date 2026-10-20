@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import { Link } from "react-router-dom";
 import { collection, getDocs, onSnapshot, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { isStaffRole, useAuth } from "../lib/auth";
-import { assignCourses, skipNote } from "../lib/assign";
+import { useAuth } from "../lib/auth";
+import { assignCourses, mailNote, skipNote, type AssignResult } from "../lib/assign";
 import { asLang } from "../lib/lang";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../lib/firebase";
@@ -37,6 +38,17 @@ type Assignment = {
   sectionsDone?: string[];
   cycleNumber?: number;
   contentLanguage?: string;
+  /** Sınav notu (geçtiğinde) / son denemenin notu (kaldığında) ve geçme notu. */
+  examScore?: number | null;
+  lastExamScore?: number | null;
+  examPassingScore?: number | null;
+  examAttemptCount?: number;
+  /** Yönetici erişimi engelledi: eğitim açılmaz, sertifika kişide görünmez. */
+  accessBlocked?: boolean;
+  accessBlockReason?: string | null;
+  /** Elle gönderilen hatırlatma e-postası (sendAssignmentReminder). */
+  lastReminderAt?: Timestamp | null;
+  reminderCount?: number;
 };
 type UserRow = {
   id: string;
@@ -45,7 +57,15 @@ type UserRow = {
   jobTitleIds?: string[];
   isActive?: boolean;
   role?: string;
+  /** Yalnızca CUSTOMER: bağlı olduğu kurum. */
+  company?: string | null;
 };
+
+/** Kişinin altında görünen satır: personelde departman, müşteride kurum. */
+function whereOf(u: UserRow | undefined, departments: Map<string, string>): string {
+  if (u?.role === "CUSTOMER") return `Customer · ${u.company || "—"}`;
+  return departments.get(u?.departmentId ?? "") ?? "—";
+}
 type CourseRow = { id: string; title: string; delivery?: string; isActive?: boolean };
 
 const DAY = 86400000;
@@ -71,8 +91,25 @@ export function Assignments() {
   const [departments, setDepartments] = useState<Map<string, string>>(new Map());
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  /** Hatırlatma gönderilen satır — çift tıklamayla iki mail gitmesin. */
+  const [reminding, setReminding] = useState<string | null>(null);
+  async function remind(a: Assignment, name: string) {
+    if (reminding) return;
+    setReminding(a.id);
+    setToast(`Sending a reminder to ${name}…`);
+    try {
+      await httpsCallable(functions, "sendAssignmentReminder")({ assignmentId: a.id });
+      setToast(`Reminder emailed to ${name}.`);
+    } catch (e) {
+      setToast((e as Error).message);
+    } finally {
+      setReminding(null);
+    }
+  }
   /** Sıfırlama / geri alma penceresi. */
-  const [act, setAct] = useState<{ kind: "reset" | "cancel"; row: Assignment } | null>(null);
+  const [act, setAct] = useState<{ kind: ActKind; row: Assignment } | null>(null);
+  /** Son tarihi değiştirilen atama. */
+  const [dueEdit, setDueEdit] = useState<Assignment | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
@@ -161,8 +198,10 @@ export function Assignments() {
     () =>
       courses
         .filter((c) => c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false)
+        // Eğitmen yalnızca kendi kursunu atar (sunucu da aynı kuralı uyguluyor).
+        .filter((c) => role !== "INSTRUCTOR" || (c as { ownerInstructorId?: string }).ownerInstructorId === profile?.uid)
         .sort((a, b) => a.title.localeCompare(b.title, "tr")),
-    [courses]
+    [courses, role, profile?.uid]
   );
 
   const now = Date.now();
@@ -334,7 +373,7 @@ export function Assignments() {
                         <span className="text-slate-400">Unknown user</span>
                       )}
                       <span className="block text-[11px] font-normal text-slate-400">
-                        {departments.get(u?.departmentId ?? "") ?? "—"}
+                        {whereOf(u, departments)}
                       </span>
                     </td>
                     <td className="td text-slate-700">{a.courseTitle}</td>
@@ -350,6 +389,12 @@ export function Assignments() {
                           {Math.round((now - due) / DAY)} days late
                         </span>
                       )}
+                      {a.lastReminderAt && !isDone(a.status) && (
+                        <span className="block text-[10.5px] text-slate-400" title="Last reminder email">
+                          Reminded {fmt(a.lastReminderAt)}
+                          {(a.reminderCount ?? 0) > 1 ? ` (${a.reminderCount}×)` : ""}
+                        </span>
+                      )}
                     </td>
                     <td className="td">
                       <span
@@ -357,6 +402,14 @@ export function Assignments() {
                       >
                         {st.label}
                       </span>
+                      {a.accessBlocked && (
+                        <span
+                          className="block w-fit mt-1 text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded bg-red-50 text-red-700"
+                          title={a.accessBlockReason ? `Reason: ${a.accessBlockReason}` : undefined}
+                        >
+                          Access blocked
+                        </span>
+                      )}
                     </td>
                     {/* Kişi kaçıncı bölümde — "takılmış mı, ilerliyor mu"
                         sorusunun cevabı. Durum rozeti bunu söylemiyor. */}
@@ -365,7 +418,28 @@ export function Assignments() {
                         const total = secCount[`${a.courseId}|${asLang(a.contentLanguage)}`] ?? 0;
                         const done = a.sectionsDone?.length ?? 0;
                         if (isDone(a.status))
-                          return <span className="text-[11.5px] text-emerald-700">Finished</span>;
+                          return (
+                            <span className="text-[11.5px] text-emerald-700">
+                              Finished
+                              {a.examScore != null && (
+                                <span className="block text-slate-600 tabular-nums">
+                                  Exam <b className="text-slate-900">{a.examScore}%</b>
+                                  {(a.examAttemptCount ?? 1) > 1 && (
+                                    <span className="text-slate-400"> · {a.examAttemptCount} attempts</span>
+                                  )}
+                                </span>
+                              )}
+                            </span>
+                          );
+                        if (a.lastExamScore != null && a.status === "EXAM_FAILED")
+                          return (
+                            <span className="text-[11.5px] text-red-700 tabular-nums">
+                              Last exam {a.lastExamScore}%
+                              {a.examPassingScore != null && (
+                                <span className="block text-slate-400">pass mark {a.examPassingScore}%</span>
+                              )}
+                            </span>
+                          );
                         if (a.status === "CANCELLED")
                           return <span className="text-slate-300">—</span>;
                         if (total === 0)
@@ -391,17 +465,36 @@ export function Assignments() {
                         label={`Actions for ${a.courseTitle}`}
                         items={[
                           { label: "Open person", icon: "→", to: `/team/${a.userId}` },
+                          ...(!isDone(a.status) && a.status !== "CANCELLED"
+                            ? [{ label: "Change due date", icon: "📅", onClick: () => setDueEdit(a) }]
+                            : []),
+                          // Bitmemiş, açık eğitim için hatırlatma e-postası.
+                          ...(MAIL_ENABLED && !isDone(a.status) && a.status !== "CANCELLED" && !a.accessBlocked
+                            ? [
+                                {
+                                  label: reminding === a.id ? "Sending…" : "Send reminder",
+                                  icon: "✉",
+                                  onClick: () => void remind(a, u?.name ?? "the person"),
+                                },
+                              ]
+                            : []),
                           {
                             label: "Reset training",
                             icon: "⟲",
                             onClick: () => setAct({ kind: "reset", row: a }),
                           },
-                          // Tamamlanmış eğitim geri alınmaz: sertifika verildi.
-                          ...(isDone(a.status) || a.status === "CANCELLED"
+                          // Eski "Block access" ile engellenmiş kayıt kaldıysa geri açılabilsin.
+                          ...(a.accessBlocked
+                            ? [{ label: "Restore access", icon: "✓", onClick: () => setAct({ kind: "unblock", row: a }) }]
+                            : []),
+                          // Tek kaldırma düğmesi (eskiden "Block access" ve "Withdraw
+                          // assignment" ayrıydı, ikisi aynı işe çıkıyordu): kişi
+                          // eğitimi ve içeriğini açamaz; bitirdiyse sertifikası kalır.
+                          ...(a.status === "CANCELLED"
                             ? []
                             : [
                                 {
-                                  label: "Withdraw assignment",
+                                  label: "Remove assignment",
                                   icon: "⦸",
                                   danger: true,
                                   onClick: () => setAct({ kind: "cancel", row: a }),
@@ -434,13 +527,15 @@ export function Assignments() {
             </tbody>
           </table>
         </div>
-        {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+        {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
       </div>
 
       {open && (
         <Modal title="Assign Training" onClose={() => setOpen(false)} width="max-w-3xl">
           <AssignForm
-            users={users.filter((u) => u.isActive !== false && isStaffRole(u.role))}
+            // Müşteriler de buradan atanır (eskiden yalnızca
+            // Users → Assign Training yolu vardı).
+            users={users.filter((u) => u.isActive !== false)}
             courses={assignable}
             departments={departments}
             existing={rows}
@@ -456,9 +551,27 @@ export function Assignments() {
 
       {/* Sıfırla / geri al. İkisi de gerekçe soruyor: eğitim kaydına
           dokunan her işlemin sebebi yazılı olmalı. */}
+      {dueEdit && (
+        <Modal
+          title="Due date"
+          subtitle={`${userById.get(dueEdit.userId)?.name ?? ""} · ${dueEdit.courseTitle}`}
+          onClose={() => setDueEdit(null)}
+          width="max-w-sm"
+        >
+          <DueDateForm
+            row={dueEdit}
+            onDone={(m) => {
+              setToast(m);
+              setDueEdit(null);
+            }}
+            onCancel={() => setDueEdit(null)}
+          />
+        </Modal>
+      )}
+
       {act && (
         <Modal
-          title={act.kind === "reset" ? "Reset training" : "Withdraw assignment"}
+          title={ACT_TITLE[act.kind]}
           subtitle={`${userById.get(act.row.userId)?.name ?? ""} · ${act.row.courseTitle}`}
           onClose={() => setAct(null)}
           width="max-w-md"
@@ -507,6 +620,75 @@ function Tally({ n, label, tone }: { n: number; label: string; tone: string }) {
  * başlanmamışsa kaydı siler; başlanmışsa iptal işaretler, çünkü kişi o
  * eğitimde zaman geçirmiş.
  */
+type ActKind = "reset" | "cancel" | "block" | "unblock";
+const ACT_TITLE: Record<ActKind, string> = {
+  reset: "Reset training",
+  cancel: "Remove assignment",
+  block: "Block access",
+  unblock: "Restore access",
+};
+const ACT_BUTTON: Record<ActKind, string> = {
+  reset: "Reset training",
+  cancel: "Remove assignment",
+  block: "Block access",
+  unblock: "Restore access",
+};
+
+/** Son tarihi değiştirir ya da kaldırır. Boş bırakılırsa son tarih yok. */
+function DueDateForm({
+  row,
+  onDone,
+  onCancel,
+}: {
+  row: Assignment;
+  onDone: (msg: string) => void;
+  onCancel: () => void;
+}) {
+  const iso = (t?: Timestamp | null) => {
+    const d = t?.toDate?.();
+    if (!d) return "";
+    // Türkiye günü (son tarih o günün 23:59'u olarak kaydediliyor)
+    return d.toLocaleDateString("en-CA", { timeZone: "Europe/Istanbul" });
+  };
+  const [v, setV] = useState(iso(row.dueDate));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function save(next: string) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await httpsCallable(functions, "setAssignmentDueDate")({ assignmentId: row.id, dueDate: next || null });
+      onDone(next ? `Due date set to ${next.split("-").reverse().join(".")}.` : "Due date removed.");
+    } catch (e) {
+      setErr((e as Error).message);
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <label className="label">Due date</label>
+      <input type="date" className="input" value={v} onChange={(e) => setV(e.target.value)} autoFocus />
+      <p className="text-[11.5px] text-slate-500 mt-1.5">Leave empty for no due date.</p>
+      <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
+        <button onClick={() => save(v)} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
+          {busy ? "Saving…" : "Save"}
+        </button>
+        {row.dueDate && (
+          <button onClick={() => save("")} disabled={busy} className="btn-secondary text-xs py-2">
+            Remove due date
+          </button>
+        )}
+        <button onClick={onCancel} className="text-xs text-slate-500 hover:text-slate-800 ml-auto">
+          Cancel
+        </button>
+      </div>
+      {err && <p className="text-[11.5px] text-red-700 mt-2">{err}</p>}
+    </div>
+  );
+}
+
 function AssignmentAction({
   row,
   kind,
@@ -514,7 +696,7 @@ function AssignmentAction({
   onCancel,
 }: {
   row: Assignment;
-  kind: "reset" | "cancel";
+  kind: ActKind;
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
@@ -527,12 +709,23 @@ function AssignmentAction({
     setBusy(true);
     setErr(null);
     try {
+      if (kind === "block" || kind === "unblock") {
+        await httpsCallable(functions, "setAssignmentAccess")({
+          assignmentId: row.id,
+          blocked: kind === "block",
+          reason,
+        });
+        onDone(kind === "block" ? `Access to ${row.courseTitle} blocked.` : `Access to ${row.courseTitle} restored.`);
+        return;
+      }
       const fn = kind === "reset" ? "resetAssignment" : "cancelAssignment";
       await httpsCallable(functions, fn)({ assignmentId: row.id, reason });
       onDone(
         kind === "reset"
           ? `${row.courseTitle} reset — the learner starts again.`
-          : `${row.courseTitle} withdrawn.`
+          : isDone(row.status)
+          ? `${row.courseTitle} removed — the certificate stays.`
+          : `${row.courseTitle} removed.`
       );
     } catch (e) {
       setErr((e as Error).message);
@@ -542,16 +735,32 @@ function AssignmentAction({
 
   return (
     <div>
-      {kind === "reset" ? (
+      {kind === "block" ? (
+        <p className="text-sm text-slate-700">
+          The person can no longer open or continue this training until you restore access.
+          Nothing is deleted — progress is kept.
+        </p>
+      ) : kind === "unblock" ? (
+        <p className="text-sm text-slate-700">
+          The person can open the training again and continue where they left off.
+        </p>
+      ) : kind === "reset" ? (
         <p className="text-sm text-slate-700">
           Progress is cleared and the person takes this training from the beginning. Any
           certificate already issued stays on the record — finishing again produces a new one.
         </p>
+      ) : isDone(row.status) ? (
+        <p className="text-sm text-slate-700">
+          The person can no longer open this training or its content. <b>The certificate stays</b>{" "}
+          — in their My Certificates, the Certificate Register and on the QR verification page —
+          and Training Follow-Up keeps counting it. Who removed it and why is kept in the audit
+          log.
+        </p>
       ) : (
         <p className="text-sm text-slate-700">
-          The assignment is removed completely and stops counting as outstanding.
-          {started ? " Any progress on it is discarded." : ""} Who removed it and why is kept
-          in the audit log.
+          The person can no longer open this training or its content, and it stops counting as
+          outstanding.{started ? " Any progress on it is discarded." : ""} Who removed it and why is
+          kept in the audit log.
         </p>
       )}
 
@@ -565,12 +774,12 @@ function AssignmentAction({
 
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
         <button onClick={go} disabled={busy} className="btn-primary text-xs py-2 disabled:opacity-40">
-          {busy ? "Working…" : kind === "reset" ? "Reset training" : "Withdraw"}
+          {busy ? "Working…" : ACT_BUTTON[kind]}
         </button>
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-[11.5px] text-brand-700">{err}</span>}
+        {err && <span className="text-[11.5px] text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -615,6 +824,9 @@ function AssignForm({
   const [err, setErr] = useState<string | null>(null);
 
   const byCourse = mode === "BY_COURSE";
+  const [notify, setNotify] = useState(MAIL_ENABLED);
+  /** Son tarih (isteğe bağlı). Boş = son tarih yok. */
+  const [dueDate, setDueDate] = useState("");
 
   function switchMode(m: "BY_COURSE" | "BY_PERSON") {
     setMode(m);
@@ -657,7 +869,7 @@ function AssignForm({
         .map((u) => ({
           id: u.id,
           label: u.name,
-          note: departments.get(u.departmentId ?? "") ?? "—",
+          note: whereOf(u, departments),
         }))
         .sort((a, b) => a.label.localeCompare(b.label, "tr"));
     }
@@ -683,11 +895,13 @@ function AssignForm({
     try {
       let created = 0;
       const skipped: string[] = [];
+      const results: AssignResult[] = [];
 
       if (byCourse) {
         // Fonksiyon kişi başına çalışıyor; kişiler döngüyle geçiliyor.
         for (const uid of Array.from(picked)) {
-          const r = await assignCourses(uid, [anchor]);
+          const r = await assignCourses(uid, [anchor], { dueDate, notify });
+          results.push(r);
           created += r.created;
           skipped.push(...r.skipped);
           setProgress((p) => p + 1);
@@ -695,18 +909,21 @@ function AssignForm({
         const title = courses.find((c) => c.id === anchor)?.title ?? "Training";
         onDone(
           `${title} assigned to ${created} ${created === 1 ? "person" : "people"}.` +
-            skipNote(skipped)
+            skipNote(skipped) +
+            mailNote(results)
         );
       } else {
         // Tek kişiye çok eğitim: fonksiyon bunu tek çağrıda yapıyor.
-        const r = await assignCourses(anchor, Array.from(picked));
+        const r = await assignCourses(anchor, Array.from(picked), { dueDate, notify });
+        results.push(r);
         created = r.created;
         skipped.push(...r.skipped);
         setProgress(picked.size);
         const name = users.find((u) => u.id === anchor)?.name ?? "the employee";
         onDone(
           `${created} training${created === 1 ? "" : "s"} assigned to ${name}.` +
-            skipNote(skipped)
+            skipNote(skipped) +
+            mailNote(results)
         );
       }
     } catch (e) {
@@ -762,7 +979,11 @@ function AssignForm({
                 .map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
-                    {u.departmentId ? ` — ${departments.get(u.departmentId) ?? ""}` : ""}
+                    {u.role === "CUSTOMER"
+                      ? ` — ${whereOf(u, departments)}`
+                      : u.departmentId
+                      ? ` — ${departments.get(u.departmentId) ?? ""}`
+                      : ""}
                   </option>
                 ))}
         </select>
@@ -857,7 +1078,7 @@ function AssignForm({
 
       <div className="-mx-[18px] -mb-[18px] mt-5 px-[18px] py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
         {err ? (
-          <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>
+          <span className="text-[11.5px] text-red-700 mr-auto">{err}</span>
         ) : (
           <span className="text-[11.5px] text-slate-400 mr-auto">
             {busy
@@ -871,9 +1092,40 @@ function AssignForm({
                 ? "Pick who should take it."
                 : "Pick the training to assign."
               : renewCount > 0
-              ? `Due in 30 days. ${renewCount} already completed — progress restarts, earlier certificates stay.`
-              : "Due in 30 days from today."}
+              ? `${renewCount} already completed — progress restarts, earlier certificates stay.`
+              : ""}
           </span>
+        )}
+        {/* Son tarih isteğe bağlı: boş bırakılırsa atamanın son tarihi olmaz. */}
+        <label className="flex items-center gap-1.5 text-[12px] text-slate-600 shrink-0">
+          Due date
+          <input
+            type="date"
+            className="input !w-auto !py-1 !px-2 !text-[12px]"
+            value={dueDate}
+            min={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setDueDate(e.target.value)}
+            disabled={busy}
+            title="Optional — leave empty for no due date"
+          />
+          {dueDate && (
+            <button type="button" onClick={() => setDueDate("")} className="text-slate-400 hover:text-slate-700" title="No due date">
+              ×
+            </button>
+          )}
+        </label>
+        {/* Kişiye "yeni eğitim atandı" e-postası (varsayılan açık). */}
+        {MAIL_ENABLED && (
+          <label className="flex items-center gap-1.5 text-[12px] text-slate-600 cursor-pointer select-none shrink-0">
+            <input
+              type="checkbox"
+              className="accent-brand-600 h-3.5 w-3.5"
+              checked={notify}
+              onChange={(e) => setNotify(e.target.checked)}
+              disabled={busy}
+            />
+            Notify by email
+          </label>
         )}
         <button type="button" onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel

@@ -1,13 +1,22 @@
 [
   {
     "origin": [
+      "https://academy.bonair.com.tr",
       "http://localhost:5173",
       "http://localhost:4173",
       "https://bonair-academy.web.app",
       "https://bonair-academy.firebaseapp.com"
     ],
-    "method": ["GET", "HEAD"],
-    "responseHeader": ["Content-Type", "Content-Length", "Content-Range", "Accept-Ranges"],
+    "method": [
+      "GET",
+      "HEAD"
+    ],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Length",
+      "Content-Range",
+      "Accept-Ranges"
+    ],
     "maxAgeSeconds": 3600
   }
 ]

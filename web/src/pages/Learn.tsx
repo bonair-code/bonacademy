@@ -10,9 +10,12 @@ import { Link, useParams } from "react-router-dom";
 import { collection, doc, onSnapshot, orderBy, query } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../lib/firebase";
+import { ORG } from "../lib/org";
 import { PdfReader } from "../components/PdfReader";
 import { ScormPlayer } from "../components/ScormPlayer";
+import { useScormSrc } from "../lib/scormAccess";
 import { ExamRunner, type ExamQ } from "../components/ExamRunner";
+import { ExamIntro } from "../components/ExamIntro";
 
 // Aynı origin'den servis edilir (hosting rewrite / vite proxy) — SCORM paketi
 // LMS API'sini window.parent üzerinde arıyor, çapraz origin'de erişemez.
@@ -43,6 +46,10 @@ type Assignment = {
   languageChosen?: boolean;
   /** Kaçıncı kez alınıyor — sertifika kimliği buna bağlı. */
   cycleNumber?: number;
+  /** Geçilen sınavın notu (submitExam yazar). */
+  examScore?: number | null;
+  /** Yönetici erişimi engelledi (setAssignmentAccess). */
+  accessBlocked?: boolean;
 };
 
 /** Bölümün ham içerik listesi (eski tek-içerik alanı dahil). */
@@ -55,17 +62,38 @@ function contentsOf(s: Section): Content[] {
 export function Learn() {
   const { id } = useParams<{ id: string }>();
   const [a, setA] = useState<Assignment | null>(null);
+  const [gone, setGone] = useState(false);
   const [sections, setSections] = useState<Section[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
   // Sınav durumu
-  const [exam, setExam] = useState<{ attemptNo: number; passingScore: number; questions: ExamQ[] } | null>(null);
-  const [result, setResult] = useState<{ passed: boolean; score: number; status: string } | null>(null);
+  const [exam, setExam] = useState<{
+    attemptNo: number;
+    passingScore: number;
+    questions: ExamQ[];
+    language: Lang;
+    deadlineMs: number | null;
+    /** Sunucu saati − istemci saati; geri sayım sunucuya göre işler. */
+    clockOffsetMs: number;
+  } | null>(null);
+  const [result, setResult] = useState<{
+    passed: boolean;
+    score: number;
+    status: string;
+    /** Süre dolduktan sonra kapanan deneme — cevaplar sayılmadı. */
+    expired?: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!id) return;
-    return onSnapshot(doc(db, "assignments", id), (d) => setA(d.data() as Assignment));
+    // Atama kaldırıldıysa belge yok; kural da yok belgeyi okumaya izin
+    // vermez (hata döner). İkisinde de "Loading…" sonsuza dek kalıyordu.
+    return onSnapshot(
+      doc(db, "assignments", id),
+      (d) => (d.exists() ? setA(d.data() as Assignment) : setGone(true)),
+      () => setGone(true)
+    );
   }, [id]);
 
   /**
@@ -82,7 +110,9 @@ export function Learn() {
           snap.docs
             .map((d) => ({ id: d.id, ...(d.data() as any) }))
             .filter((s: Section) => asLang(s.lang) === lang)
-        )
+        ),
+      // Erişim engellenince/atama kalkınca kural okumayı reddeder.
+      () => setSections([])
     );
   }, [a?.courseId, a?.contentLanguage]);
 
@@ -106,7 +136,10 @@ export function Learn() {
   const done = useMemo(() => new Set(a?.sectionsDone || []), [a?.sectionsDone]);
   const currentIndex = sections.findIndex((s) => !done.has(s.id));
 
-  // Bu oturumda hangi içerikler gerçekten tüketildi (id -> true).
+  // Bu oturumda hangi içerikler gerçekten tüketildi (id -> true). Tarayıcıda
+  // SAKLANMIYOR: 2. başarısız sınavda bölümler sıfırlanıyor ve kişinin
+  // yeniden okuması isteniyor; saklansaydı eski okuma sayılıp bölümler
+  // kendiliğinden yeniden tamamlanırdı.
   const [consumed, setConsumed] = useState<Record<string, boolean>>({});
   const markConsumed = useCallback(
     (contentId: string) => setConsumed((p) => (p[contentId] ? p : { ...p, [contentId]: true })),
@@ -122,6 +155,12 @@ export function Learn() {
   const selectedIndex = selected ? sections.findIndex((s) => s.id === selected) : -1;
   const viewIndex = selectedIndex >= 0 ? selectedIndex : currentIndex;
   const isViewingCurrent = viewIndex === currentIndex;
+  /**
+   * Sınav ya da "tamamlandı" ekranındayken raydan bir bölüm seçildi: o bölüm
+   * gösterilir. Eskiden bu ekranlarda bölüm görünümü hiç çizilmiyordu,
+   * raydaki bölüme tıklamak hiçbir şey yapmıyordu.
+   */
+  const reviewing = selectedIndex >= 0;
   const viewDone = viewIndex >= 0 ? done.has(sections[viewIndex].id) : false;
 
   /**
@@ -170,17 +209,29 @@ export function Learn() {
   const [certOpen, setCertOpen] = useState(false);
   const [myCert, setMyCert] = useState<Cert | null>(null);
   const [certErr, setCertErr] = useState<string | null>(null);
+  /* Pencere her açıldığında BU döngünün belgesi canlı dinlenir. Eskiden belge
+     bir kez yüklenince hafızada kalıyordu: aynı oturumda eğitim yeniden
+     alınıp yeni sertifika üretilse bile pencere eski döngünün belgesini
+     (eski kurs adıyla) göstermeye devam ediyordu. */
+  const certId = id ? certIdForCycle(id, a?.cycleNumber) : null;
   useEffect(() => {
-    if (!certOpen || !id || myCert) return;
+    setMyCert(null);
+    setCertErr(null);
+    if (!certOpen || !certId) return;
     return onSnapshot(
-      doc(db, "certificates", certIdForCycle(id, a?.cycleNumber)),
+      doc(db, "certificates", certId),
       (d) => {
-        if (d.exists()) setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
-        else setCertErr("No certificate has been issued for this training.");
+        if (d.exists()) {
+          setMyCert({ id: d.id, ...(d.data() as Omit<Cert, "id">) });
+          setCertErr(null);
+        } else {
+          setMyCert(null);
+          setCertErr("No certificate has been issued for this training.");
+        }
       },
       (e) => setCertErr(e.message)
     );
-  }, [certOpen, id, myCert, a?.cycleNumber]);
+  }, [certOpen, certId]);
 
   const remaining = currentContents.filter((c) => !consumed[c.id]);
   const canComplete = currentContents.length > 0 && remaining.length === 0;
@@ -227,13 +278,33 @@ export function Learn() {
     }
   }
 
-  async function beginExam() {
+  /*
+   * Bölüm KENDİLİĞİNDEN tamamlanmaz (CAPELLA isteği): materyalin son sayfasına
+   * gelince ekran bir sonraki bölüme atlıyordu. Kişi materyali bitirir,
+   * "Complete this section"a basar, sonra sıradaki bölüme geçilir.
+   */
+
+  async function beginExam(language?: Lang) {
     if (!id) return;
     setBusy(true);
     setErr(null);
     try {
-      const res = await httpsCallable(functions, "startExam")({ assignmentId: id });
-      setExam(res.data as any);
+      const res = await httpsCallable(functions, "startExam")({ assignmentId: id, language });
+      const d = res.data as any;
+      // Yarım kalan denemenin süresi çoktan dolmuşsa sunucu onu kapatıp
+      // sonucu döndürüyor.
+      if (d?.expired) {
+        setResult(d.result);
+        return;
+      }
+      setExam({
+        attemptNo: d.attemptNo,
+        passingScore: d.passingScore,
+        questions: d.questions,
+        language: asLang(d.language),
+        deadlineMs: d.deadlineMs ?? null,
+        clockOffsetMs: d.serverNow ? d.serverNow - Date.now() : 0,
+      });
       setResult(null);
     } catch (e) {
       setErr((e as Error).message);
@@ -253,6 +324,14 @@ export function Learn() {
         answers,
       });
       setResult(res.data as any);
+      try {
+        localStorage.removeItem(`exam:${id}:${exam.attemptNo}`);
+      } catch {
+        /* yok say */
+      }
+      // 2. başarısızlıkta sunucu bölümleri sıfırladı: bu oturumdaki okuma
+      // sayılmamalı — kişi materyali yeniden bitirmeli.
+      if ((res.data as any)?.status === "RETAKE_REQUIRED") setConsumed({});
       setExam(null);
     } catch (e) {
       setErr((e as Error).message);
@@ -261,7 +340,40 @@ export function Learn() {
     }
   }
 
+  if (gone)
+    return (
+      <div className="card max-w-lg mx-auto mt-10 px-6 py-8 text-center">
+        <div className="text-[15px] font-semibold text-slate-900">Training not available</div>
+        <p className="text-[13px] text-slate-600 mt-2 leading-relaxed">
+          This training is no longer assigned to you. Any certificate you earned is in My Certificates.
+        </p>
+        <div className="flex justify-center gap-2 mt-5">
+          <Link to="/certificates" className="btn-primary text-xs py-2">
+            My Certificates
+          </Link>
+          <Link to="/dashboard" className="btn-secondary text-xs py-2">
+            Dashboard
+          </Link>
+        </div>
+      </div>
+    );
   if (!a) return <div className="text-sm text-slate-400 py-10">Loading…</div>;
+  if (a.accessBlocked)
+    return (
+      <div className="card max-w-lg mx-auto mt-10 px-6 py-8 text-center">
+        <div className="text-[15px] font-semibold text-slate-900">Access suspended</div>
+        <p className="text-[13px] text-slate-600 mt-2 leading-relaxed">
+          Your access to <b>{a.courseTitle}</b> has been suspended. Please contact{" "}
+          <a href={`mailto:${ORG.contactEmail}`} className="text-brand-700 font-semibold hover:underline">
+            {ORG.contactEmail}
+          </a>
+          .
+        </p>
+        <Link to="/dashboard" className="btn-secondary text-xs py-2 mt-5 inline-flex">
+          Back to dashboard
+        </Link>
+      </div>
+    );
 
   return (
     <div>
@@ -277,7 +389,7 @@ export function Learn() {
         }
       />
       <div className="mb-4" />
-      {err && <p className="text-xs text-brand-700 mb-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mb-3">{err}</p>}
 
       {/* DİL KAPISI — eğitimin birden fazla dili yayınlanmışsa, içeriğe
           geçmeden önce tek soru. Seçim atama kaydına yazılıyor; bir daha
@@ -390,7 +502,7 @@ export function Learn() {
         </Modal>
       )}
 
-      <div className="grid lg:grid-cols-[230px_1fr] gap-3 items-start">
+      <div className="grid lg:grid-cols-[260px_1fr] gap-3 items-start">
         <ProgressRail
           sections={sections}
           done={done}
@@ -398,6 +510,8 @@ export function Learn() {
           viewIndex={viewIndex}
           examRequired={examRequired !== false}
           status={a.status}
+          examActive={!!exam}
+          examScore={a.examScore}
           onSelect={(id) => setSelected(id)}
         />
 
@@ -414,16 +528,23 @@ export function Learn() {
             {result.passed ? "Congratulations, you passed! 🎉" : "You did not pass the exam."}
           </div>
           <p className="text-sm text-slate-600 mt-1">Your score: {result.score}%</p>
+          {result.expired && (
+            <p className="text-sm text-red-800 mt-2">
+              The time limit had passed before the exam was submitted, so this attempt was closed
+              without counting the answers.
+            </p>
+          )}
           {result.passed ? (
             <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
               View My Certificate
             </button>
           ) : result.status === "RETAKE_REQUIRED" ? (
             <p className="text-sm text-red-800 mt-3">
-              You failed twice — you must retake the training from the beginning.
+              You did not pass on your second attempt. Please consult your instructor or write to{" "}
+              <a href={`mailto:${ORG.contactEmail}`} className="underline">{ORG.contactEmail}</a>.
             </p>
           ) : (
-            <button onClick={beginExam} disabled={busy} className="btn-primary mt-4">
+            <button onClick={() => setResult(null)} disabled={busy} className="btn-primary mt-4">
               Try Again
             </button>
           )}
@@ -431,12 +552,22 @@ export function Learn() {
       )}
 
       {/* TAMAMLANDI */}
-      {!result && a.status === "COMPLETED" && (
+      {!result && !reviewing && a.status === "COMPLETED" && (
         <div className="card p-4 sm:p-6 border-l-4 border-l-emerald-500">
           <div className="text-xl font-bold text-emerald-700">You have completed this training ✓</div>
-          <button onClick={() => setCertOpen(true)} className="btn-primary mt-4">
-            View My Certificate
-          </button>
+          <p className="text-[13px] text-slate-600 mt-1">
+            You can go back through the material at any time — your result and certificate stay as they are.
+          </p>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <button onClick={() => setCertOpen(true)} className="btn-primary">
+              View My Certificate
+            </button>
+            {sections.length > 0 && (
+              <button onClick={() => setSelected(sections[0].id)} className="btn-secondary">
+                Review training content
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -447,26 +578,22 @@ export function Learn() {
           passingScore={exam.passingScore}
           attemptNo={exam.attemptNo}
           busy={busy}
+          lang={exam.language}
+          deadlineMs={exam.deadlineMs}
+          clockOffsetMs={exam.clockOffsetMs}
+          storageKey={`exam:${id}:${exam.attemptNo}`}
           onSubmit={submit}
         />
       )}
 
-      {/* SINAVA HAZIR */}
-      {!result && !exam && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
-        <div className="card p-5 sm:p-6 text-center">
-          <div className="text-[15px] font-semibold text-slate-900 mb-1">
-            All sections completed 🎯
-          </div>
-          <p className="text-sm text-slate-500 mb-4">You can now take the exam.</p>
-          <button onClick={beginExam} disabled={busy} className="btn-primary">
-            {busy ? "Preparing…" : "Start Exam"}
-          </button>
-        </div>
+      {/* SINAVA HAZIR — giriş ekranı: bilgiler, dil seçimi, kurallar */}
+      {!result && !exam && !reviewing && id && (a.status === "SECTIONS_DONE" || a.status === "EXAM_FAILED") && (
+        <ExamIntro assignmentId={id} busy={busy} onStart={(l) => void beginExam(l)} />
       )}
 
       {/* BÖLÜMLER */}
-      {!result && !exam && a.status !== "COMPLETED" && a.status !== "SECTIONS_DONE" &&
-        a.status !== "EXAM_FAILED" && (
+      {!result && !exam && (reviewing || (a.status !== "COMPLETED" && a.status !== "SECTIONS_DONE" &&
+        a.status !== "EXAM_FAILED")) && (
           <div>
             {viewIndex >= 0 && sections[viewIndex] && (
               <div className="card p-3 sm:p-5">
@@ -478,6 +605,15 @@ export function Learn() {
                     <span className="text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded bg-emerald-50 text-emerald-700 shrink-0">
                       Completed
                     </span>
+                  )}
+                  {isViewingCurrent && canComplete && (
+                    <button
+                      onClick={completeCurrent}
+                      disabled={busy}
+                      className="btn-primary text-xs py-1.5 px-3 shrink-0 disabled:opacity-40"
+                    >
+                      {busy ? "Saving…" : "Complete this section →"}
+                    </button>
                   )}
                 </div>
                 {/* Bir bölümde birden fazla materyal varsa TEK TEK gösteriliyor:
@@ -551,7 +687,7 @@ export function Learn() {
                     {!canComplete && viewContents.length > 0 && (
                       <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
                         <p className="text-[13px] font-semibold text-amber-900">
-                          Go through the material before you finish this section.
+                          Go through the material, then press “Complete this section”.
                         </p>
                         <p className="text-[11px] text-amber-800 mt-0.5">
                           {remaining.length} of {viewContents.length} item(s) still open — read
@@ -566,7 +702,7 @@ export function Learn() {
                       title={canComplete ? undefined : "Finish the material above first"}
                       className="btn-primary mt-4 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      {busy ? "Saving…" : "I completed this section →"}
+                      {busy ? "Saving…" : "Complete this section →"}
                     </button>
                   </>
                 ) : viewDone ? (
@@ -574,7 +710,11 @@ export function Learn() {
                     onClick={() => setSelected(null)}
                     className="btn-secondary text-xs py-2 mt-4"
                   >
-                    Back to section {currentIndex + 1} →
+                    {currentIndex < 0
+                      ? a.status === "COMPLETED"
+                        ? "Back →"
+                        : "Back to exam →"
+                      : `Back to section ${currentIndex + 1} →`}
                   </button>
                 ) : (
                   <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 flex items-center justify-between gap-3 flex-wrap">
@@ -591,6 +731,51 @@ export function Learn() {
                   </div>
                 )}
               </div>
+            )}
+            {/* Ekranın altında yüzen çubuk. Düğme uzun PDF'in altında kalıyordu,
+                öğrenci kaydırmadan göremiyordu. Materyal bitene kadar ne
+                kaldığını söyler; bitince "Complete this section" olur. */}
+            {isViewingCurrent && viewContents.length > 0 && (
+              <>
+                <div className="h-20" aria-hidden />
+                <div className="fixed z-40 left-1/2 -translate-x-1/2 lg:left-[calc(50%+116px)] bottom-[calc(env(safe-area-inset-bottom)+1rem)] max-lg:bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] w-[min(560px,calc(100vw-2rem))] no-print">
+                  {canComplete ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-brand-600 text-white pl-4 pr-2 py-2 shadow-[0_12px_32px_rgba(24,40,75,.35)] animate-[app-land_.35s_ease-out]">
+                      <span className="flex-1 min-w-0 text-[13px] leading-snug">
+                        <b className="font-semibold">Material finished.</b>{" "}
+                        <span className="text-white/75">Complete the section to continue.</span>
+                      </span>
+                      <button
+                        onClick={completeCurrent}
+                        disabled={busy}
+                        className="shrink-0 rounded-xl bg-white text-brand-700 font-semibold text-[13px] px-4 py-2 hover:bg-brand-50 disabled:opacity-60"
+                      >
+                        {busy ? "Saving…" : "Complete this section →"}
+                      </button>
+                    </div>
+                  ) : itemAt < viewContents.length - 1 && consumed[viewContents[itemAt]?.id ?? ""] ? (
+                    <div className="flex items-center gap-3 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 pl-4 pr-2 py-2 shadow-[0_12px_32px_rgba(15,23,42,.12)]">
+                      <span className="flex-1 min-w-0 text-[13px] text-slate-700">
+                        Item {itemAt + 1} of {viewContents.length} finished.
+                      </span>
+                      <button onClick={() => setItemIndex(itemAt + 1)} className="btn-primary text-[13px] px-4 py-2 shrink-0">
+                        Next item →
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2.5 rounded-2xl bg-white/95 backdrop-blur border border-slate-200 px-4 py-2.5 shadow-[0_12px_32px_rgba(15,23,42,.12)] text-[12.5px] text-slate-600">
+                      <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" aria-hidden />
+                      <span className="leading-snug">
+                        Go through the material to the end
+                        {viewContents.length > 1
+                          ? ` (${remaining.length} of ${viewContents.length} items left)`
+                          : ""}{" "}
+                        — then you can complete this section.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
             {currentIndex < 0 && sections.length > 0 && (
               <p className="text-sm text-slate-400">All sections finished, updating status…</p>
@@ -622,7 +807,7 @@ export function Learn() {
               </span>
               <div className="flex items-center gap-2 shrink-0">
                 <button
-                  onClick={printCertificate}
+                  onClick={() => myCert && printCertificate(myCert)}
                   disabled={!myCert}
                   className="btn-primary text-xs py-2 disabled:opacity-40"
                 >
@@ -680,6 +865,13 @@ function Spinner() {
   );
 }
 
+/**
+ * Sol panel — "C, gruplu liste" tasarımı (CAPELLA/ilerleme-tasarimlari.html):
+ * iPhone Ayarlar gibi gri zemin üstünde beyaz gruplar. Üstte her adım için
+ * ayrı bir çubuk parçası; her satırda simge kutusu, başlık ve durum satırı.
+ * Bitmiş bölüm ve sınav satırı tıklanınca açılır; sınav sürerken bölümler
+ * kilitli (cevaplar ve süre sınav ekranında).
+ */
 function ProgressRail({
   sections,
   done,
@@ -687,6 +879,8 @@ function ProgressRail({
   viewIndex,
   examRequired,
   status,
+  examActive,
+  examScore,
   onSelect,
 }: {
   sections: Section[];
@@ -696,118 +890,169 @@ function ProgressRail({
   viewIndex: number;
   examRequired: boolean;
   status: string;
+  /** Sınav sürüyor: bölüme geçilmez (cevaplar ve süre sınav ekranında). */
+  examActive: boolean;
+  examScore?: number | null;
   onSelect: (sectionId: string | null) => void;
 }) {
-  /** Telefonda bölüm listesi kapalı başlar; masaüstünde bu durum kullanılmıyor. */
+  /** Telefonda liste kapalı başlar; masaüstünde bu durum kullanılmıyor. */
   const [open, setOpen] = useState(false);
   const passed = status === "COMPLETED" || status === "EXAM_PASSED";
   const examOpen = status === "SECTIONS_DONE" || status === "EXAM_FAILED";
   const total = sections.length + (examRequired ? 1 : 0);
   const doneCount = done.size + (passed && examRequired ? 1 : 0);
-  const pct = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const bubble = (kind: "done" | "current" | "locked", label: string) => (
+  type Kind = "done" | "current" | "todo";
+  const icon = (kind: Kind, label: string) => (
     <span
-      className={`h-[18px] w-[18px] rounded-full grid place-items-center text-[9.5px] font-extrabold shrink-0 ${
-        kind === "done"
-          ? "bg-emerald-100 text-emerald-700"
-          : kind === "current"
-          ? "bg-brand-600 text-white"
-          : "bg-slate-100 text-slate-400"
+      className={`h-6 w-6 rounded-[7px] grid place-items-center text-[11px] font-bold text-white shrink-0 ${
+        kind === "done" ? "bg-[#30b15a]" : kind === "current" ? "bg-brand-600" : "bg-[#c7c7cc]"
       }`}
       aria-hidden="true"
     >
       {label}
     </span>
   );
+  const row = (opts: {
+    key: string;
+    kind: Kind;
+    label: string;
+    title: string;
+    sub: string;
+    active: boolean;
+    disabled: boolean;
+    onClick: () => void;
+    hint?: string;
+  }) => (
+    <button
+      key={opts.key}
+      type="button"
+      disabled={opts.disabled}
+      onClick={() => {
+        opts.onClick();
+        setOpen(false);
+      }}
+      title={opts.hint ?? opts.title}
+      className={`group relative w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition disabled:cursor-default ${
+        opts.active ? "bg-[#fdeeee]" : "hover:bg-[#f8f8fa] disabled:hover:bg-transparent"
+      } [&+&]:before:content-[''] [&+&]:before:absolute [&+&]:before:left-[46px] [&+&]:before:right-0 [&+&]:before:top-0 [&+&]:before:h-px [&+&]:before:bg-[#e5e5ea]`}
+    >
+      {icon(opts.kind, opts.label)}
+      <span className="flex-1 min-w-0">
+        <span
+          // Ad tam görünür, gerekirse alt satıra iner (kesilmesin — CAPELLA isteği).
+          className={`block text-[13px] leading-snug break-words ${
+            opts.kind === "todo" && !opts.active ? "text-[#8e8e93]" : "text-slate-900"
+          } ${opts.active ? "font-semibold" : "font-medium"}`}
+        >
+          {opts.title}
+        </span>
+        <span
+          className={`block text-[11.5px] ${
+            opts.kind === "current" ? "text-brand-600 font-medium" : "text-[#86868b]"
+          }`}
+        >
+          {opts.sub}
+        </span>
+      </span>
+      {!opts.disabled && <span className="text-[#c7c7cc] text-[15px] shrink-0">›</span>}
+    </button>
+  );
+
+  const examKind: Kind = passed ? "done" : examOpen ? "current" : "todo";
+  const examSub = passed
+    ? examScore != null
+      ? `Passed · ${examScore}%`
+      : "Passed"
+    : status === "EXAM_FAILED"
+    ? "Retake available"
+    : examOpen
+    ? "Ready to start"
+    : "After all sections";
 
   return (
-    <div className="card p-1.5 lg:sticky lg:top-[72px]">
-      <div className="px-2.5 pt-2 pb-1">
-        <div className="flex justify-between text-[11px] text-slate-500">
-          <span>Progress</span>
-          <span className={`font-semibold ${pct === 100 ? "text-emerald-700" : "text-slate-700"}`}>
-            {doneCount}/{total}
-          </span>
-        </div>
-        <div className="h-[5px] rounded-full bg-slate-100 overflow-hidden mt-1.5">
-          <div
-            className="h-full rounded-full transition-[width] duration-300"
-            style={{ width: `${pct}%`, background: pct === 100 ? "#30b15a" : "#e31e24" }}
+    <div className="rounded-2xl bg-[#f2f2f7] p-3 lg:sticky lg:top-[72px]">
+      <div className="flex items-baseline justify-between px-1.5 pb-2">
+        <span className="text-[15px] font-semibold tracking-[-0.01em] text-slate-900">Progress</span>
+        <span className={`text-[12px] ${doneCount === total && total > 0 ? "text-[#30b15a] font-semibold" : "text-[#86868b]"}`}>
+          {doneCount} of {total}
+        </span>
+      </div>
+      {/* Her adım için bir parça: hangi adımda olunduğu tek bakışta. */}
+      <div className="flex gap-1 px-1.5 pb-3">
+        {sections.map((s, i) => (
+          <span
+            key={s.id}
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              done.has(s.id) ? "bg-[#30b15a]" : i === currentIndex ? "bg-brand-600" : "bg-[#d1d1d6]"
+            }`}
           />
-        </div>
+        ))}
+        {examRequired && (
+          <span
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              passed ? "bg-[#30b15a]" : examOpen ? "bg-brand-600" : "bg-[#d1d1d6]"
+            }`}
+          />
+        )}
       </div>
 
-      {/* Telefonda raf içeriğin ÜSTÜNE yığılıyor: bütün bölüm listesini
-          geçmeden eğitime ulaşılamıyordu. Kapalı başlar, ilerleme çubuğu
-          yukarıda görünmeye devam eder. Masaüstünde her zaman açık. */}
+      {/* Telefonda liste içeriğin ÜSTÜNE yığılıyor: bütün listeyi geçmeden
+          eğitime ulaşılamıyordu. Kapalı başlar; çubuk üstte görünmeye devam eder. */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="lg:hidden w-full flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+        className="lg:hidden w-full flex items-center justify-between rounded-xl bg-white px-3 py-2.5 text-[13px] font-medium text-slate-800"
       >
-        <span>
-          Sections
-          <span className="ml-1.5 font-normal text-slate-400">
-            {Math.min(viewIndex + 1, total)}/{total}
+        <span className="text-left leading-snug">
+          {viewIndex >= 0 ? sections[viewIndex]?.title : "Exam"}
+          <span className="ml-1.5 text-[#86868b] font-normal">
+            {viewIndex >= 0 ? viewIndex + 1 : total}/{total}
           </span>
         </span>
-        <span className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+        <span className={`text-[#c7c7cc] transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
       </button>
 
-      <div className={open ? "" : "hidden lg:block"}>
-      <div className="hidden lg:block text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
-        Sections
-      </div>
-      {sections.map((s, i) => {
-        const isDone = done.has(s.id);
-        const isCurrent = i === currentIndex;
-        const isViewed = i === viewIndex;
-        return (
-          <button
-            key={s.id}
-            onClick={() => {
-              onSelect(isCurrent ? null : s.id);
-              setOpen(false);
-            }}
-            title={s.title}
-            className={`w-full text-left flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] transition ${
-              isViewed
-                ? "bg-slate-100 text-slate-900 font-semibold"
-                : isDone
-                ? "text-slate-600 hover:bg-slate-50"
-                : "text-slate-400 hover:bg-slate-50"
-            }`}
-          >
-            {bubble(
-              isDone ? "done" : isCurrent ? "current" : "locked",
-              isDone ? "✓" : isCurrent ? String(i + 1) : String(i + 1)
-            )}
-            <span className="min-w-0 truncate">{s.title}</span>
-          </button>
-        );
-      })}
+      <div className={open ? "mt-3" : "hidden lg:block"}>
+        <div className="text-[11px] uppercase tracking-[0.04em] text-[#86868b] px-2.5 pb-1.5">Sections</div>
+        <div className="rounded-xl bg-white overflow-hidden">
+          {sections.map((s, i) => {
+            const isDone = done.has(s.id);
+            const isCurrent = i === currentIndex;
+            return row({
+              key: s.id,
+              kind: isDone ? "done" : isCurrent ? "current" : "todo",
+              label: isDone ? "✓" : String(i + 1),
+              title: s.title,
+              sub: isDone ? "Completed" : isCurrent ? "In progress" : "Not started",
+              active: i === viewIndex,
+              disabled: examActive,
+              hint: examActive ? "Finish the exam first" : undefined,
+              onClick: () => onSelect(isCurrent ? null : s.id),
+            });
+          })}
+        </div>
 
-      {examRequired && (
-        <>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400 px-2.5 pt-2.5 pb-1">
-            Assessment
-          </div>
-          <div
-            className={`flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[12.5px] ${
-              passed
-                ? "text-slate-600"
-                : examOpen
-                ? "bg-slate-100 text-slate-900 font-semibold"
-                : "text-slate-400"
-            }`}
-          >
-            {bubble(passed ? "done" : examOpen ? "current" : "locked", passed ? "✓" : examOpen ? "!" : "🔒")}
-            <span className="min-w-0 truncate">Exam</span>
-          </div>
-        </>
-      )}
+        {examRequired && (
+          <>
+            <div className="text-[11px] uppercase tracking-[0.04em] text-[#86868b] px-2.5 pt-3.5 pb-1.5">
+              Assessment
+            </div>
+            <div className="rounded-xl bg-white overflow-hidden">
+              {row({
+                key: "exam",
+                kind: examKind,
+                label: examKind === "done" ? "✓" : "★",
+                title: "Exam",
+                sub: examSub,
+                active: (examOpen || passed) && viewIndex < 0,
+                disabled: !examOpen && !passed,
+                onClick: () => onSelect(null),
+              })}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -848,15 +1093,33 @@ function ContentViewer({
         />
       )}
       {item.type === "SCORM" && (
-        <ScormPlayer
-          src={`${SCORM_SERVE_BASE}/${item.basePath}${item.entryPoint}`}
-          fileName={item.fileName}
-          onDone={onDone}
-          assignmentId={assignmentId}
-          contentId={item.id}
-        />
+        <ScormContent item={item} onDone={onDone} assignmentId={assignmentId} />
       )}
     </div>
+  );
+}
+
+/** SCORM, kursa özel erişim anahtarı alındıktan sonra açılır. */
+function ScormContent({
+  item,
+  onDone,
+  assignmentId,
+}: {
+  item: Extract<Content, { type: "SCORM" }>;
+  onDone: () => void;
+  assignmentId?: string;
+}) {
+  const { src, err } = useScormSrc(SCORM_SERVE_BASE, item.basePath, item.entryPoint);
+  if (err) return <p className="text-sm text-red-600">Content could not be opened: {err}</p>;
+  if (!src) return <p className="text-sm text-slate-400">Loading…</p>;
+  return (
+    <ScormPlayer
+      src={src}
+      fileName={item.fileName}
+      onDone={onDone}
+      assignmentId={assignmentId}
+      contentId={item.id}
+    />
   );
 }
 

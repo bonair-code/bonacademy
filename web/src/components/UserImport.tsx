@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../lib/firebase";
+import { MAIL_ENABLED } from "../lib/features";
 import {
   downloadUserTemplate,
   parseUserWorkbook,
@@ -9,7 +10,7 @@ import {
   type Ref,
 } from "../lib/userExcel";
 
-type Outcome = { user: ParsedUser; ok: boolean; error?: string };
+type Outcome = { user: ParsedUser; ok: boolean; error?: string; /** Davet e-postası gitti mi (yalnızca şifresiz satırlar). */ invited?: boolean };
 
 /**
  * Excel'den toplu kullanıcı oluşturma. Auth hesabı Function üzerinden açıldığı
@@ -65,7 +66,11 @@ export function UserImport({
     const out: Outcome[] = [];
     for (const u of parsed.users) {
       try {
-        await fn({
+        // Dosyada şifresi olmayana davet e-postası gider: şifresini kendisi
+        // belirler. Posta KAPALIYKEN davet gidemez; o satırlar üretilen geçici
+        // şifreyle açılır ve şifreler aşağıda listelenir — yoksa hesap ne
+        // davet alır ne şifresi olur, yani hiç girilemez.
+        const r = await fn({
           email: u.email,
           name: u.name,
           role: u.role,
@@ -74,9 +79,10 @@ export function UserImport({
           company: u.company,
           birthPlace: u.birthPlace,
           birthDate: u.birthDate,
-          password: u.password,
+          ...(u.generatedPassword && MAIL_ENABLED ? { invite: true } : { password: u.password }),
         });
-        out.push({ user: u, ok: true });
+        const inv = (r.data as { invite?: { ok: boolean } | null }).invite;
+        out.push({ user: u, ok: true, invited: inv ? inv.ok : undefined });
       } catch (e) {
         out.push({ user: u, ok: false, error: (e as Error).message });
       }
@@ -92,7 +98,11 @@ export function UserImport({
   if (results) {
     const ok = results.filter((r) => r.ok);
     const failed = results.filter((r) => !r.ok);
-    const generated = ok.filter((r) => r.user.generatedPassword);
+    const invited = ok.filter((r) => r.invited === true);
+    const inviteFailed = ok.filter((r) => r.invited === false);
+    // Posta kapalıyken dosyada şifresi olmayanlara üretilen şifreler: admin
+    // bunları elden iletmek zorunda, bir daha gösterilmez.
+    const generated = MAIL_ENABLED ? [] : ok.filter((r) => r.user.generatedPassword);
     // Dosyadan okunan toplam satır — "25 / 65" gibi ilerleme gösterebilmek için.
     const total = parsed?.users.length ?? results.length;
     const pct = total > 0 ? Math.round((progress / total) * 100) : 0;
@@ -111,7 +121,7 @@ export function UserImport({
           <div className="mt-1.5 h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
             <div
               className="h-full rounded-full transition-[width] duration-200"
-              style={{ width: `${pct}%`, background: busy ? "#e8630a" : "#10b981" }}
+              style={{ width: `${pct}%`, background: busy ? "#e31e24" : "#10b981" }}
             />
           </div>
 
@@ -122,7 +132,7 @@ export function UserImport({
             {failed.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">{failed.length} failed</span>
+                <span className="text-red-700 font-semibold">{failed.length} failed</span>
               </>
             )}
             {busy && total - progress > 0 && (
@@ -134,9 +144,9 @@ export function UserImport({
         {failed.length > 0 && (
           <div className="mb-3">
             <div className="label">Failed rows</div>
-            <ul className="max-h-32 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5">
+            <ul className="max-h-32 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5">
               {failed.map((r) => (
-                <li key={r.user.email} className="text-[11px] text-brand-700">
+                <li key={r.user.email} className="text-[11px] text-red-700">
                   {r.user.email}: {r.error}
                 </li>
               ))}
@@ -146,33 +156,48 @@ export function UserImport({
 
         {generated.length > 0 && (
           <div className="mb-3">
-            <div className="label">Generated passwords — copy before closing</div>
-            <p className="text-[10px] text-slate-500 mb-1">
-              These rows had no password in the file. They are shown once, here.
-            </p>
-            <div className="max-h-40 overflow-auto rounded-md border border-slate-200">
-              <table className="w-full text-[12px]">
-                <tbody className="divide-y divide-slate-100">
-                  {generated.map((r) => (
-                    <tr key={r.user.email}>
-                      <td className="px-2 py-1 text-slate-700">{r.user.email}</td>
-                      <td className="px-2 py-1 font-mono text-slate-900">{r.user.password}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex items-baseline justify-between gap-3">
+              <div className="label">Passwords to pass on</div>
+              <button
+                type="button"
+                onClick={() =>
+                  navigator.clipboard.writeText(
+                    generated.map((r) => `${r.user.email}\t${r.user.password}`).join("\n")
+                  )
+                }
+                className="text-[11px] font-semibold text-brand-700 hover:text-brand-800"
+              >
+                Copy all
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  generated.map((r) => `${r.user.email}\t${r.user.password}`).join("\n")
-                )
-              }
-              className="mt-2 text-[11px] font-semibold text-brand-700 hover:underline"
-            >
-              Copy all to clipboard
-            </button>
+            <p className="text-[11px] text-slate-500 mb-1">
+              Email is off, so no invitations were sent. These are shown once — copy them now. Each
+              person is asked to choose their own password at first sign-in.
+            </p>
+            <ul className="max-h-40 overflow-auto rounded-md bg-slate-50 border border-slate-200 p-2 space-y-0.5">
+              {generated.map((r) => (
+                <li key={r.user.email} className="text-[11px] font-mono text-slate-700 tabular-nums">
+                  {r.user.email} — {r.user.password}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {(invited.length > 0 || inviteFailed.length > 0) && (
+          <div className="mb-3 rounded-md border border-slate-200 bg-slate-50/70 p-2.5 text-[12px] text-slate-700">
+            {invited.length > 0 && (
+              <p>
+                <b>{invited.length}</b> invitation email{invited.length === 1 ? "" : "s"} sent — they set their own
+                password from the link.
+              </p>
+            )}
+            {inviteFailed.length > 0 && (
+              <p className="text-red-700 mt-1">
+                {inviteFailed.length} invitation{inviteFailed.length === 1 ? "" : "s"} could not be sent (
+                {inviteFailed.map((r) => r.user.email).join(", ")}). Use “Send invitation” on those users later.
+              </p>
+            )}
           </div>
         )}
 
@@ -234,7 +259,7 @@ export function UserImport({
             {parsed.errors.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">
+                <span className="text-red-700 font-semibold">
                   {parsed.errors.length} skipped
                 </span>
               </>
@@ -242,9 +267,9 @@ export function UserImport({
           </div>
 
           {parsed.errors.length > 0 && (
-            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5">
+            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5">
               {parsed.errors.map((e) => (
-                <li key={e.row} className="text-[11px] text-brand-700">
+                <li key={e.row} className="text-[11px] text-red-700">
                   Row {e.row}: {e.message}
                 </li>
               ))}
@@ -260,7 +285,7 @@ export function UserImport({
                     <th className="th !py-1.5">Email</th>
                     <th className="th !py-1.5">Role</th>
                     <th className="th !py-1.5">Authorisation Scope(s)</th>
-                    <th className="th !py-1.5">Password</th>
+                    <th className="th !py-1.5">Sign-in</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -286,7 +311,7 @@ export function UserImport({
                         )}
                       </td>
                       <td className="px-3 py-1 text-slate-400">
-                        {u.generatedPassword ? "auto" : "from file"}
+                        {u.generatedPassword ? (MAIL_ENABLED ? "email invitation" : "auto password") : "from file"}
                       </td>
                     </tr>
                   ))}
@@ -314,7 +339,7 @@ export function UserImport({
         </div>
       )}
 
-      {err && <p className="mt-2 text-xs text-brand-700">{err}</p>}
+      {err && <p className="mt-2 text-xs text-red-700">{err}</p>}
     </div>
   );
 }

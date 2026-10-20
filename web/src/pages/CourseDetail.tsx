@@ -1,4 +1,5 @@
 import { PageHead } from "../components/PageHead";
+import { safeFileUrl } from "../lib/safeUrl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -7,6 +8,7 @@ import {
   deleteDoc,
   deleteField,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -17,7 +19,8 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
-import { db, functions, storage } from "../lib/firebase";
+import { db, functions, storage, FUNCTIONS_BASE } from "../lib/firebase";
+import { useScormSrc } from "../lib/scormAccess";
 import { coverTone } from "../lib/coverTone";
 import { asLang, LANGS, LANG_LABEL, ofLang, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
@@ -49,6 +52,12 @@ type Course = {
   coverUrl: string | null;
   coverPath: string | null;
   durationHours: number | null;
+  /**
+   * Eğitmenin ad-soyadı — elle yazılır ya da listeden seçilir. Kursun sahibi
+   * (ownerInstructorId, düzenleme yetkisi) DEĞİŞMEZ; bu yalnızca öğrenci
+   * kartında görünen ad. Firestore'da `ownerInstructorName` alanında durur.
+   */
+  instructorName: string;
   delivery: Delivery;
   /** Revizyon elle girilir — havacılık dokümanlarında numarayı kurum belirler. */
   revisionNo: string;
@@ -148,6 +157,23 @@ export function CourseDetail() {
   const [coverBusy, setCoverBusy] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
 
+  // Eğitmen alanının öneri listesi: Instructor ve Admin rolündeki kişiler.
+  // Okuma yetkisi yoksa liste boş kalır, alan yine elle yazılabilir.
+  const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, "users"))
+      .then((s) =>
+        setInstructorOptions(
+          s.docs
+            .map((d) => d.data() as { name?: string; role?: string; isActive?: boolean })
+            .filter((u) => u.name && u.isActive !== false && (u.role === "INSTRUCTOR" || u.role === "ADMIN"))
+            .map((u) => u.name as string)
+            .sort((a, b) => a.localeCompare(b, "tr"))
+        )
+      )
+      .catch(() => setInstructorOptions([]));
+  }, []);
+
   useEffect(() => {
     if (!id) return;
     const unC = onSnapshot(doc(db, "courses", id), (d) => {
@@ -159,6 +185,7 @@ export function CourseDetail() {
         coverUrl: data.coverUrl ?? null,
         coverPath: data.coverPath ?? null,
         durationHours: data.durationHours ?? null,
+        instructorName: (data as { ownerInstructorName?: string | null }).ownerInstructorName ?? "",
         delivery: data.delivery ?? "ONLINE",
         revisionNo: data.revisionNo ?? "",
         revisionDate: data.revisionDate ?? null,
@@ -274,6 +301,7 @@ export function CourseDetail() {
         title: c.title.trim(),
         category: c.category?.trim() || null,
         durationHours: c.durationHours ?? null,
+        ownerInstructorName: c.instructorName.trim() || null,
         delivery: c.delivery,
         revisionNo: c.revisionNo.trim(),
         revisionDate: c.revisionDate || null,
@@ -569,6 +597,20 @@ export function CourseDetail() {
               placeholder="e.g. Safety / Quality"
             />
           </Field>
+          <Field label="Instructor">
+            <input
+              className="input"
+              list="course-instructors"
+              value={c.instructorName}
+              onChange={(e) => set("instructorName", e.target.value)}
+              placeholder="Name Surname — pick from the list or type"
+            />
+            <datalist id="course-instructors">
+              {instructorOptions.map((n) => (
+                <option key={n} value={n} />
+              ))}
+            </datalist>
+          </Field>
           <Field label="Revision No">
             <input
               className="input"
@@ -750,6 +792,7 @@ export function CourseDetail() {
             }
           />
           <SummaryRow label="Category" value={c.category || "—"} />
+          <SummaryRow label="Instructor" value={c.instructorName.trim() || "—"} />
           <SummaryRow
             label="Validity Period"
             value={recurText(c.recurrenceEvery, c.recurrenceUnit)}
@@ -826,7 +869,7 @@ export function CourseDetail() {
         </button>
         <div className="flex items-center gap-3">
           {saved && <span className="text-xs text-emerald-600 font-semibold">✓ Saved</span>}
-          {err && <span className="text-xs text-brand-700">{err}</span>}
+          {err && <span className="text-xs text-red-700">{err}</span>}
           {atIdx < stepNos.length - 1 ? (
             <button
               onClick={async () => {
@@ -1149,7 +1192,7 @@ function Sections({ courseId, lang }: { courseId: string; lang: Lang }) {
           Add Section
         </button>
       </form>
-      {err && <p className="text-xs text-brand-700 mb-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mb-3">{err}</p>}
 
       {rows.length === 0 && (
         <p className="text-sm text-slate-400 text-center py-3">No sections yet.</p>
@@ -1212,7 +1255,7 @@ function Sections({ courseId, lang }: { courseId: string; lang: Lang }) {
                 </button>
                 <button
                   onClick={() => remove(s.id)}
-                  className="text-[11px] text-brand-700 hover:underline px-2"
+                  className="text-[11px] text-red-700 hover:underline px-2"
                 >
                   Delete
                 </button>
@@ -1459,7 +1502,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
       )}
 
       {msg && <p className="text-xs text-emerald-600 mt-2">✓ {msg}</p>}
-      {err && <p className="text-xs text-brand-700 mt-2">{err}</p>}
+      {err && <p className="text-xs text-red-700 mt-2">{err}</p>}
     </div>
   );
 }
@@ -1490,8 +1533,7 @@ function ContentItem({ item, onRemove }: { item: SectionContent; onRemove: () =>
 }
 
 // SCORM/içerik servis eden Cloud Function'ın taban URL'i (aynı-origin dizin servisi).
-const SCORM_SERVE_BASE =
-  "https://europe-west3-bonair-academy.cloudfunctions.net/serveScormContent";
+const SCORM_SERVE_BASE = `${FUNCTIONS_BASE}/serveScormContent`;
 
 function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => void }) {
   return (
@@ -1517,17 +1559,17 @@ function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => 
         </div>
         <div className="p-4">
           {item.type === "VIDEO" && (
-            <video controls autoPlay src={item.url} className="w-full rounded bg-black" />
+            <video controls autoPlay src={safeFileUrl(item.url) ?? undefined} className="w-full rounded bg-black" />
           )}
           {item.type === "PDF" && (
             <div>
               <iframe
-                src={item.url}
+                src={safeFileUrl(item.url) ?? undefined}
                 className="w-full h-[68vh] rounded border border-slate-200"
                 title={item.fileName}
               />
               <a
-                href={item.url}
+                href={safeFileUrl(item.url) ?? "#"}
                 target="_blank"
                 rel="noreferrer"
                 className="text-[11px] text-sky-700 hover:underline mt-1 inline-block"
@@ -1536,21 +1578,32 @@ function PreviewModal({ item, onClose }: { item: SectionContent; onClose: () => 
               </a>
             </div>
           )}
-          {item.type === "SCORM" && (
-            <div>
-              <iframe
-                src={`${SCORM_SERVE_BASE}/${item.basePath}${item.entryPoint}`}
-                className="w-full h-[68vh] rounded border border-slate-200 bg-white"
-                title={item.fileName}
-              />
-              <p className="text-[11px] text-slate-400 mt-1">
-                Entry: {item.entryPoint} ({item.version === "SCORM_2004" ? "2004" : "1.2"}) ·
-                If it appears blank, the Cloud Function may not be deployed yet.
-              </p>
-            </div>
-          )}
+          {item.type === "SCORM" && <ScormPreview item={item} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ScormPreview({ item }: { item: Extract<SectionContent, { type: "SCORM" }> }) {
+  const { src, err } = useScormSrc(SCORM_SERVE_BASE, item.basePath, item.entryPoint);
+  return (
+    <div>
+      {src ? (
+        <iframe
+          src={src}
+          className="w-full h-[68vh] rounded border border-slate-200 bg-white"
+          title={item.fileName}
+        />
+      ) : (
+        <p className={`text-sm ${err ? "text-red-600" : "text-slate-400"}`}>
+          {err ? `Content could not be opened: ${err}` : "Loading…"}
+        </p>
+      )}
+      <p className="text-[11px] text-slate-400 mt-1">
+        Entry: {item.entryPoint} ({item.version === "SCORM_2004" ? "2004" : "1.2"}) ·
+        If it appears blank, the Cloud Function may not be deployed yet.
+      </p>
     </div>
   );
 }
@@ -1671,7 +1724,7 @@ function BulkImport({
             {parsed.errors.length > 0 && (
               <>
                 {" · "}
-                <span className="text-brand-700 font-semibold">
+                <span className="text-red-700 font-semibold">
                   {parsed.errors.length} skipped
                 </span>
               </>
@@ -1679,9 +1732,9 @@ function BulkImport({
           </div>
 
           {parsed.errors.length > 0 && (
-            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-brand-50/60 border border-brand-100 p-2 space-y-0.5">
+            <ul className="mb-3 max-h-32 overflow-auto rounded-md bg-red-50/60 border border-red-100 p-2 space-y-0.5">
               {parsed.errors.map((e) => (
-                <li key={e.row} className="text-[11px] text-brand-700">
+                <li key={e.row} className="text-[11px] text-red-700">
                   Row {e.row}: {e.message}
                 </li>
               ))}
@@ -1711,7 +1764,7 @@ function BulkImport({
       )}
 
       {msg && <p className="mt-2 text-xs text-emerald-600 font-semibold">✓ {msg}</p>}
-      {err && <p className="mt-2 text-xs text-brand-700">{err}</p>}
+      {err && <p className="mt-2 text-xs text-red-700">{err}</p>}
     </div>
   );
 }
@@ -1819,7 +1872,7 @@ function QuestionBank({
               </div>
               <button
                 onClick={() => remove(q.id)}
-                className="text-[11px] text-brand-700 hover:underline shrink-0"
+                className="text-[11px] text-red-700 hover:underline shrink-0"
               >
                 Delete
               </button>

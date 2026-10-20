@@ -10,6 +10,7 @@ export default defineConfig({
       // aynı origin'den servis edilmek zorunda. Canlıda firebase.json'daki
       // hosting rewrite bunu yapıyor, geliştirmede de burada vekilliyoruz.
       "/scorm-content": {
+        // firebase.ts'deki PROJECT_ID ile aynı olmalı.
         target: "https://europe-west3-bonair-academy.cloudfunctions.net",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/scorm-content/, "/serveScormContent"),

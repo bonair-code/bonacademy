@@ -100,3 +100,34 @@ export function exclusionFor(
   }
   return null;
 }
+
+/**
+ * Bu kapsam/alt yetki bileşiminin zorunlu kıldığı eğitimlerin kimlikleri.
+ *
+ * `requirementFor` ile AYNI kuralları uygular, yalnız tek tek kurs sormak
+ * yerine kümeyi bir kerede verir: kullanıcı formunda "bu seçim kaç eğitim
+ * getiriyor" yazabilmek için gerekli. İkisi birlikte değişmeli — kural
+ * sırası da aynı: önce muafiyet, sonra kapsam, sonra tikli alt yetki.
+ */
+export function requiredCourseIdsFor(
+  scopeIds: string[],
+  scopes: Scope[],
+  subScopeIds: string[] = []
+): Set<string> {
+  const held = new Set(subScopeIds);
+  const out = new Set<string>();
+  const excluded = new Set<string>();
+  for (const s of scopes) {
+    if (!scopeIds.includes(s.id)) continue;
+    for (const id of s.requiredCourseIds ?? []) out.add(id);
+    for (const sub of s.subScopes ?? []) {
+      if (!held.has(sub.id)) continue;
+      for (const id of sub.requiredCourseIds ?? []) out.add(id);
+      for (const id of sub.excludedCourseIds ?? []) excluded.add(id);
+    }
+  }
+  // Muafiyet her şeyden önce gelir (bkz. requirementFor): başka bir kapsam
+  // aynı eğitimi zorunlu tutsa bile düşer.
+  for (const id of excluded) out.delete(id);
+  return out;
+}

@@ -17,6 +17,7 @@ import { TrainingMatrix } from "./pages/TrainingMatrix";
 import { StaffDetail } from "./pages/StaffDetail";
 import { ClassSessions, ClassSessionDetail } from "./pages/ClassSessions";
 import { JoinSession } from "./pages/JoinSession";
+import { Invite } from "./pages/Invite";
 import { CertificateView } from "./pages/CertificateView";
 import { Onboarding } from "./pages/Onboarding";
 import { Placeholder } from "./pages/Placeholder";
@@ -43,6 +44,13 @@ function Only({ roles, children }: { roles: Role[]; children: React.ReactNode })
 }
 
 const STAFF_VIEW: Role[] = ["ADMIN", "MANAGER", "INSTRUCTOR"];
+
+/** "/certificates": personel kendi tam kaydını, müşteri sade listeyi görür. */
+function MyRecord() {
+  const { role } = useAuth();
+  if (!role) return null;
+  return role === "CUSTOMER" ? <Certificates /> : <StaffDetail self />;
+}
 const TRAINING_ADMIN: Role[] = ["ADMIN", "INSTRUCTOR"];
 
 function AuthedApp() {
@@ -56,7 +64,11 @@ function AuthedApp() {
         {/* Herkes — müşteri dahil: kendi eğitimi ve kendi belgeleri */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/learn/:id" element={<Learn />} />
-        <Route path="/certificates" element={<Certificates />} />
+        {/* Kendi kaydım. Personel için bu, Users/Follow-Up'tan açılan kişi
+            sayfasının ta kendisi: aynı bilgiyi iki ekranda tutmak ikisinin de
+            kaymasına yol açıyordu. Müşteride departman ve yetki kapsamı yok
+            (kurallar da ikisini ona kapatıyor), ona sade liste kalıyor. */}
+        <Route path="/certificates" element={<MyRecord />} />
         <Route path="/certificate/:certId" element={<CertificateView />} />
 
         <Route
@@ -160,7 +172,7 @@ export function App() {
   // İlk giriş: şifre ve eksik profil tamamlanmadan uygulamaya girilemez.
   // Herkese açık rotalar (doğrulama, yoklama) bundan etkilenmez.
   const path = window.location.pathname;
-  const isPublic = path.startsWith("/verify") || path.startsWith("/join");
+  const isPublic = path.startsWith("/verify") || path.startsWith("/join") || path.startsWith("/invite");
   if (user && !isPublic && needsOnboarding(profile)) return <Onboarding />;
 
   return (
@@ -170,6 +182,8 @@ export function App() {
       <Route path="/verify" element={<Verify />} />
       {/* Yoklama formu — giriş gerektirmez, link parolanın kendisidir */}
       <Route path="/join/:sessionId" element={<JoinSession />} />
+      {/* Davet e-postasındaki "şifremi belirle" bağlantısı */}
+      <Route path="/invite/:token" element={<Invite />} />
       <Route path="/login" element={user ? <Navigate to="/dashboard" replace /> : <Login />} />
       <Route
         path="/*"

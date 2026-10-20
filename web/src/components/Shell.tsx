@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAuth, type Role } from "../lib/auth";
 import { PageHeadProvider, usePageHead } from "./PageHead";
 import { ReportFootnote, ReportLetterhead } from "./ReportSheet";
+import { ORG } from "../lib/org";
 
 /**
  * Menü ikonları. Tek çizgi kalınlığı (1.8) ve aynı 24'lük kutu — SF Symbols
@@ -87,8 +88,10 @@ const ALL: Role[] = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", roles: ALL, group: "General", icon: Icon.dashboard },
   {
+    // Artik yalniz sertifika degil, kisinin tam kaydi: egitimler, eksikler,
+    // sertifikalar, dis kayitlar ve atamalar. Musteride sade liste kaliyor.
     to: "/certificates",
-    label: "My Certificates",
+    label: "My Record",
     roles: ALL,
     group: "General",
     icon: Icon.certificate,
@@ -161,6 +164,7 @@ export function Shell({ children }: { children: ReactNode }) {
 }
 
 function ShellLayout({ children }: { children: ReactNode }) {
+  // Giriş uçuşundan gelindiyse panel yumuşak belirir; bir kez oynar.
   const { profile, role, signOut } = useAuth();
   const head = usePageHead();
   const r = role ?? "USER";
@@ -186,7 +190,16 @@ function ShellLayout({ children }: { children: ReactNode }) {
       if (e.key === "Escape") setNavOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Menü açıkken arkadaki sayfa kaymasın: telefonda parmak menüde ya da
+    // karartmada gezinirken sayfa kayıyor, Safari çubukları da onunla birlikte
+    // açılıp kapanıp menüyü oynatıyordu.
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      html.style.overflow = prev;
+    };
   }, [navOpen]);
 
   return (
@@ -196,7 +209,7 @@ function ShellLayout({ children }: { children: ReactNode }) {
           sayfa kullanılabilir değildi. */}
       {navOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden no-print"
+          className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden no-print touch-none"
           onClick={() => setNavOpen(false)}
           aria-hidden
         />
@@ -204,40 +217,39 @@ function ShellLayout({ children }: { children: ReactNode }) {
 
       {/* Uzun listelerde menü yukarıda kalmasın — ekranda sabit durur, yalnızca
           içerik kayar. Menünün kendisi taşarsa kendi içinde kayar. */}
-      {/* Nötr grafit zemin. Marka kırmızısı menünün tamamını kaplamak yerine
-          yalnızca aktif maddeyi işaretliyor; böylece tablolardaki kırmızı
-          uyarılarla yarışmıyor. */}
+      {/* Koyu lacivert zemin (logonun rengi). Aktif madde koyu zeminde okunan
+          açık bir lacivertle işaretleniyor; kırmızı yalnızca tablolardaki
+          uyarılara kalıyor. */}
       <aside
-        className={`w-[232px] shrink-0 flex flex-col h-screen z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
+        className={`w-[232px] shrink-0 flex flex-col h-screen h-[100dvh] z-50 fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0 lg:z-auto ${
           navOpen ? "translate-x-0" : "-translate-x-full"
         }`}
-        style={{ background: "#1c1c1e", borderRight: "1px solid rgba(255,255,255,.07)" }}
+        style={{
+          background: "linear-gradient(180deg, #2a2a2e 0%, var(--sidebar-bg) 60%)",
+          borderRight: "1px solid rgba(255,255,255,.07)",
+        }}
       >
-        {/* Antet bandı: logo koyu metinli olduğu için beyaz zemine oturmak
-            zorunda. Kart yerine tam genişlikte bir bant — basılı evraktaki
-            antet mantığı, logo da en büyük burada duruyor. */}
-        <div className="bg-white px-3.5 py-4 flex items-center justify-center">
-          <img src="/Logo.png" alt="Bon Air" className="h-[38px] w-auto" />
-        </div>
-
-        <div className="flex items-center gap-2 px-4 pt-3 pb-0.5">
-          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+        {/* Logo giriş ekranındaki gibi: beyaz, kutusuz, ortalı. Altında iki ucu
+            eriyen ince çizgi (eski "CAPELLA ACADEMY / TRAINING MANAGEMENT
+            SYSTEM" yazılarının yerine). */}
+        {/* Telefonda sayfa durum çubuğunun altına kadar uzanıyor (viewport-fit=cover):
+            logo onun altında kalmasın. */}
+        <div className="flex flex-col items-center px-4 pt-6 max-lg:pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-3">
+          {/* Logo-mono: beyaz siluet, saydam zemin. Logo.png koyu metinli ve
+              zemini OPAK BEYAZ; ona filtre uygulayinca yazi da zemin de ayni
+              beyaza donuyor ve logo kayboluyordu. */}
+          <img src="/Logo-mono.png" alt={ORG.name} className="h-[38px] w-auto" />
           <span
-            className="text-[8.5px] font-bold whitespace-nowrap"
-            style={{ color: "#98989d", letterSpacing: "0.15em" }}
-          >
-            BONACADEMY
-          </span>
-          <span className="flex-1 h-px" style={{ background: "rgba(255,255,255,.14)" }} />
+            className="mt-4 h-px w-full"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent, rgba(227,30,36,.75) 30%, rgba(227,30,36,.75) 70%, transparent)",
+            }}
+            aria-hidden
+          />
         </div>
-        <p
-          className="text-center text-[8.5px] font-bold uppercase px-3 pb-1"
-          style={{ color: "#98989d", letterSpacing: "0.15em", lineHeight: 1.6 }}
-        >
-          Training Management System
-        </p>
 
-        <nav className="flex-1 pb-3 overflow-y-auto">
+        <nav className="flex-1 min-h-0 pb-3 overflow-y-auto overscroll-contain sidebar-scroll">
           {GROUP_ORDER.map((g) => {
             const inGroup = items.filter((n) => n.group === g);
             if (inGroup.length === 0) return null;
@@ -259,42 +271,12 @@ function ShellLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
-        {/* Kimlik bloğu buraya taşındı — üst barda ikinci kez göstermek
-            gereksizdi. Çıkış da kimliğin yanında duruyor. */}
-        <div className="px-2 py-2" style={{ borderTop: "1px solid rgba(255,255,255,.08)" }}>
-          <div className="flex items-center gap-[9px] px-2 py-1.5 rounded-[10px]">
-            <div
-              className="h-[26px] w-[26px] rounded-full grid place-items-center text-[10.5px] font-bold shrink-0"
-              style={{ background: "rgba(227,30,36,.22)", color: "#ff6b6f" }}
-            >
-              {initials || "?"}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[12.5px] font-semibold text-white leading-tight truncate">
-                {profile?.name || "User"}
-              </div>
-              <div className="text-[10.5px] leading-tight truncate" style={{ color: "#98989d" }}>
-                {ROLE_LABEL[r]}
-              </div>
-            </div>
-            <button
-              onClick={() => signOut()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="shrink-0 h-7 w-7 grid place-items-center rounded-lg text-white/55 hover:text-white hover:bg-white/10 transition"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-4 w-4"
-              >
-                <path d="M15 17l5-5-5-5M20 12H9M12 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h6" />
-              </svg>
-            </button>
-          </div>
-        </div>
+        <AccountRow
+          name={profile?.name || "User"}
+          role={ROLE_LABEL[r]}
+          initials={initials || "?"}
+          onSignOut={() => signOut()}
+        />
       </aside>
 
       <main className="flex-1 min-w-0 flex flex-col">
@@ -339,6 +321,98 @@ function ShellLayout({ children }: { children: ReactNode }) {
           <ReportFootnote />
         </div>
       </main>
+    </div>
+  );
+}
+
+/**
+ * Menünün altındaki hesap satırı: küçük avatar, ad, rol ve güç simgesi.
+ * Simgeye basınca aynı satırda "Sign out?" onayı çıkar — tek dokunuşla
+ * yanlışlıkla çıkış yapılmasın. Esc ya da Cancel onayı kapatır.
+ *
+ * Telefonda tarayıcının alttaki (yüzen) araç çubuğu bu bölümün üstüne
+ * biniyordu; güvenli alan + çubuk payı bırakılıyor (iOS 26 Safari'nin yüzen
+ * çubuğu ~90 pt — 4.5rem yetmiyordu, satır çubuğun arkasında kalıyordu).
+ */
+function AccountRow({
+  name,
+  role,
+  initials,
+  onSignOut,
+}: {
+  name: string;
+  role: string;
+  initials: string;
+  onSignOut: () => void;
+}) {
+  const [ask, setAsk] = useState(false);
+  useEffect(() => {
+    if (!ask) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setAsk(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [ask]);
+  return (
+    <div className="px-2 pt-1.5 pb-2.5 max-lg:pb-[calc(env(safe-area-inset-bottom)+6.5rem)]">
+      <div
+        className="relative flex items-center gap-2 px-2 py-2"
+        style={{ borderTop: "1px solid rgba(255,255,255,.07)" }}
+      >
+        <div
+          className="h-6 w-6 rounded-full grid place-items-center text-[9.5px] font-bold shrink-0"
+          style={{ background: "rgba(227,30,36,.22)", color: "#ff6b6f" }}
+        >
+          {initials}
+        </div>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="text-[12px] font-semibold truncate" style={{ color: "#f2f2f7" }}>
+            {name}
+          </div>
+          <div className="text-[10px] truncate" style={{ color: "#98989d" }}>
+            {role}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setAsk(true)}
+          title="Sign out"
+          aria-label="Sign out"
+          className="shrink-0 h-[26px] w-[26px] grid place-items-center rounded-full transition text-[#98989d] hover:text-[#ff6b6f] hover:bg-[rgba(227,30,36,.22)]"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" className="h-[15px] w-[15px]" aria-hidden>
+            <path d="M12 3v8M6.3 6.3a8 8 0 1 0 11.4 0" />
+          </svg>
+        </button>
+
+        {/* Satır içi onay */}
+        <div
+          role="dialog"
+          aria-label="Sign out?"
+          className={`absolute inset-x-0 inset-y-1 flex items-center gap-1.5 px-1.5 rounded-[10px] transition-opacity duration-150 ${
+            ask ? "opacity-100" : "opacity-0 pointer-events-none"
+          }`}
+          style={{ background: "#2c2c2e" }}
+        >
+          <span className="flex-1 pl-1 text-[12px] font-semibold text-white">Sign out?</span>
+          <button
+            type="button"
+            onClick={() => setAsk(false)}
+            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold transition hover:bg-white/15"
+            style={{ background: "rgba(255,255,255,.08)", color: "#d1d1d6" }}
+            tabIndex={ask ? 0 : -1}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="rounded-lg px-2.5 py-[5px] text-[11px] font-semibold text-white bg-[#e31e24] hover:bg-[#c0171c] transition"
+            tabIndex={ask ? 0 : -1}
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

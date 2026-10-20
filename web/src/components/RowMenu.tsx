@@ -18,7 +18,16 @@ const MENU_W = 176;
  * Satır sonundaki üç nokta menüsü. Panel body'ye portal'lanır — tablo kartları
  * `overflow-hidden` taşıdığı için normal `absolute` konumlama kırpılıyordu.
  */
-export function RowMenu({ items, label = "Row actions" }: { items: MenuItem[]; label?: string }) {
+export function RowMenu({
+  items,
+  label = "Row actions",
+  variant = "row",
+}: {
+  items: MenuItem[];
+  label?: string;
+  /** "round": sayfa başlığındaki yuvarlak ⋯ düğmesi (iOS gibi). */
+  variant?: "row" | "round";
+}) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -77,16 +86,34 @@ export function RowMenu({ items, label = "Row actions" }: { items: MenuItem[]; l
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={label}
-        className={`h-7 w-7 inline-flex items-center justify-center rounded-md transition ${
-          open
-            ? "bg-slate-100 text-slate-700"
-            : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-        }`}
+        className={
+          variant === "round"
+            ? `h-9 w-9 inline-flex items-center justify-center rounded-full border transition ${
+                open
+                  ? "bg-slate-100 border-slate-300 text-slate-800"
+                  : "bg-white border-slate-200 text-brand-700 hover:bg-slate-50"
+              }`
+            : `h-7 w-7 inline-flex items-center justify-center rounded-md transition ${
+                open
+                  ? "bg-slate-100 text-slate-700"
+                  : "text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              }`
+        }
       >
         <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor" aria-hidden="true">
-          <circle cx="10" cy="4" r="1.6" />
-          <circle cx="10" cy="10" r="1.6" />
-          <circle cx="10" cy="16" r="1.6" />
+          {variant === "round" ? (
+            <>
+              <circle cx="4" cy="10" r="1.7" />
+              <circle cx="10" cy="10" r="1.7" />
+              <circle cx="16" cy="10" r="1.7" />
+            </>
+          ) : (
+            <>
+              <circle cx="10" cy="4" r="1.6" />
+              <circle cx="10" cy="10" r="1.6" />
+              <circle cx="10" cy="16" r="1.6" />
+            </>
+          )}
         </svg>
       </button>
 
@@ -101,7 +128,7 @@ export function RowMenu({ items, label = "Row actions" }: { items: MenuItem[]; l
           >
             {items.map((it, i) => {
               const cls = `w-full text-left px-3 py-2 text-[13px] flex items-center gap-2.5 transition ${
-                it.danger ? "text-brand-700 hover:bg-brand-50" : "text-slate-700 hover:bg-slate-50"
+                it.danger ? "text-red-700 hover:bg-red-50" : "text-slate-700 hover:bg-slate-50"
               }`;
               const body = (
                 <>

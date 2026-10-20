@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { MAIL_ENABLED } from "../lib/features";
 import { Link } from "react-router-dom";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
@@ -61,6 +62,9 @@ export function Users() {
         snap.docs.map((d) => ({
           id: d.id,
           name: (d.data() as any).name,
+          // Kullanici formu "bu kapsam kac egitim getiriyor" yaziyor; bu alan
+          // yoksa sayi herkeste 0 gorunur (bkz. components/user/types.ts).
+          requiredCourseIds: (d.data() as any).requiredCourseIds ?? [],
           subScopes: (d.data() as any).subScopes ?? [],
         }))
       )
@@ -141,6 +145,17 @@ export function Users() {
         list,
       }));
   }, [sorted, departments]);
+
+  /** Davet e-postasını (yeniden) gönderir; önceki bağlantılar geçersiz olur. */
+  async function sendInvite(u: UserRow) {
+    setToast(`Sending invitation to ${u.email}…`);
+    try {
+      await httpsCallable(functions, "resendInvite")({ uid: u.id });
+      setToast(`Invitation emailed to ${u.email}.`);
+    } catch (e) {
+      setToast((e as Error).message);
+    }
+  }
 
   async function setActive(u: UserRow, isActive: boolean) {
     try {
@@ -269,6 +284,7 @@ export function Users() {
                       onEdit={() => setDialog({ kind: "edit", user: u })}
                       onToggle={() => setActive(u, !u.isActive)}
                       onPassword={() => setDialog({ kind: "password", user: u })}
+                      onInvite={() => sendInvite(u)}
                       onAssign={() => setDialog({ kind: "assign", user: u })}
                       onDelete={() => setDialog({ kind: "delete", user: u })}
                     />
@@ -400,6 +416,7 @@ function UserRowView({
   onEdit,
   onToggle,
   onPassword,
+  onInvite,
   onAssign,
   onDelete,
 }: {
@@ -411,6 +428,7 @@ function UserRowView({
   onEdit: () => void;
   onToggle: () => void;
   onPassword: () => void;
+  onInvite: () => void;
   onAssign: () => void;
   onDelete: () => void;
 }) {
@@ -468,6 +486,17 @@ function UserRowView({
         >
           {u.isActive ? "Active" : "Inactive"}
         </span>
+        {/* Davet gitti ama kişi henüz şifresini belirlemedi. */}
+        {!!u.invitedAt && !u.inviteAcceptedAt && (
+          <span
+            className={`ml-1.5 text-[9.5px] font-bold uppercase tracking-[0.04em] px-2 py-1 rounded ${
+              u.inviteEmailStatus === "FAILED" ? "bg-red-50 text-red-700" : "bg-sky-50 text-sky-700"
+            }`}
+            title={u.inviteEmailStatus === "FAILED" ? "The invitation email could not be sent" : "Invitation sent — password not set yet"}
+          >
+            {u.inviteEmailStatus === "FAILED" ? "Invite failed" : "Invited"}
+          </span>
+        )}
       </td>
       <td className="td text-right no-print">
         {canManage ? (
@@ -482,6 +511,11 @@ function UserRowView({
                 onClick: onToggle,
               },
               { label: "Reset password", icon: "🔑", onClick: onPassword },
+              // Davet: kişi şifresini e-postadaki bağlantıyla belirler. Eski
+              // ortak şifreyle açılmış hesaplara da gönderilebilir.
+              ...(MAIL_ENABLED && isAdmin && !u.inviteAcceptedAt
+                ? [{ label: u.invitedAt ? "Resend invitation" : "Send invitation", icon: "✉", onClick: onInvite }]
+                : []),
               // Eğitim atamak admin ve eğitmenin işi; müdür personelini
               // yönetir ama eğitim atamaz. Sunucu da aynı kuralı uyguluyor.
               ...(isAdmin ? [{ label: "Assign Training", icon: "▤", onClick: onAssign }] : []),

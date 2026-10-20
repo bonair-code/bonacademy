@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { placeCase } from "./text";
 
 export type Role = "ADMIN" | "MANAGER" | "INSTRUCTOR" | "USER" | "CUSTOMER";
 export type Ref = { id: string; name: string };
@@ -63,7 +64,8 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
     { wch: 12 },
     { wch: 28 },
     { wch: 34 },
-    { wch: 18 },
+    { wch: 24 },
+    { wch: 16 },
     { wch: 14 },
     { wch: 20 },
   ];
@@ -73,15 +75,16 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
   const example = XLSX.utils.aoa_to_sheet([
     HEADERS,
     [
-      "Birol TUNÇ",
-      "btunc@bonair.com.tr",
+      "Mehmet DEMİR",
+      "mdemir@bonair.com.tr",
       "Manager",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles.slice(0, 2).map((j) => j.name).join(", ") ||
         "Certifying Staff, Mechanic Technician",
+      "",
       "İstanbul",
       "1985-04-12",
-      "Bonair2026!",
+      "BonAir2026!",
     ],
     [
       "Ayşe YILMAZ",
@@ -89,8 +92,21 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
       "Employee",
       departments[0]?.name ?? "Maintenance Department",
       jobTitles[0]?.name ?? "Technician",
+      "",
       "Ankara",
       "1992-11-03",
+      "",
+    ],
+    // Müşteri: departman ve yetki kapsamı BOŞ, şirket dolu.
+    [
+      "Can KARA",
+      "ckara@example.com",
+      "Customer",
+      "",
+      "",
+      "Example Airlines",
+      "İzmir",
+      "1990-06-21",
       "",
     ],
   ]);
@@ -117,10 +133,12 @@ export function downloadUserTemplate(departments: Ref[], jobTitles: Ref[]) {
     ["4. Authorisation Scopes may hold SEVERAL values in one cell — separate them with a comma"],
     ["   or a semicolon. Example: Certifying Staff, Technician"],
     ["5. Date of Birth: use YYYY-MM-DD (or a real Excel date cell)."],
-    ["6. Place of Birth and Date of Birth are printed on the training certificate."],
-    ["7. Temporary Password may be left empty — one is generated and shown after import."],
-    ["8. A password you type must be at least 6 characters."],
-    [`9. The "${SHEET_EXAMPLE}" sheet is ignored on import — it is only a reference.`],
+    ["6. Customers: Role = Customer, write the Company; leave Department and Authorisation Scopes empty."],
+    ["   Staff: leave Company empty."],
+    ["7. Place of Birth and Date of Birth are printed on the training certificate."],
+    ["8. Temporary Password may be left empty — one is generated and shown after import."],
+    ["9. A password you type must be at least 8 characters."],
+    [`10. The "${SHEET_EXAMPLE}" sheet is ignored on import — it is only a reference.`],
     [""],
     ["Upload the saved file from the same place you downloaded this template."],
   ]);
@@ -149,7 +167,7 @@ function toISODate(v: unknown): string | null {
 function randomPassword() {
   const bytes = crypto.getRandomValues(new Uint8Array(6));
   const body = Array.from(bytes, (b) => b.toString(36)).join("");
-  return `Bon${body}!9`;
+  return `Cap${body}!9`;
 }
 
 export async function parseUserWorkbook(
@@ -234,10 +252,10 @@ export async function parseUserWorkbook(
       });
 
     const pwRaw = String(raw["Temporary Password"] ?? "").trim();
-    if (pwRaw && pwRaw.length < 6)
+    if (pwRaw && pwRaw.length < 8)
       return void errors.push({
         row: rowNo,
-        message: "Temporary Password must be at least 6 characters.",
+        message: "Temporary Password must be at least 8 characters.",
       });
 
     // Müşteri personel değil: departmanı ve yetki kapsamı taşımaz.
@@ -258,7 +276,7 @@ export async function parseUserWorkbook(
       jobTitleNames: jobTitleIds.map(
         (id) => jobTitles.find((j) => j.id === id)?.name ?? id
       ),
-      birthPlace: String(raw["Place of Birth"] ?? "").trim() || null,
+      birthPlace: placeCase(String(raw["Place of Birth"] ?? "")) || null,
       birthDate,
       password: pwRaw || randomPassword(),
       generatedPassword: !pwRaw,

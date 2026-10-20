@@ -1,12 +1,98 @@
 # BonAcademy — Eksikler ve Yapılacaklar
 
 > Çalışma sırasında tespit edilen açık maddeler. Tamamlananlar listeden silinir.
-> Son güncelleme: 01.10.2026
+> Son güncelleme: 20.10.2026
+>
+> **20.10.2026 — CAPELLA aktarımı.** Capella Academy, BonAcademy'nin ayrı
+> kurulum (fork) kopyasıydı; orada geliştirilen ortak iyileştirmeler bu depoya
+> geri alındı (dal: `capella-aktarim`). Markaya ve CAPELLA'nın kendi
+> altyapısına bağlı olan her şey BonAir'e çevrildi; e-posta kodu geldi ama
+> KAPALI (aşağıda). Aktarım talimatının kendisi CAPELLA deposunda.
 >
 > **01.10.2026'da kapanan maddeler:** atama döngüsü (yenileme artık yeni
 > döngü açıyor ve her döngü kendi sertifikasını alıyor), dış eğitim kaydı
 > düzenleme, eski kayıtlarda `userDepartmentId` (geriye dönük dolduruldu +
 > `updateUser` departman değişiminde kendisi güncelliyor), hosting dağıtımı.
+
+## 0. Sırada
+
+### Açık talepler
+- **E-posta açılışı:** kod tam ama kapalı — aşağıdaki "E-posta altyapısı"
+  maddesindeki adımlar yapılmadan açılmaz.
+- **Sınavlı yüz yüze eğitim:** sınıf oturumuna bağlı sınav — işleyiş önerisi
+  hazırlanacak. Canlı/gözetimli toplu sınav (aşağıda) ile birlikte düşünülmeli.
+- **İçi boş 6 taslak eğitimin içeriği** girilecek; içeriksiz eğitim artık
+  yayına alınamıyor, yani bunlar kimseye atanamaz.
+
+### Güvenlik — sonraya kalanlar (inceleme 08.10.2026)
+- **Tam CSP'yi zorunlu yap:** şu an `Content-Security-Policy-Report-Only` (firebase.json).
+  Giriş (masaüstü + iPhone Safari), PDF okuyucu, önizleme/yazdır/indir, SCORM
+  (öğrenci + önizleme), video, QR, Excel, sınıf QR'ı denenip konsolda ihlal yoksa
+  zorunluya çevrilecek.
+- **SCORM'u ayrı kökenden sun:** paket HTML'i bugün uygulamayla aynı kökende çalışıyor
+  (/scorm-content). Risk sınırlandı (yalnız admin/kurs sahibi yükler, yalnız scorm/
+  klasörü sunulur) ama kalıcı çözüm ayrı alan adı + postMessage ile SCORM API köprüsü.
+- **App Check (bot koruması):** girişsiz uçlar (yoklama formu, davet) için.
+- **SSO: `email_verified` kontrol edilmiyor** (bakıldı 20.10.2026, *kapatıldı*).
+  `sso.js` → `start`, kimlik kaynağından gelen token’ın e-postasına güvenip
+  yerel hesabı onunla eşliyor. IdP’de doğrulanmamış adresle hesap açılabiliyorsa
+  bu, hesap devralmaya yol açar. **Karar: ele alınmıyor** — dosya dört depoda
+  birebir aynı ve kimlik kaynağı (BonAppetit) bu projenin kapsamı dışında.
+  BonAppetit tarafında hesap açma akışı değişirse yeniden bakılmalı.
+- **Konsol ayarları (BonAir):** e-posta numaralandırma koruması, şifre
+  politikası (en az 8), Browser key'in web sitesi kısıtlaması — CAPELLA'da
+  yapıldı, BonAir projesinde 20.10.2026'da ele alınıyor.
+
+### Canlı (gözetimli) toplu sınav — istendi 07.10.2026
+Birden fazla kişinin (ör. 10 kişi) **aynı anda, admin'in başlattığı** bir
+sınava girmesi. Mevcut sınav kursa bağlı ve herkes kendi zamanında giriyor;
+bu ondan ayrı bir "sınav oturumu" kavramı.
+
+**İstenen akış (kullanıcının tarifi):**
+1. Admin **Sınavlar** sayfasından sınav oluşturur: soru seti, süre, geçme
+   notu, sınavın geçerli olduğu **tarih ve saat aralığı**.
+2. Kişileri sınava atar, sonra **"Sınavı aç"** der.
+3. Atanan kişi, sınav saati içinde girişte **bekleme alanına** düşer.
+   Sınav henüz başlamamıştır.
+4. Admin canlı listede kimin bekleme alanında olduğunu görür (katıldı /
+   gelmedi). Herkes gelince **"Sınavı başlat"** der; sınav herkeste aynı
+   anda başlar.
+5. Sınav ekranında:
+   - üstte soru numaraları (hangi soruda olduğu, hangileri cevaplandı),
+   - kalan süre (geri sayım),
+   - kaç soru cevapladı / kaç soru kaldı, tüm ilerleme detayları.
+6. Kişi **"Sınavı bitir ve gönder"** der. Süre dolarsa otomatik gönderilir.
+
+**Tasarlarken karar verilecekler:**
+- Sınav bağımsız mı, yoksa bir kursa bağlı mı (geçince sertifika çıkacak mı,
+  hangi kurs adıyla)?
+- Süre herkes için admin'in "başlat" anından mı sayılır, yoksa kişinin
+  ekranı açtığı andan mı? Bağlantısı kopan kişi geri dönünce süre devam eder
+  mi?
+- Admin canlı ekranda kişi bazında ilerlemeyi (kaçıncı soruda) de görsün mü?
+- Geç gelen kişi sınav başladıktan sonra girebilir mi?
+- Soru ve şık sırası kişiye göre karışık mı? (kopya önlemi)
+- Kalanlar için tekrar hakkı: aynı oturumda mı, yeni oturum mu?
+
+**Teknik notlar:**
+- Mevcut güvenlik modeli korunmalı: sorular istemciye **cevapsız** gider,
+  puanlama sunucuda (`startExam` / `submitExam` kalıbı).
+- Bekleme alanı ve "başlat" için Firestore canlı dinleme yeterli
+  (`examSessions/{id}` + `participants` alt koleksiyonu; admin `status`
+  alanını `WAITING → RUNNING → CLOSED` yapar, istemciler dinler).
+- Süre istemcide değil sunucu zamanında tutulmalı (`startedAt` +
+  `durationMin`); gönderim süre dışında gelirse sunucu reddeder ya da
+  o ana kadarki cevapları puanlar.
+
+### "Yalnızca sınav" kurs tipi — istendi 07.10.2026
+Bugün bir kurs, içeriği olan en az bir bölüm olmadan yayınlanamıyor ve sınav
+yalnızca bölümler bitince açılıyor. Geçici çözüm: tek bölüm + tek belge
+(CAPELLA'da TNA yükleniyor), öğrenci onu tamamlayınca sınava geçiyor.
+Kalıcı çözüm için değişecek yerler: `publishBlockers` (sunucu) +
+CourseDetail yayın kontrolü, atamada başlangıç durumu (doğrudan
+`SECTIONS_DONE`), yenileme döngüsü, 2. başarısızlıkta "bölümleri sıfırla"
+kuralı (bölüm yoksa kişi kilitli kalır), Learn ekranı. Canlı sınav
+yapılırsa bu ihtiyaç onun içinde de çözülebilir — birlikte değerlendirilmeli.
 
 ## 1. Veri bütünlüğünü bozan açıklar
 
@@ -23,25 +109,42 @@ referans oluşuyor.
 Vade takibi, gecikme tespiti, 90/60/30 gün hatırlatmaları, periyodik yenileme —
 hiçbiri çalışmıyor. `notifications` koleksiyonu tanımlı ama boş.
 
-### E-posta gönderimi yok — atama bildirimi dahil (istendi 30.09.2026)
-Sistemde hiçbir kanaldan e-posta çıkmıyor. Talep edilen ilk kalem:
-**eğitim atandığında kişiye e-posta gitmesi** ("atama yapılınca kişiye mail
-gidecek, ilerde yapacağız"). Bugün atama sessiz: kişi giriş yapıp Dashboard'a
-bakmadıkça atandığını bilmiyor.
+### E-posta altyapısı — kod VAR, anahtar KAPALI (20.10.2026)
+Davet, atama bildirimi, hatırlatma, geçici şifre ve sertifika PDF'i e-postaları
+CAPELLA'da yazıldı ve buraya aktarıldı. **Hiçbiri gönderilmiyor:** anahtar
+`functions/.env` → `MAIL_ENABLED=false` ve `web/src/lib/features.ts` →
+`MAIL_ENABLED = false`. Kapalıyken e-posta vaat eden her düğme ve alan
+arayüzde çizilmiyor; SMTP sırrı hiçbir fonksiyona bağlanmıyor, bu yüzden sır
+tanımlı olmadan da deploy edilebiliyor.
 
-Aynı altyapının eksikliğine bağlı diğer kalemler — hepsi tek seferde
-çözülmeli, ayrı ayrı değil:
+Not: giriş ekranındaki **"Forgot password?"** bundan bağımsız — o postayı
+Firebase Auth kendi gönderiyor, çalışmaya devam ediyor. Yeni açılan hesaplar
+da geçici şifreyle açılıp elden iletiliyor.
 
-- atama bildirimi (yukarıdaki talep),
-- yaklaşan bitiş uyarıları (90/60/30 gün) — `runScheduler` ile birlikte,
+**Açmadan önce yapılacaklar — sırayla:**
+1. **Gönderen adresi ve sağlayıcı.** CAPELLA'da Brevo SMTP relay kullanıldı
+   (kurumun kendi sunucusu STARTTLS vermiyordu). BonAir için `bonair.com.tr`
+   posta sağlayıcısının şifreli gönderim verip vermediği sınanacak; vermezse
+   relay. Gönderen `noreply@bonair.com.tr`, yanıt adresi
+   `qualitytechnic@bonair.com.tr`.
+2. **SPF/DKIM** kayıtları `bonair.com.tr` DNS'ine eklenecek — yoksa mailler
+   gereksize düşer.
+3. **`functions/src/certPdf.ts` yeniden çizilecek.** Dosyadaki çizim hâlâ
+   CAPELLA sertifikası (lacivert + altın). BonAir sertifikası
+   `web/src/components/CertificateSheet.tsx`'te; ikisi birebir aynı olmalı.
+   Bu yapılmadan sertifika e-postası açılırsa kişiye YANLIŞ KURUMUN tasarımı
+   gider.
+4. Sır girilecek:
+   `npx firebase functions:secrets:set SMTP_PASSWORD --project bonair-academy`
+5. `functions/.env` → `MAIL_ENABLED=true` + SMTP_HOST/PORT/USER/MAIL_FROM,
+   `web/src/lib/features.ts` → `MAIL_ENABLED = true`. **İkisi birlikte:**
+   yalnız arayüz açılırsa gönderileceği söylenir ama gönderilmez.
+6. Ayarlar → Email sekmesindeki "örnek sertifika gönder" ile denenecek.
+
+**Aynı altyapıya bağlı, HÂLÂ yazılmamış olanlar** (`runScheduler` ile birlikte):
+- yaklaşan bitiş uyarıları (90/60/30 gün),
 - geciken atama uyarısı (kişiye + departman müdürüne),
-- yeni hesap açılışında davet/şifre belirleme maili — şu an 63 kullanıcının
-  ilk şifresi bilinmiyor, herkes "Forgot password?" ile girmek zorunda.
-
-**Karar verilecek:** gönderim yolu (Firebase "Trigger Email" eklentisi mi,
-kendi SMTP'mizle bir Function mı), gönderen adresi ve şablon dili (TR/EN).
-Gönderim kaydı `notifications` koleksiyonuna yazılmalı; aynı bildirimin iki
-kez gitmemesi için idempotans anahtarı gerekiyor.
+- aynı bildirimin iki kez gitmemesi için idempotans anahtarı.
 
 ### `plans` arayüzü yok
 Koleksiyon ve güvenlik kuralı var, ekran yok. `/plans` hâlâ Placeholder.

@@ -3,12 +3,11 @@
  *
  * Assignments sayfasındaki `AssignForm` toplu ve iki yönlü: hem kişi hem
  * eğitim seçtiriyor. Matriste ikisi de zaten belli — hücre kimi ve neyi
- * söylüyor. Kalan tek karar son teslim süresi.
+ * söylüyor. Kalan tek karar son tarih — isteğe bağlı, boşsa son tarih yok.
  */
 import { useState } from "react";
 import { assignCourses, skipNote } from "../lib/assign";
 
-const PRESETS = [7, 14, 30, 60, 90];
 
 export function AssignOne({
   userId,
@@ -24,17 +23,16 @@ export function AssignOne({
   onDone: (msg: string) => void;
   onCancel: () => void;
 }) {
-  const [dueDays, setDueDays] = useState(30);
+  const [dueDate, setDueDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const due = new Date(Date.now() + dueDays * 86400000);
 
   async function submit() {
     setBusy(true);
     setErr(null);
     try {
-      const r = await assignCourses(userId, courseIds, dueDays);
+      const r = await assignCourses(userId, courseIds, { dueDate });
       if (r.created === 0) {
         // Hiçbir şey açılmadıysa pencereyi kapatıp "atandı" demek yanlış olur.
         setErr(
@@ -66,30 +64,28 @@ export function AssignOne({
         </div>
       )}
 
-      <label className="label">Due in</label>
-      <div className="flex flex-wrap gap-1.5">
-        {PRESETS.map((d) => (
-          <button
-            key={d}
-            type="button"
-            onClick={() => setDueDays(d)}
-            className={`text-[12px] font-semibold px-3 py-1.5 rounded-lg border transition ${
-              dueDays === d
-                ? "bg-slate-900 text-white border-slate-900"
-                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
-            }`}
-          >
-            {d} days
+      <label className="label">Due date (optional)</label>
+      <div className="flex items-center gap-2">
+        <input
+          type="date"
+          className="input !w-auto"
+          value={dueDate}
+          min={new Date().toISOString().slice(0, 10)}
+          onChange={(e) => setDueDate(e.target.value)}
+        />
+        {dueDate && (
+          <button type="button" onClick={() => setDueDate("")} className="text-[12px] text-slate-500 hover:text-slate-800">
+            Clear
           </button>
-        ))}
+        )}
       </div>
       <p className="text-[11.5px] text-slate-500 mt-2">
-        Due date: <b className="text-slate-800">{due.toLocaleDateString("tr-TR")}</b>
+        {dueDate ? "The person sees this date and gets it in the email." : "No due date — leave empty if the training has no deadline."}
       </p>
 
       <div className="-mx-[18px] -mb-[18px] mt-5 px-[18px] py-3 border-t border-slate-100 bg-slate-50/70 flex items-center justify-end gap-2.5">
         {err ? (
-          <span className="text-[11.5px] text-brand-700 mr-auto">{err}</span>
+          <span className="text-[11.5px] text-red-700 mr-auto">{err}</span>
         ) : (
           <span className="text-[11.5px] text-slate-400 mr-auto">
             {courseIds.length} training{courseIds.length === 1 ? "" : "s"}

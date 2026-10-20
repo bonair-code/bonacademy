@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { safeFileUrl, safePreviewType } from "../lib/safeUrl";
 
 /**
  * Belge önizleme penceresi.
@@ -25,21 +26,28 @@ export function FilePreview({
   onClose: () => void;
 }) {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "fallback">("loading");
+  const [state, setState] = useState<"loading" | "ready" | "fallback" | "invalid">("loading");
+  /** Yalnızca Storage adresi (javascript: vb. adresler reddedilir). */
+  const safe = safeFileUrl(url);
   const frame = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     let alive = true;
     let made: string | null = null;
+    if (!safe) {
+      setState("invalid");
+      return;
+    }
     setState("loading");
-    fetch(url)
+    fetch(safe)
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
         return r.blob();
       })
       .then((b) => {
         if (!alive) return;
-        made = URL.createObjectURL(b);
+        // Tür zorlanır: aynı kökendeki blob'da HTML/SVG çalışmasın.
+        made = URL.createObjectURL(new Blob([b], { type: safePreviewType(b, fileName) }));
         setBlobUrl(made);
         setState("ready");
       })
@@ -51,7 +59,7 @@ export function FilePreview({
       alive = false;
       if (made) URL.revokeObjectURL(made);
     };
-  }, [url]);
+  }, [safe, fileName]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -64,7 +72,7 @@ export function FilePreview({
     };
   }, [onClose]);
 
-  const src = state === "ready" && blobUrl ? blobUrl : state === "fallback" ? url : null;
+  const src = state === "ready" && blobUrl ? blobUrl : state === "fallback" ? safe : null;
   const name = (fileName || "document.pdf").replace(/[^\w.\-()\s]+/g, "_");
 
   return (
@@ -103,7 +111,7 @@ export function FilePreview({
             </>
           ) : state === "fallback" ? (
             <a
-              href={url}
+              href={safe ?? "#"}
               target="_blank"
               rel="noreferrer"
               className="btn-secondary text-xs py-1.5 px-3"
@@ -122,7 +130,9 @@ export function FilePreview({
         </div>
 
         <div className="flex-1 min-h-0 bg-slate-100">
-          {src ? (
+          {state === "invalid" ? (
+            <div className="h-full grid place-items-center text-sm text-slate-500">This file link is not valid.</div>
+          ) : src ? (
             <iframe ref={frame} src={src} title={name} className="w-full h-full border-0" />
           ) : (
             <div className="h-full grid place-items-center text-sm text-slate-400">Loading…</div>

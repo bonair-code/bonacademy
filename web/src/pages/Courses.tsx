@@ -302,7 +302,7 @@ export function Courses() {
         </>
       )}
 
-      {err && <p className="text-xs text-brand-700 mt-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mt-3">{err}</p>}
 
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 text-white text-[13px] rounded-lg px-4 py-2.5 shadow-xl">
@@ -543,7 +543,7 @@ function DeleteConfirm({
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -570,7 +570,7 @@ function RevisionList({ courseId }: { courseId: string }) {
   }, [courseId]);
 
   if (loading) return <p className="text-sm text-slate-400 py-4">Loading…</p>;
-  if (err) return <p className="text-xs text-brand-700 py-2">{err}</p>;
+  if (err) return <p className="text-xs text-red-700 py-2">{err}</p>;
   if (rows.length === 0)
     return (
       <p className="text-sm text-slate-400 py-6 text-center">

@@ -2,15 +2,10 @@ node_modules
 dist
 .firebase
 
+# Ortam ayarlari: gercek dosya asla git'e girmez, ornek dosya girer.
 .env
 .env.*
-*.log
-functions/lib
-serviceAccount*.json
-.DS_Store
-
-.env
-.env.*
+!.env.example
 *.log
 functions/lib
 serviceAccount*.json

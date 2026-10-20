@@ -48,7 +48,13 @@ export function Upcoming() {
 
     const u1 = onSnapshot(
       aq,
-      (s) => setRows(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Row, "id">) }))),
+      // Erişimi engellenen eğitim için yaklaşan tarih hatırlatılmaz.
+      (s) =>
+        setRows(
+          s.docs
+            .filter((d) => !d.data().accessBlocked)
+            .map((d) => ({ id: d.id, ...(d.data() as Omit<Row, "id">) }))
+        ),
       onErr
     );
 
@@ -139,7 +145,7 @@ export function Upcoming() {
           ))}
         </ul>
       )}
-      {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+      {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
     </div>
   );
 }

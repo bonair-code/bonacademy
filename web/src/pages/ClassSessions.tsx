@@ -34,7 +34,11 @@ type Session = {
   /** Kapanışta atanan numara aralığı — oturum açılırken girilmez. */
   certFirstNo?: string | null;
   certLastNo?: string | null;
-  status: "DRAFT" | "OPEN" | "CLOSED";
+  /**
+   * DRAFT: yoklama kapalı (henüz açılmadı / duraklatıldı) · OPEN: yoklama açık ·
+   * ATTENDANCE_CLOSED: yoklama bitti, eğitim sürüyor · CLOSED: sertifikalar verildi.
+   */
+  status: "DRAFT" | "OPEN" | "ATTENDANCE_CLOSED" | "CLOSING" | "CLOSED";
   issuedCount?: number;
   createdAt?: Timestamp | null;
 };
@@ -54,7 +58,17 @@ type Attendee = {
 const STATUS_CLS: Record<Session["status"], string> = {
   DRAFT: "bg-slate-100 text-slate-600 ring-slate-200",
   OPEN: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  ATTENDANCE_CLOSED: "bg-amber-50 text-amber-800 ring-amber-200",
+  CLOSING: "bg-amber-50 text-amber-800 ring-amber-200",
   CLOSED: "bg-sky-50 text-sky-700 ring-sky-200",
+};
+/** Durumun ekrandaki adı. */
+const STATUS_LABEL: Record<Session["status"], string> = {
+  DRAFT: "Not open",
+  OPEN: "Attendance open",
+  ATTENDANCE_CLOSED: "In training",
+  CLOSING: "Issuing…",
+  CLOSED: "Completed",
 };
 
 const dmy = (d?: string | null) => (d ? d.split("-").reverse().join(".") : "—");
@@ -141,7 +155,7 @@ function SessionCard({
           STATUS_CLS[s.status]
         }`}
       >
-        {s.status}
+        {STATUS_LABEL[s.status] ?? s.status}
       </span>
 
       {/* Taslak oturum henüz belge üretmedi; düzeltilebilir ve silinebilir.
@@ -234,7 +248,7 @@ export function ClassSessions() {
         </div>
       )}
 
-      {err && <p className="text-xs text-brand-700 mt-3">{err}</p>}
+      {err && <p className="text-xs text-red-700 mt-3">{err}</p>}
 
       {open && (
         <Modal title="New Classroom Session" onClose={() => setOpen(false)}>
@@ -304,7 +318,7 @@ function DeleteSession({ row, onClose }: { row: Session; onClose: () => void }) 
         <button onClick={onClose} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </div>
   );
@@ -320,7 +334,12 @@ function SessionForm({
   existing?: Session | null;
   onClose: () => void;
 }) {
-  const { profile } = useAuth();
+  const { profile, role } = useAuth();
+  // Eğitmen yalnızca kendi kursu için oturum açar (kural da aynısını istiyor).
+  const pickable =
+    role === "INSTRUCTOR"
+      ? courses.filter((c) => (c as { ownerInstructorId?: string }).ownerInstructorId === profile?.uid)
+      : courses;
   // "OTHER": sistemde kursu olmayan bir eğitim; adı elle yazılır.
   const [courseId, setCourseId] = useState(
     existing ? (existing.courseId ?? "OTHER") : ""
@@ -399,7 +418,7 @@ function SessionForm({
             }}
           >
             <option value="">— Select —</option>
-            {courses.map((c) => (
+            {pickable.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
               </option>
@@ -486,7 +505,7 @@ function SessionForm({
         <button type="button" onClick={onClose} className="btn-secondary text-xs py-2">
           Cancel
         </button>
-        {err && <span className="text-xs text-brand-700">{err}</span>}
+        {err && <span className="text-xs text-red-700">{err}</span>}
       </div>
     </form>
   );
@@ -588,7 +607,13 @@ export function ClassSessionDetail() {
   async function setStatus(status: Session["status"]) {
     if (!sessionId) return;
     await updateDoc(doc(db, "classSessions", sessionId), { status });
-    setToast(status === "OPEN" ? "Attendance is open." : "Attendance paused.");
+    setToast(
+      status === "OPEN"
+        ? "Attendance is open."
+        : status === "ATTENDANCE_CLOSED"
+        ? "Attendance closed. Issue certificates when the training is over."
+        : "Attendance paused."
+    );
   }
 
   async function finish() {
@@ -597,8 +622,12 @@ export function ClassSessionDetail() {
     setErr(null);
     try {
       const res = await httpsCallable(functions, "finishClassSession")({ sessionId });
-      const d = res.data as { issued: number; first: string; last: string };
-      setToast(`${d.issued} certificate(s) issued — ${d.first} to ${d.last}.`);
+      // emailed null gelir (posta kapalıysa sunucu hiç denemez) → yazılmaz.
+      const d = res.data as { issued: number; first: string; last: string; emailed?: number | null };
+      setToast(
+        `${d.issued} certificate(s) issued — ${d.first} to ${d.last}.` +
+          (d.emailed != null ? ` ${d.emailed} emailed as PDF.` : "")
+      );
       setConfirmFinish(false);
     } catch (e) {
       setErr((e as Error).message);
@@ -618,7 +647,11 @@ export function ClassSessionDetail() {
     );
 
   const isOpen = session.status === "OPEN";
-  const isClosed = session.status === "CLOSED";
+  const isClosed = session.status === "CLOSED" || session.status === "CLOSING";
+  /** Yoklama bitti, eğitim sürüyor: sertifika bu aşamada verilir. */
+  const attendanceDone = session.status === "ATTENDANCE_CLOSED";
+  /** Yoklama açılmış, sonra duraklatılmış (DRAFT ama imza var). */
+  const paused = session.status === "DRAFT" && attendees.length > 0;
 
   return (
     <div>
@@ -629,24 +662,62 @@ export function ClassSessionDetail() {
       <div className="mb-4" />
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-4">
-        {/* QR + kontrol */}
+        {/* QR + kontrol — "B" tasarımı (CAPELLA/sinif-oturumu-butonlari.html):
+            her an TEK bir sıradaki adım düğmesi; araçlar altta eşit kutucuk.
+            Akış: yoklamayı aç → (duraklat) → yoklamayı kapat → sertifika ver. */}
         <div className="card p-4">
           <div className="flex items-center justify-between gap-2 mb-3">
             <span
               className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ring-1 ${STATUS_CLS[session.status]}`}
             >
-              {session.status}
+              {paused ? "Paused" : STATUS_LABEL[session.status] ?? session.status}
             </span>
             <span className="text-[11px] text-slate-500 tabular-nums">
               {attendees.length} signed in
             </span>
           </div>
 
+          <div className="no-print">
+            {isClosed ? (
+              <div className="rounded-lg bg-sky-50 text-sky-800 text-[12.5px] text-center px-3 py-2.5">
+                ✓ {session.issuedCount ?? 0} certificate{(session.issuedCount ?? 0) === 1 ? "" : "s"} issued
+                {session.certLastNo
+                  ? ` — ${session.certFirstNo ? `${session.certFirstNo} to ${session.certLastNo}` : session.certLastNo}`
+                  : ""}
+              </div>
+            ) : attendanceDone ? (
+              <>
+                <button
+                  onClick={() => setConfirmFinish(true)}
+                  disabled={attendees.length === 0}
+                  className="btn-primary w-full text-[13px] py-2.5 disabled:opacity-40"
+                >
+                  Finish training &amp; issue certificates
+                </button>
+                <p className="text-[11.5px] text-slate-500 mt-2">
+                  Attendance is closed ({attendees.length} people). When the training is over, issue the
+                  certificates.
+                </p>
+              </>
+            ) : isOpen || paused ? (
+              <button
+                onClick={() => setStatus("ATTENDANCE_CLOSED")}
+                className="btn-primary w-full text-[13px] py-2.5"
+              >
+                Close attendance
+              </button>
+            ) : (
+              <button onClick={() => setStatus("OPEN")} className="btn-primary w-full text-[13px] py-2.5">
+                Open attendance
+              </button>
+            )}
+          </div>
+
           {/* Yazdırmada kendi kipini kullanır (dikey A4, tek sayfa);
               sertifikanın sayfayı kaplayan kipinde QR taşıyordu. */}
           <div
             ref={printRef}
-            className="qr-print bg-white rounded-lg border border-slate-200 p-4 text-center"
+            className="qr-print bg-white rounded-lg border border-slate-200 p-4 text-center mt-3"
           >
             <div className="qr-title text-[12px] font-bold text-slate-900">
               {session.courseTitle}
@@ -667,38 +738,27 @@ export function ClassSessionDetail() {
             <div className="qr-url text-[9px] text-slate-400 break-all mt-1">{joinUrl}</div>
           </div>
 
-          <div className="flex flex-wrap gap-2 mt-3 no-print">
-            {!isClosed && (
-              <button
-                onClick={() => setStatus(isOpen ? "DRAFT" : "OPEN")}
-                className={isOpen ? "btn-secondary text-xs py-1.5" : "btn-primary text-xs py-1.5"}
-              >
-                {isOpen ? "Pause attendance" : "Open attendance"}
-              </button>
+          <div className="grid grid-cols-3 gap-1.5 mt-2 no-print">
+            {isOpen ? (
+              <ToolTile icon="⏸" label="Pause" onClick={() => setStatus("DRAFT")} />
+            ) : paused ? (
+              <ToolTile icon="▶" label="Resume" onClick={() => setStatus("OPEN")} />
+            ) : attendanceDone ? (
+              <ToolTile icon="↺" label="Reopen" onClick={() => setStatus("OPEN")} />
+            ) : (
+              <ToolTile icon="⏸" label="Pause" disabled />
             )}
-            <button onClick={printQr} className="btn-secondary text-xs py-1.5">
-              Print QR
-            </button>
-            <button
+            <ToolTile icon="⎙" label="Print QR" onClick={printQr} disabled={isClosed} />
+            <ToolTile
+              icon="⧉"
+              label="Copy link"
+              disabled={isClosed}
               onClick={() => {
                 navigator.clipboard.writeText(joinUrl);
                 setToast("Link copied.");
               }}
-              className="btn-secondary text-xs py-1.5"
-            >
-              Copy link
-            </button>
+            />
           </div>
-
-          {!isClosed && (
-            <button
-              onClick={() => setConfirmFinish(true)}
-              disabled={attendees.length === 0}
-              className="btn-primary w-full text-xs py-2 mt-3 disabled:opacity-40 no-print"
-            >
-              Finish training &amp; issue certificates
-            </button>
-          )}
         </div>
 
         {/* Katılımcılar */}
@@ -737,7 +797,12 @@ export function ClassSessionDetail() {
                 {attendees.map((a, i) => (
                   <tr key={a.id} className="hover:bg-slate-50/70">
                     <td className="td text-slate-400 tabular-nums">{i + 1}</td>
-                    <td className="td font-semibold text-slate-900">{a.fullName}</td>
+                    <td className="td font-semibold text-slate-900">
+                      {a.fullName}
+                      {a.email && (
+                        <span className="block text-[11px] font-normal text-slate-400">{a.email}</span>
+                      )}
+                    </td>
                     <td className="td text-slate-500">{a.birthPlace || "—"}</td>
                     <td className="td tabular-nums text-slate-500">{dmy(a.birthDate)}</td>
                     {/* Eşleşme görünür ve düzeltilebilir: yanlış kişiye
@@ -799,7 +864,7 @@ export function ClassSessionDetail() {
               </tbody>
             </table>
           </div>
-          {err && <p className="px-5 py-3 text-xs text-brand-700 border-t border-slate-100">{err}</p>}
+          {err && <p className="px-5 py-3 text-xs text-red-700 border-t border-slate-100">{err}</p>}
         </div>
       </div>
 
@@ -830,5 +895,30 @@ export function ClassSessionDetail() {
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Sol paneldeki eşit araç kutucuğu (simge + kısa ad). */
+function ToolTile({
+  icon,
+  label,
+  onClick,
+  disabled,
+}: {
+  icon: string;
+  label: string;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex flex-col items-center gap-0.5 rounded-lg border border-slate-200 bg-white py-2 text-[11px] font-semibold text-slate-600 transition hover:border-brand-600 hover:text-brand-700 disabled:opacity-35 disabled:hover:border-slate-200 disabled:hover:text-slate-600"
+    >
+      <span className="text-[15px] font-normal leading-none">{icon}</span>
+      {label}
+    </button>
   );
 }
