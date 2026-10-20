@@ -33,6 +33,12 @@
   (/scorm-content). Risk sınırlandı (yalnız admin/kurs sahibi yükler, yalnız scorm/
   klasörü sunulur) ama kalıcı çözüm ayrı alan adı + postMessage ile SCORM API köprüsü.
 - **App Check (bot koruması):** girişsiz uçlar (yoklama formu, davet) için.
+- **SSO: `email_verified` kontrol edilmiyor** (bakıldı 20.10.2026, *kapatıldı*).
+  `sso.js` → `start`, kimlik kaynağından gelen token’ın e-postasına güvenip
+  yerel hesabı onunla eşliyor. IdP’de doğrulanmamış adresle hesap açılabiliyorsa
+  bu, hesap devralmaya yol açar. **Karar: ele alınmıyor** — dosya dört depoda
+  birebir aynı ve kimlik kaynağı (BonAppetit) bu projenin kapsamı dışında.
+  BonAppetit tarafında hesap açma akışı değişirse yeniden bakılmalı.
 - **Konsol ayarları (BonAir):** e-posta numaralandırma koruması, şifre
   politikası (en az 8), Browser key'in web sitesi kısıtlaması — CAPELLA'da
   yapıldı, BonAir projesinde 20.10.2026'da ele alınıyor.
