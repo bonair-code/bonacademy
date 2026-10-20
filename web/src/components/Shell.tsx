@@ -88,8 +88,10 @@ const ALL: Role[] = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
 const NAV: NavItem[] = [
   { to: "/dashboard", label: "Dashboard", roles: ALL, group: "General", icon: Icon.dashboard },
   {
+    // Artik yalniz sertifika degil, kisinin tam kaydi: egitimler, eksikler,
+    // sertifikalar, dis kayitlar ve atamalar. Musteride sade liste kaliyor.
     to: "/certificates",
-    label: "My Certificates",
+    label: "My Record",
     roles: ALL,
     group: "General",
     icon: Icon.certificate,

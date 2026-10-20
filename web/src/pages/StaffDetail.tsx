@@ -14,6 +14,13 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
+import type { Cert } from "../components/CertificateSheet";
+import {
+  CertModal,
+  RecordHistory,
+  courseMetaMap,
+  useRecordGroups,
+} from "../components/RecordHistory";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { ExternalCertForm } from "../components/ExternalCertForm";
@@ -87,10 +94,20 @@ type Line = {
   certificateId: string | null;
 };
 
-export function StaffDetail() {
-  const { userId } = useParams<{ userId: string }>();
+/**
+ * Bir kişinin tam kaydı.
+ *
+ * İki yerden açılıyor: yöneticiler `/team/:userId` ile başkasının kaydını,
+ * personel `/certificates` ile KENDİ kaydını görüyor (`self`). Aynı bilgiyi
+ * iki ayrı ekranda tutmak ikisinin de kaymasına yol açıyordu; sorguların
+ * hepsi zaten `userId` ile sınırlı ve kurallar kişinin kendi kaydını
+ * okumasına izin veriyor, bu yüzden tek bileşen ikisine de yetiyor.
+ */
+export function StaffDetail({ self = false }: { self?: boolean } = {}) {
+  const params = useParams<{ userId: string }>();
   const { profile, role } = useAuth();
   const navigate = useNavigate();
+  const userId = self ? profile?.uid : params.userId;
 
   const [user, setUser] = useState<UserRow | null>(null);
   const [courses, setCourses] = useState<CourseRow[]>([]);
@@ -104,6 +121,8 @@ export function StaffDetail() {
   const [preview, setPreview] = useState<{ url: string; name: string; title: string } | null>(
     null
   );
+  /** Tam boy gösterilen sertifika (Certificates sekmesindeki "View"). */
+  const [certView, setCertView] = useState<Cert | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [dialog, setDialog] = useState<
     | { kind: "add"; course: CourseRow | null }
@@ -281,8 +300,28 @@ export function StaffDetail() {
   );
 
 
+  /**
+   * Eğitim başına gruplanmış kayıtlar — Certificates sekmesi.
+   * Bütün erken return'lerin ÜSTÜNDE: kanca her render'da aynı sırada
+   * çağrılmak zorunda (eslint react-hooks/rules-of-hooks).
+   */
+  const recordGroups = useRecordGroups(certs, externals, courseMetaMap(courses));
+
+  /**
+   * KAYIT işlemleri: dış sertifika ekle/değiştir/sil. Kurallar müdüre kendi
+   * departmanı için izin veriyor (externalTrainings create/update).
+   * Kişi kendi kaydına bakarken kapalı — kimse kendi belgesini kendi giremez.
+   */
   const canEdit =
-    role === "ADMIN" || (role === "MANAGER" && user?.departmentId === profile?.departmentId);
+    !self &&
+    (role === "ADMIN" || (role === "MANAGER" && user?.departmentId === profile?.departmentId));
+  /**
+   * HESAP işlemleri: bilgileri düzenle, şifre sıfırla, aktif/pasif, sil.
+   * Sunucuda üçü de yalnızca ADMIN (updateUser ve deleteUser assertAdmin,
+   * setUserPassword "admins only"). Müdüre göstermek, bastığında yetki
+   * hatası yemesi demekti.
+   */
+  const canManageAccount = !self && role === "ADMIN";
 
   /**
    * Eğitim atamak kişiyi yönetmekten ayrı yetki: eğitimi veren atar. Müdür
@@ -302,13 +341,14 @@ export function StaffDetail() {
     }
   }
 
-  if (role !== "ADMIN" && role !== "MANAGER" && role !== "INSTRUCTOR")
+  // Kendi kaydını herkes görür; başkasınınkini yalnızca yönetici/eğitmen.
+  if (!self && role !== "ADMIN" && role !== "MANAGER" && role !== "INSTRUCTOR")
     return <p className="text-sm text-slate-400 py-10">Not available for your role.</p>;
 
   if (!user)
     return (
       <div>
-        <PageHead title="Staff" subtitle="Training status." />
+        <PageHead title={self ? "My Record" : "Staff"} subtitle="Training status." />
         <p className="text-sm text-slate-400 py-10">
           {err ? err : "Loading…"}
         </p>
@@ -454,11 +494,7 @@ export function StaffDetail() {
       ? upcoming
       : [...expired, ...missing, ...soon, ...planned, ...valid.filter((l) => !isSoon(l))];
 
-  const certRows = [...certs].sort((a, b) => (b.issuedAt?.toMillis?.() ?? 0) - (a.issuedAt?.toMillis?.() ?? 0));
-  const extRows = [...externals].sort(
-    (a, b) => (b.completedAt?.toMillis?.() ?? 0) - (a.completedAt?.toMillis?.() ?? 0)
-  );
-  const listCount = filter === "cert" ? certRows.length + extRows.length : shown.length;
+  const listCount = filter === "cert" ? recordGroups.length : shown.length;
   const nextUp = upcoming[0] ?? null;
 
   const widgets: { k: Filter; dot: string; label: string; big: ReactNode; small: string }[] = [
@@ -516,9 +552,13 @@ export function StaffDetail() {
     <div>
       {/* ── EKRAN ─────────────────────────────────────────────── */}
       <div className="print:hidden">
-        <Link to="/follow-up" className="text-[13px] font-medium text-brand-700 hover:underline">
-          ‹ Training Follow-Up
-        </Link>
+        {/* Kendi kaydına menüden gelinir; "‹ Training Follow-Up" oraya
+            erişimi olmayan personele anlamsız (ve kuralca kapalı) bir yer. */}
+        {!self && (
+          <Link to="/follow-up" className="text-[13px] font-medium text-brand-700 hover:underline">
+            ‹ Training Follow-Up
+          </Link>
+        )}
 
         <div className="flex flex-wrap items-start justify-between gap-4 mt-3">
           <div className="flex items-center gap-3.5 min-w-0">
@@ -561,33 +601,40 @@ export function StaffDetail() {
                 Assign training
               </button>
             )}
-            {/* Kişiyle ilgili bütün işlemler tek menüde. */}
+            {/* Kişiyle ilgili bütün işlemler tek menüde. Kendi kaydında
+                yönetim eylemi yok; menü yerine tek "PDF report" düğmesi. */}
+            {self ? (
+              <button onClick={() => printReport()} className="btn-secondary rounded-xl">
+                PDF report
+              </button>
+            ) : (
             <RowMenu
               variant="round"
               label={`Manage ${user.name}`}
               items={[
-                ...(canEdit
+                ...(canManageAccount
                   ? [
                       { label: "Edit details", icon: "✎", onClick: () => setDialog({ kind: "editUser" }) },
                       { label: "Reset password", icon: "🔑", onClick: () => setDialog({ kind: "password" }) },
-                      { label: "Add external certificate", icon: "＋", onClick: () => setDialog({ kind: "add", course: null }) },
                     ]
                   : []),
-                { label: "PDF report", icon: "⎙", onClick: () => printReport() },
                 ...(canEdit
+                  ? [{ label: "Add external certificate", icon: "＋", onClick: () => setDialog({ kind: "add", course: null }) }]
+                  : []),
+                { label: "PDF report", icon: "⎙", onClick: () => printReport() },
+                ...(canManageAccount
                   ? [
                       {
                         label: user.isActive === false ? "Activate" : "Deactivate",
                         icon: user.isActive === false ? "✓" : "⦸",
                         onClick: () => void setActive(user.isActive === false),
                       },
+                      { label: "Delete user", icon: "🗑", danger: true, onClick: () => setDialog({ kind: "deleteUser" }) },
                     ]
-                  : []),
-                ...(role === "ADMIN"
-                  ? [{ label: "Delete user", icon: "🗑", danger: true, onClick: () => setDialog({ kind: "deleteUser" }) }]
                   : []),
               ]}
             />
+            )}
           </div>
         </div>
 
@@ -628,7 +675,7 @@ export function StaffDetail() {
           )}
         </div>
 
-        <div className="bg-white rounded-2xl shadow-card overflow-hidden">
+        <div className={filter === "cert" ? "" : "bg-white rounded-2xl shadow-card overflow-hidden"}>
           {filter !== "cert" ? (
             shown.length === 0 ? (
               <p className="px-5 py-8 text-center text-[13px] text-slate-400">
@@ -641,94 +688,25 @@ export function StaffDetail() {
             ) : (
               <ul className="divide-y divide-slate-100">{shown.map(renderLine)}</ul>
             )
-          ) : certRows.length + extRows.length === 0 ? (
-            <p className="px-5 py-8 text-center text-[13px] text-slate-400">
-              No certificates or external records yet.
-            </p>
           ) : (
-            <ul className="divide-y divide-slate-100">
-              {certRows.map((c) => (
-                <li key={c.__id}>
-                  <Link
-                    to={`/certificate/${c.__id}`}
-                    className="flex items-center gap-3 pl-4 pr-3 py-2.5 min-h-[56px] hover:bg-slate-50/70"
-                  >
-                    <span className="h-2.5 w-2.5 rounded-full shrink-0 bg-sky-500" />
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[14px] font-medium text-slate-900 truncate">
-                        {c.courseTitle ?? "—"}
-                      </span>
-                      <span className="block text-[12px] text-slate-500 mt-0.5 truncate">
-                        {[
-                          `No ${c.serialNo ?? "—"}`,
-                          fmt(c.issuedAt?.toDate?.()),
-                          c.examScore != null ? `Exam ${c.examScore}` : "",
-                          c.deliveryMode === "CLASSROOM" ? "Classroom" : "",
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </span>
-                    <span className="text-slate-300 text-[18px] leading-none">›</span>
-                  </Link>
-                </li>
-              ))}
-              {extRows.map((e) => {
-                const exp = e.expiresAt?.toDate?.() ?? null;
-                const gone = !!exp && exp.getTime() < Date.now();
-                const linked = courses.some((c) => c.id === e.courseId);
-                const txt = (
-                  <>
-                    <span className="block text-[14px] font-medium text-slate-900 truncate">
-                      {e.title}
-                      {e.method && <span className="text-slate-400 font-normal"> · {e.method}</span>}
-                    </span>
-                    <span className={`block text-[12px] mt-0.5 truncate ${gone ? "text-red-700" : "text-slate-500"}`}>
-                      {[
-                        `External · ${e.provider}`,
-                        fmt(e.completedAt?.toDate?.()),
-                        exp ? (gone ? `expired ${fmt(exp)}` : `until ${fmt(exp)}`) : "",
-                        e.fileUrl ? "" : "on paper",
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                      {!linked && <span className="text-amber-700"> · not linked — closes no gap</span>}
-                    </span>
-                  </>
-                );
-                return (
-                  <li key={e.id} className="flex items-center gap-3 pl-4 pr-2 py-2.5 min-h-[56px]">
-                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${gone ? "bg-red-500" : "bg-slate-400"}`} />
-                    {e.fileUrl ? (
-                      <button
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() =>
-                          setPreview({ url: e.fileUrl!, name: e.fileName ?? "certificate.pdf", title: e.title })
-                        }
-                      >
-                        {txt}
-                      </button>
-                    ) : (
-                      <span className="min-w-0 flex-1">{txt}</span>
-                    )}
-                    {canEdit ? (
-                      <RowMenu
-                        label={`Actions for ${e.title}`}
-                        items={[
-                          { label: "Edit", icon: "✎", onClick: () => setDialog({ kind: "edit", row: e }) },
-                          { label: "Delete", icon: "🗑", danger: true, onClick: () => setDialog({ kind: "remove", row: e }) },
-                        ]}
-                      />
-                    ) : (
-                      <span className="w-7" />
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            /* Eğitim başına tek grup: geçerli kayıt üstte, geçmişi altında.
+               Eskiden sertifikalar ve dış kayıtlar iki ayrı düz listeydi ve
+               aynı eğitimin iki kaydından HANGİSİNİN geçerli olduğu
+               görünmüyordu. Bileşen components/RecordHistory.tsx'te; kişinin
+               kendi ekranı ve müşteri ekranı da aynısını kullanıyor. */
+            <div className="p-3">
+              <RecordHistory
+                groups={recordGroups}
+                onView={setCertView}
+                onPreview={setPreview}
+                onEdit={canEdit ? (r) => setDialog({ kind: "edit", row: r as unknown as ExternalRow }) : undefined}
+                empty="No certificates or external records yet."
+              />
+            </div>
           )}
         </div>
         {err && <p className="mt-3 text-xs text-red-700">{err}</p>}
+        {certView && <CertModal cert={certView} onClose={() => setCertView(null)} />}
       </div>
 
       {/* ── PDF RAPORU ────────────────────────────────────────────

@@ -44,6 +44,13 @@ function Only({ roles, children }: { roles: Role[]; children: React.ReactNode })
 }
 
 const STAFF_VIEW: Role[] = ["ADMIN", "MANAGER", "INSTRUCTOR"];
+
+/** "/certificates": personel kendi tam kaydını, müşteri sade listeyi görür. */
+function MyRecord() {
+  const { role } = useAuth();
+  if (!role) return null;
+  return role === "CUSTOMER" ? <Certificates /> : <StaffDetail self />;
+}
 const TRAINING_ADMIN: Role[] = ["ADMIN", "INSTRUCTOR"];
 
 function AuthedApp() {
@@ -57,7 +64,11 @@ function AuthedApp() {
         {/* Herkes — müşteri dahil: kendi eğitimi ve kendi belgeleri */}
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/learn/:id" element={<Learn />} />
-        <Route path="/certificates" element={<Certificates />} />
+        {/* Kendi kaydım. Personel için bu, Users/Follow-Up'tan açılan kişi
+            sayfasının ta kendisi: aynı bilgiyi iki ekranda tutmak ikisinin de
+            kaymasına yol açıyordu. Müşteride departman ve yetki kapsamı yok
+            (kurallar da ikisini ona kapatıyor), ona sade liste kalıyor. */}
+        <Route path="/certificates" element={<MyRecord />} />
         <Route path="/certificate/:certId" element={<CertificateView />} />
 
         <Route
