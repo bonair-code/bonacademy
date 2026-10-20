@@ -227,6 +227,20 @@ export function StaffDetail() {
     });
   }, [courses, requiredIds, assignments, certs, externals]);
 
+  /**
+   * Sertifikanın MUTLAK adresi — raporun PDF'ine tıklanabilir link olarak
+   * gitsin diye. Tercih herkese açık doğrulama sayfası: raporu okuyan kişi
+   * (çoğu zaman bir denetçi) giriş yapmadan açabilsin. Göreli adres
+   * (<Link to=…>) PDF'te tıklanacak bir şeye dönüşmüyor.
+   */
+  const certHref = (certificateId: string) => {
+    const c = certs.find((x) => x.__id === certificateId);
+    const base = window.location.origin;
+    return c?.verifyToken
+      ? `${base}/verify/${encodeURIComponent(c.verifyToken)}`
+      : `${base}/certificate/${certificateId}`;
+  };
+
   /** UserForm departman listesini dizi bekliyor; sayfa Map tutuyor. */
   const departmentList: Ref[] = useMemo(
     () => [...departments.entries()].map(([id, name]) => ({ id, name })),
@@ -908,12 +922,14 @@ export function StaffDetail() {
                             </span>
                           )
                         ) : l.state === "DONE" && l.certificateId ? (
-                          <Link
-                            to={`/certificate/${l.certificateId}`}
+                          <a
+                            href={certHref(l.certificateId)}
+                            target="_blank"
+                            rel="noopener noreferrer"
                             className="text-brand-700 hover:underline text-[12px] font-medium"
                           >
                             BonAir · view certificate
-                          </Link>
+                          </a>
                         ) : l.state === "DONE" ? (
                           <span className="text-[12px] text-slate-500">BonAir</span>
                         ) : (

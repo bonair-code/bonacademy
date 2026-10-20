@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kullanıcı — yetki atama tasarımı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --brand:#e31e24; --brand-dark:#c0171c; --brand-50:#fdeeee; --brand-100:#fbdddd;
+    --brand-700:#b3171c; --ink:#0f172a; --ink-2:#334155; --mut:#64748b; --mut-2:#94a3b8;
+    --line:#e2e8f0; --line-2:#eef2f7; --bg:#f4f6f9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:400 14px/1.5 Inter,ui-sans-serif,system-ui,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1180px;margin:0 auto;padding:28px 16px 80px}
+  h1{font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--mut);font-size:13px;margin:0 0 10px;max-width:70ch}
+  .today{border:1px solid var(--line);border-left:3px solid var(--mut-2);background:#fff;
+    border-radius:10px;padding:12px 14px;margin:0 0 26px;font-size:12.5px;color:var(--mut)}
+  .today b{color:var(--ink-2)}
+
+  .opt{background:#fff;border:1px solid var(--line);border-radius:14px;
+    margin-bottom:26px;overflow:hidden}
+  .opt > header{display:flex;align-items:flex-start;gap:12px;
+    padding:14px 18px;border-bottom:1px solid var(--line-2);background:#fcfdfe}
+  .tag{flex:none;width:26px;height:26px;border-radius:8px;background:var(--brand);
+    color:#fff;font-weight:700;font-size:13px;display:grid;place-items:center}
+  .opt h2{font-size:15px;font-weight:700;margin:1px 0 2px}
+  .opt header p{margin:0;font-size:12.5px;color:var(--mut);line-height:1.55}
+  .demo{padding:18px;background:#fff}
+  .note{padding:0 18px 16px;font-size:12px;color:var(--mut)}
+  .note b{color:var(--ink-2);font-weight:600}
+  .note ul{margin:6px 0 0;padding-left:18px}
+  .note li{margin:3px 0}
+
+  .lbl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--mut-2);margin-bottom:7px}
+  .hint{font-size:11px;color:var(--mut-2);margin:7px 0 0;line-height:1.5}
+
+  /* ---------- A: kapsam kartları ---------- */
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+  .c{border:1px solid var(--line);border-radius:11px;background:#fff;overflow:hidden;
+    transition:border-color .12s,box-shadow .12s}
+  .c.on{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-50)}
+  .c > .top{display:flex;align-items:flex-start;gap:9px;padding:11px 12px;cursor:pointer}
+  .c.on > .top{background:var(--brand-50)}
+  .sw{flex:none;width:34px;height:20px;border-radius:999px;background:#cbd5e1;
+    position:relative;transition:background .14s;margin-top:1px}
+  .sw::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;
+    border-radius:50%;background:#fff;transition:transform .14s;
+    box-shadow:0 1px 3px rgba(15,23,42,.3)}
+  .c.on .sw{background:var(--brand)}
+  .c.on .sw::after{transform:translateX(14px)}
+  .c .nm{font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.35}
+  .c.on .nm{color:var(--brand-700)}
+  .c .meta{font-size:11px;color:var(--mut-2);margin-top:2px}
+  .c.on .meta{color:var(--brand-700);opacity:.8}
+  .c > .body{border-top:1px solid var(--brand-100);padding:10px 12px;background:#fffafa}
+  .parts{display:flex;flex-wrap:wrap;gap:6px}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:27px;padding:0 10px;
+    border-radius:999px;border:1px solid var(--line);background:#fff;
+    font-size:12px;font-weight:500;color:var(--ink-2);cursor:pointer}
+  .pill:hover{border-color:#cbd5e1}
+  .pill.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  .pill .tick{font-size:10px;opacity:.9}
+  .partlbl{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--mut-2);margin:0 0 6px}
+  .partlbl + .parts{margin-bottom:9px}
+  .parts:last-child{margin-bottom:0}
+
+  .summary{margin-top:12px;border:1px solid var(--line);border-radius:10px;
+    background:#f8fafc;padding:10px 12px;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+  .summary b{color:var(--ink);font-weight:600}
+  .summary .req{display:inline-flex;align-items:center;gap:5px;font-weight:700;
+    color:var(--brand-700);background:var(--brand-50);border-radius:6px;padding:1px 7px;font-size:12px}
+
+  /* ---------- B: iki sütun aktarma ---------- */
+  .xfer{display:grid;grid-template-columns:1fr 38px 1fr;gap:10px;align-items:stretch}
+  .box{border:1px solid var(--line);border-radius:11px;background:#fff;
+    display:flex;flex-direction:column;min-height:214px}
+  .box > h4{margin:0;padding:9px 11px;border-bottom:1px solid var(--line-2);
+    font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .box.right > h4{color:var(--brand-700);background:var(--brand-50);
+    border-bottom-color:var(--brand-100)}
+  .box ul{list-style:none;margin:0;padding:6px;flex:1;overflow:auto}
+  .box li{padding:7px 9px;border-radius:7px;font-size:13px;color:var(--ink-2);cursor:pointer;
+    display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .box li:hover{background:#f8fafc}
+  .box li.sel{background:var(--brand-50);color:var(--brand-700);font-weight:600}
+  .box li small{font-size:11px;color:var(--mut-2);font-weight:400}
+  .box li.sel small{color:var(--brand-700);opacity:.75}
+  .xbtns{display:flex;flex-direction:column;justify-content:center;gap:7px}
+  .xb{width:34px;height:30px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    cursor:pointer;color:var(--mut);font-size:14px;display:grid;place-items:center}
+  .xb:hover{border-color:var(--brand);color:var(--brand)}
+  .subrow{padding:6px 9px 9px 9px;border-top:1px dashed var(--line-2);margin-top:2px}
+
+  /* ---------- C: katlanır liste ---------- */
+  .acc{border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .row{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;
+    border-bottom:1px solid var(--line-2);background:#fff}
+  .row:last-of-type{border-bottom:0}
+  .row:hover{background:#fcfdfe}
+  .cb{flex:none;width:17px;height:17px;border-radius:5px;border:1.6px solid #cbd5e1;background:#fff;
+    display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700}
+  .row.on .cb{background:var(--brand);border-color:var(--brand)}
+  .row .nm{font-size:13.5px;color:var(--ink);flex:1}
+  .row.on .nm{font-weight:600}
+  .row .tail{font-size:11.5px;color:var(--mut-2)}
+  .row.on .tail{color:var(--brand-700)}
+  .row .car{color:var(--mut-2);font-size:11px}
+  .sub{border-bottom:1px solid var(--line-2);background:#f8fafc;padding:9px 12px 11px 39px}
+  .sub .partlbl{margin-bottom:6px}
+
+  .foot{display:flex;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2)}
+  .btn{height:34px;padding:0 15px;border-radius:9px;border:1px solid var(--line);background:#fff;
+    font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+  .btn.p{background:var(--brand);border-color:var(--brand);color:#fff}
+
+  .mini{font-size:11.5px;color:var(--mut-2);text-align:center}
+  @media(max-width:760px){
+    .cards{grid-template-columns:1fr}
+    .xfer{grid-template-columns:1fr;gap:8px}
+    .xbtns{flex-direction:row;justify-content:center}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Kullanıcı — yetki atama</h1>
+  <p class="sub">
+    Üç seçenek, gerçek kapsamlarınla: Certifying Staff (alt: Incoming Inspector),
+    Technician, Mechanic Technician, Auditor (alt: Product, Quality, NDT, Procedures),
+    NDT Staff, Technical Quality &amp; Safety Engineer — artı NDT metodları (PT, MT, UT, ET).
+  </p>
+  <p class="today">
+    <b>Bugünkü hâli:</b> boş bir “— Select —” açılır kutusu, altında seçim yapılınca beliren
+    gri bir alt-yetki kutusu, ondan da bağımsız ayrı bir NDT metod satırı. Üç ayrı yerde duran
+    üç şey aslında tek bir soruyu cevaplıyor: <b>bu kişi neyden sorumlu?</b> Üçü de boşken
+    ekran bomboş görünüyor ve hangi kapsamın hangi eğitimi getirdiği hiç yazmıyor.
+  </p>
+
+  <!-- ─────────────── A ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">A</span>
+      <div>
+        <h2>Kapsam kartları — aç, içi kendiliğinden gelsin</h2>
+        <p>Her yetki bir kart. Açınca <b>o kapsama ait</b> alt yetkiler ve metodlar
+           kartın içinde beliriyor; kapalıyken hiç görünmüyor. Altta tek cümlelik özet:
+           bu seçim kaç eğitimi zorunlu kılıyor.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <span class="lbl">Yetki kapsamları</span>
+      <div class="cards">
+
+        <div class="c on">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">Certifying Staff</div><div class="meta">1 alt yetki · 9 zorunlu eğitim</div></div>
+          </div>
+          <div class="body">
+            <p class="partlbl">Alt yetkiler</p>
+            <div class="parts"><span class="pill on"><span class="tick">✓</span>Incoming Inspector</span></div>
+          </div>
+        </div>
+
+        <div class="c">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">Technician</div><div class="meta">7 zorunlu eğitim</div></div>
+          </div>
+        </div>
+
+        <div class="c">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">Mechanic Technician</div><div class="meta">7 zorunlu eğitim</div></div>
+          </div>
+        </div>
+
+        <div class="c on">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">Auditor</div><div class="meta">4 alt yetkiden 2 seçili · 6 zorunlu eğitim</div></div>
+          </div>
+          <div class="body">
+            <p class="partlbl">Alt yetkiler</p>
+            <div class="parts">
+              <span class="pill on"><span class="tick">✓</span>Product</span>
+              <span class="pill on"><span class="tick">✓</span>Quality</span>
+              <span class="pill">NDT</span>
+              <span class="pill">Procedures</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c on" style="grid-column:1/-1">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">NDT Staff</div><div class="meta">2 metod seçili · her metod kendi sertifikası ve son kullanma tarihiyle takip edilir</div></div>
+          </div>
+          <div class="body">
+            <p class="partlbl">NDT training on the related testing type — metodlar</p>
+            <div class="parts">
+              <span class="pill on"><span class="tick">✓</span>PT</span>
+              <span class="pill on"><span class="tick">✓</span>MT</span>
+              <span class="pill">UT</span>
+              <span class="pill">ET</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="c">
+          <div class="top"><span class="sw"></span>
+            <div><div class="nm">Technical Quality &amp; Safety Engineer</div><div class="meta">8 zorunlu eğitim</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="summary">
+        <b>Filiz UYAN</b> → 3 yetki kapsamı, 3 alt yetki, 2 NDT metodu.
+        Bu seçim <span class="req">13 eğitimi</span> zorunlu kılıyor; şu an 9'u tamam,
+        <b>4'ü eksik</b>.
+      </div>
+      <div class="foot"><button class="btn p">Save Changes</button><button class="btn">Cancel</button></div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>Üç ayrı yerde duran üç şey tek yerde — alt yetki ve metod, ait olduğu kapsamın içinde.</li>
+        <li>Hiçbir şey seçili değilken bile bütün kapsamlar ve kaç eğitim getirdikleri görünüyor.</li>
+        <li>Özet satırı “bu kişiden ne bekleniyor”u kaydırmadan söylüyor — bugün bu bilgi hiç yok.</li>
+        <li>Metodlar artık havada durmuyor, NDT Staff'ın altında.</li>
+      </ul>
+      <b>Eksisi:</b> altı kapsam altı kart demek — pencere bugünkünden uzun.
+    </div>
+  </section>
+
+  <!-- ─────────────── B ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">B</span>
+      <div>
+        <h2>İki sütun — soldan seç, sağa geçir</h2>
+        <p>Solda verilebilecekler, sağda bu kişide olanlar. “Ne verdim” sorusunun
+           cevabı tek bakışta sağ sütun. Alt yetki ve metod, sağ sütundaki satırın
+           altında küçük rozetler olarak çıkıyor.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <span class="lbl">Yetki kapsamları</span>
+      <div class="xfer">
+        <div class="box">
+          <h4>Verilebilir</h4>
+          <ul>
+            <li>Technician <small>7 eğitim</small></li>
+            <li>Mechanic Technician <small>7 eğitim</small></li>
+            <li class="sel">Technical Quality &amp; Safety Engineer <small>8 eğitim</small></li>
+          </ul>
+        </div>
+        <div class="xbtns">
+          <button class="xb" title="Ekle">→</button>
+          <button class="xb" title="Çıkar">←</button>
+        </div>
+        <div class="box right">
+          <h4>Bu kişide (3)</h4>
+          <ul>
+            <li>Certifying Staff <small>9 eğitim</small></li>
+            <li style="padding-top:0"><div class="subrow" style="width:100%">
+              <p class="partlbl">Alt yetkiler</p>
+              <div class="parts"><span class="pill on"><span class="tick">✓</span>Incoming Inspector</span></div>
+            </div></li>
+            <li>Auditor <small>6 eğitim</small></li>
+            <li style="padding-top:0"><div class="subrow" style="width:100%">
+              <p class="partlbl">Alt yetkiler</p>
+              <div class="parts">
+                <span class="pill on"><span class="tick">✓</span>Product</span>
+                <span class="pill on"><span class="tick">✓</span>Quality</span>
+                <span class="pill">NDT</span><span class="pill">Procedures</span>
+              </div>
+            </div></li>
+            <li>NDT Staff <small>metod bazlı</small></li>
+            <li style="padding-top:0"><div class="subrow" style="width:100%">
+              <p class="partlbl">Metodlar</p>
+              <div class="parts">
+                <span class="pill on"><span class="tick">✓</span>PT</span><span class="pill on"><span class="tick">✓</span>MT</span>
+                <span class="pill">UT</span><span class="pill">ET</span>
+              </div>
+            </div></li>
+          </ul>
+        </div>
+      </div>
+      <p class="hint">Toplam 13 zorunlu eğitim · 9 tamam · 4 eksik</p>
+      <div class="foot"><button class="btn p">Save Changes</button><button class="btn">Cancel</button></div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>“Bu kişide ne var” ile “ne verilebilir” fiziksel olarak ayrı — karışmıyor.</li>
+        <li>Çok yetkili kişilerde sağ sütun tek başına okunabilir bir özet.</li>
+      </ul>
+      <b>Eksisi:</b> seç → düğmeye bas iki adım; altı kapsam için bu ağır kalıyor.
+      Telefonda iki sütun alt alta düşüyor ve mantığı bozuluyor.
+    </div>
+  </section>
+
+  <!-- ─────────────── C ─────────────── -->
+  <section class="opt">
+    <header>
+      <span class="tag">C</span>
+      <div>
+        <h2>Katlanır liste — en sade, en kısa</h2>
+        <p>Tek sütun, her satır bir kapsam. Tik koyunca alt yetkiler ve metodlar
+           hemen altında açılıyor. Bugünkü kutudan en az sapan ama hepsini
+           tek yerde toplayan seçenek.</p>
+      </div>
+    </header>
+    <div class="demo">
+      <span class="lbl">Yetki kapsamları · 3 seçili</span>
+      <div class="acc">
+        <div class="row on"><span class="cb">✓</span><span class="nm">Certifying Staff</span>
+          <span class="tail">1/1 alt yetki · 9 eğitim</span><span class="car">▾</span></div>
+        <div class="sub">
+          <p class="partlbl">Alt yetkiler</p>
+          <div class="parts"><span class="pill on"><span class="tick">✓</span>Incoming Inspector</span></div>
+        </div>
+
+        <div class="row"><span class="cb"></span><span class="nm">Technician</span>
+          <span class="tail">7 eğitim</span><span class="car"></span></div>
+        <div class="row"><span class="cb"></span><span class="nm">Mechanic Technician</span>
+          <span class="tail">7 eğitim</span><span class="car"></span></div>
+
+        <div class="row on"><span class="cb">✓</span><span class="nm">Auditor</span>
+          <span class="tail">2/4 alt yetki · 6 eğitim</span><span class="car">▾</span></div>
+        <div class="sub">
+          <p class="partlbl">Alt yetkiler</p>
+          <div class="parts">
+            <span class="pill on"><span class="tick">✓</span>Product</span>
+            <span class="pill on"><span class="tick">✓</span>Quality</span>
+            <span class="pill">NDT</span><span class="pill">Procedures</span>
+          </div>
+        </div>
+
+        <div class="row on"><span class="cb">✓</span><span class="nm">NDT Staff</span>
+          <span class="tail">2/4 metod</span><span class="car">▾</span></div>
+        <div class="sub">
+          <p class="partlbl">NDT training on the related testing type — metodlar</p>
+          <div class="parts">
+            <span class="pill on"><span class="tick">✓</span>PT</span><span class="pill on"><span class="tick">✓</span>MT</span>
+            <span class="pill">UT</span><span class="pill">ET</span>
+          </div>
+          <p class="hint">Her tikli metod kendi sertifikası ve son kullanma tarihiyle takip edilir.</p>
+        </div>
+
+        <div class="row"><span class="cb"></span><span class="nm">Technical Quality &amp; Safety Engineer</span>
+          <span class="tail">8 eğitim</span><span class="car"></span></div>
+      </div>
+      <p class="hint">Toplam <b style="color:var(--brand-700)">13 zorunlu eğitim</b> · 9 tamam · 4 eksik</p>
+      <div class="foot"><button class="btn p">Save Changes</button><button class="btn">Cancel</button></div>
+    </div>
+    <div class="note">
+      <b>Artısı:</b>
+      <ul>
+        <li>En az yer kaplayan seçenek; altı kapsam altı satır.</li>
+        <li>Seçili olmayanda bile “kaç eğitim getiriyor” yazıyor — vermeden önce görüyorsun.</li>
+        <li>Telefonda da aynı mantık, bozulmadan çalışır.</li>
+      </ul>
+      <b>Eksisi:</b> A'daki kadar “ayrı ayrı nesne” hissi yok; uzun listede satırlar birbirine benziyor.
+    </div>
+  </section>
+
+  <p class="mini">
+    Hangisini seçersen onu uygularım. Üçünde de ortak olan iki yenilik var ve
+    bence asıl kazanç onlar: <b>metodlar artık NDT Staff'ın altında</b> ve
+    <b>her kapsamın kaç eğitim getirdiği yazıyor</b>.
+  </p>
+</div>
+</body>
+</html>

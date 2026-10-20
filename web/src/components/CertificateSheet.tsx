@@ -110,11 +110,11 @@ export function CertificateSheet({ cert }: { cert: Cert }) {
       .catch(() => setQr(""));
   }, [verifyUrl]);
 
+  // Sinav yoksa satir hic yazilmaz. "Exam: Not required" bir bilgi degil,
+  // olmayan bir seyin ilani; belgede yeri yok.
   const examText =
     cert.issuedVia === "IMPORT"
       ? null
-      : cert.examRequired === false
-      ? "Exam: Not required"
       : cert.examScore != null
       ? `Exam Score: ${cert.examScore}%${
           cert.examPassingScore != null ? ` (pass mark ${cert.examPassingScore}%)` : ""

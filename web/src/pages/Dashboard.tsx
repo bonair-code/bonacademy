@@ -277,11 +277,10 @@ function CourseCard({
       >
         {!course?.coverUrl && (
           <img
-            src="/Logo.png"
+            src="/Logo-mono.png"
             alt=""
             aria-hidden="true"
             className="absolute right-3 top-3 h-4 w-auto opacity-25"
-            style={{ filter: "brightness(0) invert(1)" }}
           />
         )}
       </div>

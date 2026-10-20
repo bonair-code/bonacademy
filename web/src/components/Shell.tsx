@@ -233,12 +233,10 @@ function ShellLayout({ children }: { children: ReactNode }) {
         {/* Telefonda sayfa durum çubuğunun altına kadar uzanıyor (viewport-fit=cover):
             logo onun altında kalmasın. */}
         <div className="flex flex-col items-center px-4 pt-6 max-lg:pt-[calc(env(safe-area-inset-top)+1.5rem)] pb-3">
-          <img
-            src="/Logo.png"
-            alt={ORG.name}
-            className="h-[38px] w-auto"
-            style={{ filter: "brightness(0) invert(1)" }}
-          />
+          {/* Logo-mono: beyaz siluet, saydam zemin. Logo.png koyu metinli ve
+              zemini OPAK BEYAZ; ona filtre uygulayinca yazi da zemin de ayni
+              beyaza donuyor ve logo kayboluyordu. */}
+          <img src="/Logo-mono.png" alt={ORG.name} className="h-[38px] w-auto" />
           <span
             className="mt-4 h-px w-full"
             style={{
