@@ -371,12 +371,13 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
 
   /**
    * PDF raporu. Antetli bir kurum kaydı dökümü, tek tek sertifikadan farklı:
-   * denetimde gösterilen şey bu. Admin ve müdür hem KENDİ kaydını hem
-   * baktıkları kişininkini basabilir (müdür kendi departmanıyla sınırlı,
-   * sayfa zaten ona göre açılıyor). Sıradan personel kendi kaydını basamaz;
-   * belgesi gerekiyorsa tek tek "View certificate"ten alır.
+   * denetimde gösterilen şey bu. Başkasının kaydını açabilen herkes
+   * (admin, müdür, eğitmen) KENDİ kaydını da basabilir — müdür kendi
+   * departmanıyla sınırlı, sayfa zaten ona göre açılıyor. Sıradan personel
+   * ve müşteri basamaz; belgesi gerekiyorsa "View certificate"ten alır.
    */
-  const canPrint = !self || role === "ADMIN" || role === "MANAGER";
+  const canPrint =
+    !self || role === "ADMIN" || role === "MANAGER" || role === "INSTRUCTOR";
 
   /**
    * Eğitim atamak kişiyi yönetmekten ayrı yetki: eğitimi veren atar. Müdür
