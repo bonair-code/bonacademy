@@ -9,7 +9,17 @@
 export const ORG = {
   /** Uygulamanın adı — sidebar, giriş ekranı, sekme başlığı. */
   productName: "BonAcademy",
+  /**
+   * Resmî/onay adı. SHT-145 onayındaki yazımla aynı olmalı; SERTİFİKADA
+   * bu geçiyor. Verilmiş sertifikalar adı kendi belgelerinde saklıyor,
+   * burayı değiştirmek onları etkilemez.
+   */
   name: "BONAIR AVIATION MAINTENANCE ORGANISATION",
+  /**
+   * Rapor antetindeki kısa ad. Rapor bir onay belgesi değil, iç kayıt
+   * dökümü; uzun kurum unvanı orada gereksiz yer kaplıyordu.
+   */
+  reportName: "BONAIR AVIATION",
   /** Belge antetinde kurum adının altındaki satır. */
   approvalLine: "Turkish DGCA SHT 145 Approval No: TR.145.118",
   /** Sertifikaya yazılan onay numarası (sunucu tarafı da bunu kullanır). */

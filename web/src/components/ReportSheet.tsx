@@ -45,7 +45,7 @@ export function ReportLetterhead({
       <div className="rh-top">
         <img src="/Logo.png" alt="" className="rh-logo" />
         <div className="rh-org">
-          <div className="rh-org-name">{ORG.name}</div>
+          <div className="rh-org-name">{ORG.reportName}</div>
           <div className="rh-org-sub">{ORG.approvalLine}</div>
         </div>
         {/* Form künyesi antette: sabit alt künye çok sayfalı çıktıda tablonun

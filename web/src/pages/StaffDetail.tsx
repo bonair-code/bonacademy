@@ -684,12 +684,10 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
               </button>
             )}
             {/* Kişiyle ilgili bütün işlemler tek menüde. Kendi kaydında
-                yönetim eylemi yok; menü yerine tek "PDF report" düğmesi. */}
-            {self ? (
-              <button onClick={() => printReport()} className="btn-secondary rounded-xl">
-                PDF report
-              </button>
-            ) : (
+                hiçbiri yok: PDF raporu da yok — o bir kurum kaydı dökümü,
+                antetli ve form numaralı; kişinin kendi adına üretmesi doğru
+                değil. Belgesi gereken "View certificate"ten alır. */}
+            {self ? null : (
             <RowMenu
               variant="round"
               label={`Manage ${user.name}`}
@@ -819,7 +817,9 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
           Ekranda görünmez. Rapor bir uygunluk belgesi: kimlik, özet sayılar
           ve bütün tablolar (eğitim, dış kayıtlar, sertifikalar, atamalar)
           eksiksiz basılır — ekranda neyin süzülü olduğundan bağımsız. */}
-      <div className="hidden print:block">
+      {/* Kendi kaydinda HIC basilmaz: dugmeyi gizlemek Ctrl+P yi
+          engellemiyordu, antetli kurum belgesi yine cikiyordu. */}
+      <div className={self ? "hidden" : "hidden print:block"}>
   <Link to="/follow-up" className="text-xs text-slate-500 hover:text-slate-800 no-print">
           ← Training Follow-Up
         </Link>
