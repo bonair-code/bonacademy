@@ -155,9 +155,18 @@ async function main() {
       continue;
     }
 
-    // Kâğıtta kapsama iki yönlü yazılmış:
-    //   HF/SMS hücresinde "(Safety Training)" → Safety tarihini HF/SMS'e taşı
-    //   Safety hücresinde "HF & SMS"          → HF tarihini Safety'ye taşı
+    // Kapsama TEK yönlü: Safety Training → HF/SMS.
+    //
+    // Kurs adı zaten "Safety Training (Include Human Factors)": Safety eğitimi
+    // HF'i (ve bu kuruluşta SMS'i) kapsar, dolayısıyla HF/SMS hücresinde
+    // "(Safety Training)" yazıyorsa Safety tarihi oraya taşınabilir.
+    //
+    // TERSİ YAPILMAZ. Safety hücresindeki "HF & SMS" notu, o kişinin Safety
+    // gerekliliğinin ayrı HF ve SMS eğitimleriyle karşılandığını anlatır —
+    // "HF tarihini buraya yaz" demek değildir. Eskiden HF tarihi Safety'ye
+    // kopyalanıyordu; bu, karşılığı olmayan 10 adet Safety/SMS kaydı üretti
+    // (biri kâğıtta PLANNED olan kişiye aitti). O yön kaldırıldı: böyle bir
+    // hücre artık atlanır ve raporda "kapsama notu" olarak listelenir.
     const safety = p.cells["SAFETY Training"];
     if (safety && safety.completed) {
       for (const col of COVERED_BY_SAFETY) {
@@ -165,9 +174,6 @@ async function main() {
         if (cell && cell.note && /safety/i.test(cell.note))
           p.cells[col] = { ...safety, coveredBy: "SAFETY Training" };
       }
-    } else if (safety && safety.note && /hf/i.test(safety.note)) {
-      const hf = p.cells.HF;
-      if (hf && hf.completed) p.cells["SAFETY Training"] = { ...hf, coveredBy: "HF" };
     }
 
     for (const [col, cell] of Object.entries(p.cells)) {
