@@ -4,42 +4,13 @@
     {
       "name": "web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev",
-        "--prefix",
-        "web"
-      ],
+      "runtimeArgs": ["run", "dev", "--prefix", "web"],
       "port": 5173
-    },
-    {
-      "name": "web",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "dev",
-        "--prefix",
-        "web",
-        "--",
-        "--port",
-        "5174",
-        "--strictPort"
-      ],
-      "port": 5174
     },
     {
       "name": "dist",
       "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "run",
-        "preview",
-        "--prefix",
-        "web",
-        "--",
-        "--port",
-        "5175",
-        "--strictPort"
-      ],
+      "runtimeArgs": ["run", "preview", "--prefix", "web", "--", "--port", "5175", "--strictPort"],
       "port": 5175
     }
   ]
