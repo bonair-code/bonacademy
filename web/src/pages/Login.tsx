@@ -67,8 +67,8 @@ export function Login() {
       >
         {sent ? (
           <>
-            <p className="text-[12.5px] leading-relaxed mb-4" style={{ color: "#c7c7cc" }}>
-              If an account exists for <b className="text-white">{email.trim()}</b>, a password
+            <p className="text-[13px] leading-relaxed mb-5 text-slate-600">
+              If an account exists for <b className="text-slate-900">{email.trim()}</b>, a password
               reset link is on its way. The link expires after a while — request a new one if it
               does.
             </p>
@@ -96,7 +96,7 @@ export function Login() {
             <button
               type="button"
               onClick={backToSignIn}
-              className="w-full text-center text-[11px] font-semibold mt-3 text-white/45 hover:text-white/80"
+              className="w-full text-center text-[12.5px] font-medium mt-3.5 text-slate-500 hover:text-slate-800"
             >
               ← Back to sign in
             </button>
@@ -127,7 +127,7 @@ export function Login() {
               setMode("reset");
               setErr(null);
             }}
-            className="text-[10.5px] font-semibold text-brand-500 hover:text-brand-400 mb-1.5"
+            className="text-[12.5px] font-medium text-brand-600 hover:text-brand-700 mb-1.5"
           >
             Forgot password?
           </button>

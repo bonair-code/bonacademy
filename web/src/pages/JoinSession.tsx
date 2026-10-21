@@ -159,8 +159,8 @@ export function JoinSession() {
       }
     >
       {open && done && (
-        <p className="text-[12.5px] leading-relaxed" style={{ color: "#c7c7cc" }}>
-          <b className="text-white">{fullName}</b> is on the attendance list for{" "}
+        <p className="text-[13px] leading-relaxed text-slate-600">
+          <b className="text-slate-900">{fullName}</b> is on the attendance list for{" "}
           {session?.courseTitle}. Your certificate is issued when the instructor closes the
           session.
         </p>
@@ -249,7 +249,7 @@ export function JoinSession() {
 
           {/* E-posta alanı kalıyor: sertifikanın sahibini tanımlıyor ve posta
               açıldığında gönderim adresi bu. Yalnız vaat edilen şey değişiyor. */}
-          <p className="text-[10.5px] mt-2 mb-4" style={{ color: "#8e8e93" }}>
+          <p className="text-[11.5px] mt-2 mb-4 text-slate-500">
             Your place and date of birth are printed on the certificate.
             {MAIL_ENABLED
               ? " It is emailed to you as a PDF when the training is complete."

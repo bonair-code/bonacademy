@@ -75,14 +75,14 @@ export function Verify() {
       width="max-w-[440px]"
     >
       {state === "noToken" && (
-        <p className="text-[12.5px] leading-relaxed" style={{ color: "#c7c7cc" }}>
+        <p className="text-[13px] leading-relaxed text-slate-600">
           Scan the QR code printed on the certificate to verify it. Certificates can only be
           checked through their own QR code.
         </p>
       )}
 
       {state === "loading" && (
-        <p className="text-[13px]" style={{ color: "#98989d" }}>
+        <p className="text-[13px] text-slate-500">
           Checking…
         </p>
       )}
@@ -103,16 +103,15 @@ export function Verify() {
 
       {state === "found" && cert && (
         <div
-          className="rounded-xl p-4"
-          style={{ background: "rgba(48,177,90,.14)", border: "1px solid rgba(48,177,90,.32)" }}
+          className="rounded-xl p-4 bg-emerald-50 border border-emerald-200"
         >
-          <div className="font-semibold text-[13px]" style={{ color: "#86e0a6" }}>
+          <div className="font-semibold text-[13px] text-emerald-700">
             ✓ Registered certificate
           </div>
-          <div className="text-[19px] font-semibold text-white mt-2.5 tracking-[-0.018em]">
+          <div className="text-[19px] font-semibold text-slate-900 mt-2.5 tracking-[-0.018em]">
             {cert.name}
           </div>
-          <p className="text-[13px] mt-0.5" style={{ color: "#c7c7cc" }}>
+          <p className="text-[13px] mt-0.5 text-slate-600">
             {cert.courseTitle}
           </p>
 
@@ -120,27 +119,25 @@ export function Verify() {
               gözüyle karşılaştırıyor, ayrıca bir adım gerekmiyor. */}
           <div
             className="mt-3 pt-3 grid grid-cols-2 gap-3"
-            style={{ borderTop: "1px solid rgba(48,177,90,.25)" }}
+            style={{ borderTop: "1px solid rgb(167 243 208)" }}
           >
             <div>
               <div
-                className="text-[9.5px] font-semibold uppercase tracking-[0.09em]"
-                style={{ color: "#8e8e93" }}
+                className="text-[9.5px] font-semibold uppercase tracking-[0.09em] text-emerald-800/70"
               >
                 Certificate No
               </div>
-              <div className="text-[13.5px] font-semibold text-white tabular-nums mt-0.5">
+              <div className="text-[13.5px] font-semibold text-slate-900 tabular-nums mt-0.5">
                 {cert.serialNo}
               </div>
             </div>
             <div>
               <div
-                className="text-[9.5px] font-semibold uppercase tracking-[0.09em]"
-                style={{ color: "#8e8e93" }}
+                className="text-[9.5px] font-semibold uppercase tracking-[0.09em] text-emerald-800/70"
               >
                 Certificate Date
               </div>
-              <div className="text-[13.5px] font-semibold text-white tabular-nums mt-0.5">
+              <div className="text-[13.5px] font-semibold text-slate-900 tabular-nums mt-0.5">
                 {issued ? dmy(issued) : "—"}
               </div>
             </div>

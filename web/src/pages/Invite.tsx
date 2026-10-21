@@ -73,7 +73,7 @@ export function Invite() {
         : "This invitation link is not valid. Please check that you opened the full link from the email.";
     return (
       <PublicShell title="Invitation" subtitle={undefined}>
-        <p className="text-[15px] text-white/80 leading-relaxed">{msg}</p>
+        <p className="text-[14.5px] text-slate-600 leading-relaxed">{msg}</p>
         <Link to="/login" className={`${pubButton} mt-6 inline-flex justify-center w-full`}>
           Go to sign in
         </Link>
@@ -85,7 +85,7 @@ export function Invite() {
     <PublicShell title={`Welcome${info.name ? `, ${info.name.split(" ")[0]}` : ""}`} subtitle="Set a password to activate your account.">
       <form onSubmit={submit}>
         <label className={pubLabel}>Email</label>
-        <div className="rounded-xl border border-white/15 bg-white/[.06] px-4 py-3 text-[15px] text-white/85 mb-4 truncate">
+        <div className="rounded-[10px] border border-slate-200 bg-slate-50 px-3.5 py-3 text-[14.5px] text-slate-700 mb-4 truncate">
           {info.email}
         </div>
         <label className={pubLabel}>New password</label>
