@@ -27,6 +27,9 @@ import {
   methodRecordIndex,
   openAssignmentSet,
   pickLatest,
+  resolveCoverage,
+  type Coverage,
+  type SatisfiedBy,
 } from "../lib/records";
 import { AnchoredCard } from "../components/AnchoredCard";
 import { AssignOne } from "../components/AssignOne";
@@ -57,6 +60,8 @@ type CourseRow = {
   methods?: string[];
   recurrenceEvery?: number | null;
   recurrenceUnit?: string;
+  /** Bu gerekliliğin yerine geçebilecek kurslar (ör. Safety = SMS + HF). */
+  satisfiedBy?: SatisfiedBy | null;
 };
 type JobTitle = {
   id: string;
@@ -90,6 +95,8 @@ type CellState =
       recordTitle?: string | null;
       /** Metod bazlı eğitimde her metodun kendi tarihleri. */
       methodRows?: MethodRow[];
+      /** Gereklilik başka kurslarla karşılandıysa onların kayıtları. */
+      via?: Coverage["via"];
     };
 
 
@@ -285,6 +292,9 @@ export function TrainingMatrix() {
     [externals]
   );
 
+  /** Eşdeğerlik çözümü, yerine geçen kursun tekrar süresine de bakıyor. */
+  const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
+
   const assignedSet = useMemo(() => openAssignmentSet(assignments), [assignments]);
 
   /**
@@ -357,7 +367,28 @@ export function TrainingMatrix() {
       };
     }
 
-    const done = completions.get(keyOf(u.id, c.id));
+    /**
+     * Gereklilik kursun KENDİ kaydıyla ya da eşdeğer kurslarla karşılanmış
+     * olabilir (Safety = SMS + HF). Kural lib/records.ts'de; burada yalnızca
+     * sonucu gösteriyoruz. Hem doğrudan hem eşdeğer kayıt varsa daha uzun
+     * koruyan seçilir.
+     */
+    const cover = resolveCoverage(u.id, c, completions, courseById);
+    const done = cover?.via ? undefined : completions.get(keyOf(u.id, c.id));
+
+    // Gereklilik yalnızca eşdeğer kurslarla karşılanıyorsa: tarih ve bitiş
+    // o kayıtlardan gelir, kursun kendi belgesi yoktur.
+    if (cover && cover.via) {
+      return {
+        kind: "DONE",
+        date: cover.date,
+        expires: cover.expiry,
+        days: daysLeft(cover.expiry),
+        external: null,
+        via: cover.via,
+      };
+    }
+
     if (done) {
       // Dış belgenin geçerliliği kursun tekrar süresinden değil, belgenin
       // kendi bitiş tarihinden gelir. Kural lib/records.ts'de — matris bunu
@@ -927,6 +958,7 @@ export function TrainingMatrix() {
           at={hover.at}
           onEnter={hover.holdOpen}
           onLeave={hover.closeNow}
+          courseTitleOf={(id) => courseById.get(id)?.title ?? "—"}
           onPreviewFile={(url, title) => {
             hover.closeNow();
             setPreview({ url, title });
@@ -1228,10 +1260,13 @@ function CellDetail({
   onPreviewFile,
   onRecord,
   onAssign,
+  courseTitleOf,
 }: {
   at: HoverState;
   onEnter: () => void;
   onLeave: () => void;
+  /** Kapsamayı sağlayan kursun adı — "Covered by" satırı için. */
+  courseTitleOf: (courseId: string) => string;
   onEditRecord?: (externalId: string) => void;
   onPreviewFile?: (url: string, title: string) => void;
   /** Eksik hücrede "kayıt gir" — verilmezse yetki yok. */
@@ -1394,7 +1429,25 @@ function CellDetail({
           {state.serialNo ? row("Certificate No", state.serialNo) : null}
           {state.durationHours != null ? row("Duration", `${state.durationHours} hours`) : null}
           {state.instructor ? row("Instructor", state.instructor) : null}
-          {row("Source", state.external ? `External — ${state.external}` : "BonAcademy")}
+
+          {/* Gereklilik başka eğitimlerle karşılandıysa bunu SÖYLEMEK zorundayız:
+              hücre yeşil ama o kursun kendi belgesi yok. Denetçinin ilk sorusu
+              "bu neden geçerli" oluyor; cevabı ekranda duruyor. Birden çok
+              kayıt varsa bitişi EN ERKEN biten belirler (bkz. resolveCoverage). */}
+          {state.via && state.via.length > 0
+            ? row(
+                "Covered by",
+                <span>
+                  {state.via
+                    .map((v) => courseTitleOf(v.courseId))
+                    .join(" + ")}
+                  <span className="text-slate-400">
+                    {" "}
+                    — no separate record for this training
+                  </span>
+                </span>
+              )
+            : row("Source", state.external ? `External — ${state.external}` : "BonAcademy")}
 
           {/* Dolu hücrede kaydı düzeltmenin yolu yoktu: tarih yanlış
               girildiyse ya da yeni belge geldiyse kişi sayfasına gitmek

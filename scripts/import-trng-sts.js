@@ -21,10 +21,27 @@ const XLSX = webRequire("xlsx");
 const { initializeApp } = fnRequire("firebase-admin/app");
 const { getFirestore, Timestamp, FieldValue } = fnRequire("firebase-admin/firestore");
 
-const FILE = process.env.TRNG_FILE || "C:/Users/user/Desktop/Kitap1.xlsx";
+const FILE = process.env.TRNG_FILE || "C:/Users/user/Desktop/Follow Up Training.xlsx";
 const APPLY = process.argv.includes("--apply");
-/** Kalan günlerin hesaplandığı gün — tablonun kendi referansı. */
-const TODAY = new Date(Date.UTC(2026, 8, 28));
+
+/** Tablo bir kez okunur; hem TODAY hem parseSheet aynı satırları kullanır. */
+const SHEET_ROWS = XLSX.utils.sheet_to_json(XLSX.readFile(FILE).Sheets["TRNG_STS"], {
+  header: 1,
+  raw: true,
+  defval: "",
+});
+
+/**
+ * Kalan-gün sütunu tablonun KENDİ "LAST MOD. DATE" hücresine göre hesaplanmış.
+ * Burada sabit tarih tutmak, dosya güncellendiğinde geçerlilik sürelerinin
+ * yanlış çıkmasına yol açıyordu (eşleşme toleransı yalnızca ±2 gün).
+ */
+const TODAY = (() => {
+  const v = SHEET_ROWS[2] && SHEET_ROWS[2][10];
+  if (typeof v !== "number")
+    throw new Error("LAST MOD. DATE okunamadı (TRNG_STS, 3. satir K sutunu).");
+  return new Date(Math.round((v - 25569) * 86400000));
+})();
 
 /** Matris kolonu → sistemdeki kurs başlığı. Burada olmayan kolon aktarılmaz. */
 const COURSE_BY_COLUMN = {
@@ -35,6 +52,10 @@ const COURSE_BY_COLUMN = {
   "FUEL TANK SAFETY": "Fuel Tank Safety Training (Phase 2) | Initial Training",
   "SHT-CAM": "SHT-CAM | Initial Training",
   "SAFETY Training": "Safety Training (Include Human Factors) | Initial Training",
+  // Eski kayit tasiyicisi. Artik ayri verilmiyor; Safety Training onun yerine
+  // geciyor (kurs ayarindaki satisfiedBy esdegerligi). Kolon aktarilmazsa ayri
+  // SMS almis kisilerin kaydi sistemde hic gorunmuyordu.
+  SMS: "Safety Management System (SMS) | Initial Training",
   "SHT-66": "SHT-66 | Initial Training",
   "TECHNOLOGY UPDATE": "Technology Update | Initial Training",
   "INCOMING INSPECTION": "Incoming Inspection | Initial Training",
@@ -45,12 +66,6 @@ const COURSE_BY_COLUMN = {
   // içinde veriliyor; Module-10 ayrıldı, artık takip edilmiyor.
   "ENGLISH EXAM": "English Exam",
 };
-
-/**
- * HF ve SMS hücresinde tarih yerine Safety Training notu yazan kişiler için
- * Safety Training tarihi bu kolonlara da kopyalanır — kâğıttaki mantık bu.
- */
-const COVERED_BY_SAFETY = ["HF", "SMS"];
 
 const DEPTS = [
   "QUALITY DEPARTMENT",
@@ -88,11 +103,7 @@ function readCell(dateSerial, remaining) {
 }
 
 function parseSheet() {
-  const rows = XLSX.utils.sheet_to_json(XLSX.readFile(FILE).Sheets["TRNG_STS"], {
-    header: 1,
-    raw: true,
-    defval: "",
-  });
+  const rows = SHEET_ROWS;
   const header = rows[4].map((h) => String(h).replace(/\s+/g, " ").trim());
   const people = [];
   let dept = "";
@@ -155,27 +166,16 @@ async function main() {
       continue;
     }
 
-    // Kapsama TEK yönlü: Safety Training → HF/SMS.
-    //
-    // Kurs adı zaten "Safety Training (Include Human Factors)": Safety eğitimi
-    // HF'i (ve bu kuruluşta SMS'i) kapsar, dolayısıyla HF/SMS hücresinde
-    // "(Safety Training)" yazıyorsa Safety tarihi oraya taşınabilir.
-    //
-    // TERSİ YAPILMAZ. Safety hücresindeki "HF & SMS" notu, o kişinin Safety
-    // gerekliliğinin ayrı HF ve SMS eğitimleriyle karşılandığını anlatır —
-    // "HF tarihini buraya yaz" demek değildir. Eskiden HF tarihi Safety'ye
-    // kopyalanıyordu; bu, karşılığı olmayan 10 adet Safety/SMS kaydı üretti
-    // (biri kâğıtta PLANNED olan kişiye aitti). O yön kaldırıldı: böyle bir
-    // hücre artık atlanır ve raporda "kapsama notu" olarak listelenir.
-    const safety = p.cells["SAFETY Training"];
-    if (safety && safety.completed) {
-      for (const col of COVERED_BY_SAFETY) {
-        const cell = p.cells[col];
-        if (cell && cell.note && /safety/i.test(cell.note))
-          p.cells[col] = { ...safety, coveredBy: "SAFETY Training" };
-      }
-    }
-
+    /**
+     * Kapsama BURADA TÜRETİLMEZ.
+     *
+     * "Safety Training = SMS + HF" kuralı artık kursun kendi ayarında
+     * (`satisfiedBy`) duruyor ve ekranlar bunu okuma anında çözüyor
+     * (lib/records.ts → resolveCoverage). Import'un kâğıttaki "(Safety
+     * Training)" notundan sahte bir HF/SMS kaydı üretmesi, karşılığı olmayan
+     * belge yaratıyordu; bir kez temizlendi. Burası artık yalnızca kâğıtta
+     * TARİH yazan hücreleri aktarır, notlar rapora düşer.
+     */
     for (const [col, cell] of Object.entries(p.cells)) {
       const title = COURSE_BY_COLUMN[col];
       if (!title) {
@@ -217,7 +217,6 @@ async function main() {
         column: col,
         completedAt: cell.completed,
         expiresAt: expiry,
-        coveredBy: cell.coveredBy || null,
       });
     }
   }

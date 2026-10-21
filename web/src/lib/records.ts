@@ -143,3 +143,98 @@ export function methodRecordIndex(
   }
   return m;
 }
+
+/* ────────────────────────────────────────────────────────────────────────
+   EŞDEĞERLİK — bir eğitimin yerine başka eğitim(ler)in geçmesi
+   ──────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Kursun eşdeğerlik tanımı: "bu gereklilik şu kurslarla da karşılanır".
+ *
+ *  ALL → listedeki kursların HEPSİ gerekli. Kapsama, bunların EN ERKEN
+ *        bitenine kadar sürer (biri düşerse kapsama biter).
+ *  ANY → herhangi biri yeter. Kapsama, EN GEÇ bitene kadar sürer.
+ *
+ * Bon Air kuralı: "Safety Training = SMS + HF". Yani
+ *   Safety → ALL [SMS, HF]   (ikisi de varsa Safety gerekmez; biri bitince gerekir)
+ *   HF     → ANY [Safety]    (Safety alan HF'i de almış sayılır)
+ *   SMS    → ANY [Safety]
+ */
+export type SatisfiedBy = { mode: "ALL" | "ANY"; courseIds: string[] };
+
+/** Gerekliliği karşılayan tek bir kayıt. */
+export type CoverageSource = { courseId: string; date: Date; expiry: Date | null };
+
+/** Gereklilik nasıl karşılanıyor? `via` null ise kursun KENDİ kaydıyla. */
+export type Coverage = { date: Date; expiry: Date | null; via: CoverageSource[] | null };
+
+type DoneLike = { date: Date; external?: string | null; expiresAt?: Date | null };
+type CourseLike = {
+  id: string;
+  recurrenceEvery?: number | null;
+  recurrenceUnit?: string;
+  satisfiedBy?: SatisfiedBy | null;
+};
+
+/** Süresiz (null) her zaman daha uzundur. */
+const laterExpiry = (a: Date | null, b: Date | null) =>
+  a === null || b === null ? null : a > b ? a : b;
+
+/** Süresiz (null) karşı tarafı belirler — "en erken biten" aranıyor. */
+const earlierExpiry = (a: Date | null, b: Date | null) =>
+  a === null ? b : b === null ? a : a < b ? a : b;
+
+/** Daha uzun koruyan kapsama kazanır; süresiz olan her şeyi yener. */
+function betterCoverage(a: Coverage | null, b: Coverage | null): Coverage | null {
+  if (!a) return b;
+  if (!b) return a;
+  if (a.expiry === null) return a;
+  if (b.expiry === null) return b;
+  return a.expiry >= b.expiry ? a : b;
+}
+
+/**
+ * Bir (kişi, kurs) gerekliliğinin nasıl karşılandığı — doğrudan kendi kaydıyla
+ * ya da eşdeğer kurslarla. İkisi de varsa **daha uzun koruyan** seçilir.
+ *
+ * Eşdeğerlik TEK KADEME bakar: yerine geçen kursun kendi `satisfiedBy`'ına
+ * inilmez. Bu bilinçli — Safety↔HF/SMS gibi karşılıklı tanımlarda sonsuz
+ * döngüyü engeller ve "A, B'nin yerine geçer" zincirinin farkında olmadan
+ * uzamasını önler.
+ */
+export function resolveCoverage(
+  userId: string,
+  course: CourseLike,
+  completions: Map<string, DoneLike>,
+  courseById: Map<string, CourseLike>
+): Coverage | null {
+  const expiryFor = (d: DoneLike, c: CourseLike) =>
+    expiryOf(
+      { date: d.date, external: !!d.external, externalExpiry: d.expiresAt ?? null },
+      c
+    );
+
+  const direct = completions.get(keyOf(userId, course.id));
+  let best: Coverage | null = direct
+    ? { date: direct.date, expiry: expiryFor(direct, course), via: null }
+    : null;
+
+  const sb = course.satisfiedBy;
+  if (sb?.courseIds?.length) {
+    const parts: CoverageSource[] = [];
+    for (const cid of sb.courseIds) {
+      const d = completions.get(keyOf(userId, cid));
+      const sub = courseById.get(cid);
+      if (d && sub) parts.push({ courseId: cid, date: d.date, expiry: expiryFor(d, sub) });
+    }
+    const enough = sb.mode === "ALL" ? parts.length === sb.courseIds.length : parts.length > 0;
+    if (enough) {
+      let expiry = parts[0].expiry;
+      for (const p of parts.slice(1))
+        expiry = sb.mode === "ALL" ? earlierExpiry(expiry, p.expiry) : laterExpiry(expiry, p.expiry);
+      const date = parts.reduce((acc, p) => (p.date > acc ? p.date : acc), parts[0].date);
+      best = betterCoverage(best, { date, expiry, via: parts });
+    }
+  }
+  return best;
+}

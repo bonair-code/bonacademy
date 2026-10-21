@@ -25,7 +25,17 @@ import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
 import { ExternalCertForm } from "../components/ExternalCertForm";
 import { requirementFor } from "../lib/requirements";
-import { DAY, daysLeft, expiryOf, fmt, isAssignmentOpen, pickLatest } from "../lib/records";
+import {
+  DAY,
+  daysLeft,
+  expiryOf,
+  fmt,
+  isAssignmentOpen,
+  keyOf,
+  pickLatest,
+  resolveCoverage,
+  type Coverage,
+} from "../lib/records";
 import {
   AssignPanel,
   DeleteConfirm,
@@ -87,6 +97,8 @@ type Line = {
   course: CourseRow;
   required: boolean;
   state: "DONE" | "PLANNED" | "MISSING";
+  /** Gereklilik başka eğitimlerle karşılandıysa onların kayıtları. */
+  via?: Coverage["via"];
   date: Date | null;
   expires: Date | null;
   days: number | null;
@@ -225,6 +237,31 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
       (c) => requiredIds.has(c.id) || assignedIds.has(c.id) || certByCourse.has(c.id) || extByCourse.has(c.id)
     );
 
+    /**
+     * resolveCoverage, matristekiyle AYNI girdiyi bekliyor: (kişi|kurs) →
+     * kazanan kayıt. Burada tek kişi var, yine de aynı anahtar biçimi
+     * kullanılıyor ki iki ekran aynı fonksiyonu paylaşsın.
+     */
+    const courseById = new Map(courses.map((c) => [c.id, c]));
+    const completions = new Map<
+      string,
+      { date: Date; external?: string | null; expiresAt?: Date | null }
+    >();
+    for (const c of courses) {
+      const e = extByCourse.get(c.id) ?? null;
+      const cert = certByCourse.get(c.id) ?? null;
+      const eDate = e?.completedAt?.toDate?.() ?? null;
+      const iDate = cert?.date ?? null;
+      const viaExt = !!eDate && (!iDate || eDate > iDate);
+      const d = viaExt ? eDate : iDate;
+      if (!d || !user) continue;
+      completions.set(keyOf(user.id, c.id), {
+        date: d,
+        external: viaExt ? e?.provider ?? "External" : null,
+        expiresAt: viaExt ? e?.expiresAt?.toDate?.() ?? null : null,
+      });
+    }
+
     return relevant.map((course) => {
       const ext = extByCourse.get(course.id) ?? null;
       const internalCert = certByCourse.get(course.id) ?? null;
@@ -233,6 +270,28 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
       // En son alınan geçerli sayılır — iç ya da dış fark etmez.
       const useExt = !!extDate && (!internal || extDate > internal);
       const date = useExt ? extDate : internal;
+
+      /**
+       * Kursun kendi kaydı yoksa eşdeğer eğitimlere bakılır (Safety = SMS + HF).
+       * Kural lib/records.ts'de — matris ve bu sayfa aynı fonksiyonu kullanmak
+       * zorunda, yoksa aynı kişi iki ekranda farklı görünür (daha önce oldu).
+       */
+      if (!date && user) {
+        const cover = resolveCoverage(user.id, course, completions, courseById);
+        if (cover && cover.via) {
+          return {
+            course,
+            required: requiredIds.has(course.id),
+            state: "DONE" as const,
+            date: cover.date,
+            expires: cover.expiry,
+            days: daysLeft(cover.expiry),
+            external: null,
+            certificateId: null,
+            via: cover.via,
+          };
+        }
+      }
 
       if (date) {
         const expires = expiryOf(
