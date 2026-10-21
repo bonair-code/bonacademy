@@ -7,6 +7,8 @@ dist
 .env.*
 !.env.example
 *.log
+# Duzenleyici/betik yedekleri: surum takibine girmemeli.
+*.bak
 functions/lib
 serviceAccount*.json
 .DS_Store
