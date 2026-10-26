@@ -32,6 +32,7 @@ export function ReportLetterhead({
   userName,
   role,
   scope,
+  form,
 }: {
   title: string;
   subtitle?: string;
@@ -39,6 +40,12 @@ export function ReportLetterhead({
   role: Role;
   /** Verinin kapsamı — örn. departman adı. Rapor neyin kaydı olduğunu söylemeli. */
   scope?: string;
+  /**
+   * Kalite sisteminin form künyesi. YALNIZCA bunu veren sayfada basılır:
+   * raporların çoğu kayıtlı bir form değil ve yanlış numara basmaktansa
+   * hiç basmamak doğru (bkz. lib/org.ts → footer).
+   */
+  form?: { no: string; rev: string };
 }) {
   return (
     <div className="print-only report-head">
@@ -48,10 +55,16 @@ export function ReportLetterhead({
           <div className="rh-org-name">{ORG.reportName}</div>
           <div className="rh-org-sub">{ORG.approvalLine}</div>
         </div>
-        {/* Form künyesi YOK. BON-F145-070 yoklama listesinin form numarası;
-            raporlara en baştan yanlışlıkla taşınmıştı ve bu çıktıların
-            hiçbiri o form değil. Yanlış numara basmaktansa hiç basmamak
-            doğru; raporlara kendi numaraları verilirse buraya döner. */}
+        {/* Form künyesi yalnızca kayıtlı bir formsa. BON-F145-070 yoklama
+            listesinindi ve bütün raporlara yanlışlıkla basılıyordu. */}
+        {form && (
+          <div className="rh-doc">
+            <div>
+              Form No: <b>{form.no}</b>
+            </div>
+            <div>Rev. {form.rev}</div>
+          </div>
+        )}
       </div>
 
       <div className="rh-title-row">

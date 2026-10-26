@@ -303,8 +303,9 @@ function ShellLayout({ children }: { children: ReactNode }) {
         </div>
         <div className="px-4 lg:px-8 pb-10 pt-6">
           <ReportLetterhead
-            title={head.title}
+            title={head.printTitle ?? head.title}
             subtitle={head.subtitle}
+            form={head.form}
             userName={profile?.name}
             role={r}
             scope={

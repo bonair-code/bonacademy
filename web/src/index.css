@@ -296,6 +296,17 @@
     font-size: 7.5pt;
     color: #475569;
   }
+  /* Antetteki form künyesi sağa yaslanır. Kural bir ara silinmişti (form
+     numarası bütün raporlardan kaldırılınca); Follow-Up kayıtlı bir form
+     olarak künyeyi geri alınca biçimsiz basıyordu. */
+  body.printing-report .rh-doc {
+    margin-left: auto;
+    text-align: right;
+    font-size: 7.5pt;
+    color: #475569;
+    line-height: 1.35;
+    white-space: nowrap;
+  }
   body.printing-report .rh-title-row {
     margin: 4mm 0 3mm;
   }
@@ -411,67 +422,135 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Training Follow-Up matrisi: ekranda sütunlar sabit genişlikte ve yatay
-     kayıyor, kâğıtta kayacak yer yok. `table-layout: fixed` + `width: 100%`
-     sütunları kalan alana eşit böler, böylece kaç eğitim olursa olsun sayfaya
-     sığar. Satır içi min/max genişlikler `!important` ile geçersiz kılınır. */
+  /* ── Training Follow-Up: DENETİM FORMU çıktısı ──────────────────────
+     Form No BON-F145-094 Rev. 02.
+
+     Ekrandaki tablo ve telefon görünümü BASILMAZ (`no-print`); baskıda
+     `.matrix-print` çiziliyor. Eskiden matrisin basılması `lg:` kırılma
+     noktasına bağlıydı ve tarayıcı medya sorgusunu kâğıt genişliğine göre
+     çözdüğü için A4 dikeyde (703px) ve Letter yatayda (965px) tablo
+     tamamen kaybolup telefon görünümü basılıyordu. */
+  body.printing-report .matrix-print {
+    display: block !important;
+  }
+  body.printing-report .mx-dept {
+    break-inside: auto;
+    margin-bottom: 7mm;
+  }
+  /* Departman başlığı tek başına sayfa sonunda kalmasın. */
+  body.printing-report .mx-dept-head {
+    font-size: 9.5pt;
+    font-weight: 700;
+    color: #8b1013;
+    letter-spacing: 0.02em;
+    margin: 0 0 2mm;
+    break-after: avoid;
+  }
+  body.printing-report .mx-dept-head span {
+    font-weight: 400;
+    color: #64748b;
+    font-size: 7.5pt;
+    margin-left: 3mm;
+  }
+
   body.printing-report table.matrix-table {
     table-layout: fixed;
-    font-size: 5pt;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  /* Başlık her sayfanın üstünde tekrar etsin — ikinci sayfadaki sütunun
+     hangi eğitim olduğu anlaşılmazdı. */
+  body.printing-report table.matrix-table thead {
+    display: table-header-group;
   }
   body.printing-report table.matrix-table th,
   body.printing-report table.matrix-table td {
     min-width: 0 !important;
     max-width: none !important;
     width: auto !important;
-    padding: 0.6mm 0.3mm !important;
+    border: 0.2mm solid #cbd5e1;
+    padding: 0.9mm 0.4mm !important;
+    text-align: center;
+    font-size: 6.5pt;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  /* Sütun başlıkları uzun — yalnızca BOŞLUKTAN sarılır. */
-  body.printing-report table.matrix-table th {
+  /* Sütun başlıkları uzun — yalnızca BOŞLUKTAN sarılır, kelime kırılmaz. */
+  body.printing-report table.matrix-table thead th {
+    background: #f1f5f9;
+    color: #334155;
+    font-weight: 600;
+    font-size: 5.8pt;
+    vertical-align: bottom;
+    height: 20mm;
+    white-space: normal;
     overflow-wrap: break-word;
     word-break: normal;
     hyphens: none;
   }
-  /* Hücre içeriği hiç sarılmaz: tarih "25.08.20 / 26" diye ikiye bölünüyordu,
-     "PLANNED" de kelime ortasından kırılıyordu. */
-  body.printing-report table.matrix-table td,
-  body.printing-report table.matrix-table td * {
-    white-space: nowrap;
-    overflow-wrap: normal;
-    word-break: keep-all;
-    hyphens: none;
-  }
-  /* Personel sütunu okunur kalsın, geri kalanı paylaşsın. */
-  body.printing-report table.matrix-table th:first-child,
-  body.printing-report table.matrix-table td:first-child {
-    width: 27mm !important;
+  body.printing-report table.matrix-table .mx-nm {
+    width: 38mm !important;
     text-align: left;
-    overflow-wrap: normal;
+    font-size: 7.5pt;
+    font-weight: 500;
+    background: #fff;
+    color: #1d1d1f;
   }
-  /* Isı haritasında hücre tek bir kısa değer taşıyor (kalan gün ya da tarih),
-     eskisi gibi iki satır değil — punto büyüyebilir ve satır sıkışabilir.
-     Ekrandaki `text-[11px]` sınıfı tablonun ayarını eziyordu, burada geri alınır. */
-  body.printing-report table.matrix-table td {
-    font-size: 6pt !important;
-    line-height: 1.1;
-    height: auto !important;
+
+  /* Anahtar ve imza bloğu bölünmesin. */
+  body.printing-report .mx-key {
+    break-inside: avoid;
+    margin-top: 4mm;
+    padding-top: 2.5mm;
+    border-top: 0.3mm solid #cbd5e1;
+    font-size: 7pt;
+    color: #334155;
   }
-  body.printing-report table.matrix-table td span {
-    font-size: inherit !important;
+  body.printing-report .mx-key p {
+    margin: 0 0 1.5mm;
+  }
+  body.printing-report .mx-key-colors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3mm;
+    color: #475569;
+  }
+  body.printing-report .mx-key-colors span {
+    display: inline-flex;
+    align-items: center;
+    gap: 1mm;
+  }
+  body.printing-report .mx-key-colors i {
+    width: 2.6mm;
+    height: 2.6mm;
+    border-radius: 0.5mm;
     display: block;
   }
-  /* Zeminler kâğıtta da basılmalı: bu tablonun bilgisi renkte.
-     Hücre kenarındaki beyaz ayraç kâğıtta çok kalın kalıyor, inceltilir. */
-  body.printing-report table.matrix-table td {
-    border-width: 0.25mm !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+  body.printing-report table.mx-sign {
+    break-inside: avoid;
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 5mm;
+    font-size: 7.5pt;
   }
-  /* Taranan desen kâğıtta gri bir blok gibi çıkıyor; düz açık gri yeter. */
-  body.printing-report table.matrix-table td.matrix-na {
-    background-image: none !important;
-    background-color: #f2f2f4 !important;
+  body.printing-report table.mx-sign th,
+  body.printing-report table.mx-sign td {
+    border: 0.2mm solid #94a3b8;
+    padding: 2mm;
+    text-align: left;
   }
+  body.printing-report table.mx-sign th {
+    background: #f1f5f9;
+    font-weight: 600;
+    width: 26mm;
+    white-space: nowrap;
+  }
+  body.printing-report table.mx-sign td {
+    width: 34%;
+  }
+
   /* Lejant kutucukları renkli basılsın — çıktının anahtarı bu. */
   body.printing-report .card + div i,
   body.printing-report i[aria-hidden="true"] {

@@ -106,6 +106,14 @@ type CellState =
  * aynı renkti (Missing ile 30-0 gün, Planned ile 90-60 gün) — lejantta ayrı
  * yazan dört şey ekranda iki renkti.
  */
+/**
+ * Denetim formundaki hucre tarihi: gg.aa.yy.
+ * Tam yil 12 sutunlu bir departmanda tasiyor (hucre 12,0mm, gerekli 13,6mm)
+ * ve tarih kirpiliyordu. Kisa yil 10,8mm -- rahat sigiyor.
+ */
+const fmtShort = (d: Date) =>
+  d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit", year: "2-digit" });
+
 const HEAT = {
   fresh: "#30b15a", // 1 yıldan uzun ya da süresiz
   good: "#7fb845", // 90-365 gün
@@ -524,6 +532,8 @@ export function TrainingMatrix() {
   return (
     <div>
       <PageHead
+        form={{ no: "BON-F145-094", rev: "02" }}
+        printTitle="Training Follow-Up Form"
         title="Training Follow-Up"
         subtitle="Personnel × training matrix. Click a name for that person's full record."
       />
@@ -708,7 +718,7 @@ export function TrainingMatrix() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <PrintButton landscape />
+          <PrintButton />
           <Swatch color={HEAT.fresh} label="1 yr+" />
           <Swatch color={HEAT.good} label="90–365" />
           <Swatch color={HEAT.warn} label="90–60" />
@@ -722,7 +732,7 @@ export function TrainingMatrix() {
 
       {/* Telefon görünümü: 200px donmuş ilk kolon + ders başına bir kolon
           375px'e sığmıyor. Aynı `cellFor` hesabı, kişi kartı olarak. */}
-      <div className="lg:hidden space-y-2">
+      <div className="lg:hidden space-y-2 no-print">
         {filteredGroups.map((g) => (
           <div key={g.deptId}>
             <div className="text-[11px] font-bold uppercase tracking-wide text-brand-800 bg-brand-50 rounded-lg px-3 py-1.5 mb-2">
@@ -807,7 +817,7 @@ export function TrainingMatrix() {
         {err && <p className="text-xs text-red-700">{err}</p>}
       </div>
 
-      <div className="card hidden lg:block">
+      <div className="card hidden lg:block no-print">
         <div className="overflow-auto max-h-[70vh]">
           <table className="matrix-table text-[12px] border-separate border-spacing-0">
             <thead>
@@ -1135,6 +1145,116 @@ export function TrainingMatrix() {
           />
         </Modal>
       )}
+
+      {/* ── DENETİM FORMU ÇIKTISI ────────────────────────────────
+          Ekranda görünmez. Her departman kendi tablosunda ve YALNIZCA o
+          departmanda en az bir kişi için gerekli olan eğitimler sütun
+          oluyor — 1206 hücrenin 848'i zaten N/A'ydı, tam ızgara kâğıdın
+          çoğunu boşa harcıyordu. Hiçbir gereklilik gizlenmiyor: sütun
+          ancak o departmanda kimse o eğitime ihtiyaç duymuyorsa düşer.
+
+          Hücrede kalan gün değil GEÇERLİLİK TARİHİ var: "683 gün" baskı
+          gününe göre değişir ve denetçi doğrulayamaz, tarih doğrulanabilir. */}
+      <div className="print-only matrix-print">
+        {filteredGroups.map((g) => {
+          const cols = visibleCourses.filter((c) =>
+            g.list.some((u) => cellFor(u, c).kind !== "NA")
+          );
+          if (cols.length === 0) return null;
+          return (
+            <section key={g.deptId} className="mx-dept">
+              <h3 className="mx-dept-head">
+                {g.name}
+                <span>
+                  {g.list.length} staff · {cols.length} training
+                  {cols.length === 1 ? "" : "s"}
+                </span>
+              </h3>
+              <table className="matrix-table">
+                <thead>
+                  <tr>
+                    <th className="mx-nm">Personnel</th>
+                    {cols.map((c) => (
+                      <th key={c.id}>
+                        <span>{c.title}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {g.list.map((u) => (
+                    <tr key={u.id}>
+                      <td className="mx-nm">{u.name}</td>
+                      {cols.map((c) => {
+                        const st = cellFor(u, c);
+                        const h = heat(st);
+                        const txt =
+                          st.kind === "NA"
+                            ? ""
+                            : st.kind === "MISSING"
+                            ? "MISSING"
+                            : st.kind === "PLANNED"
+                            ? "PLANNED"
+                            : st.expires
+                            ? fmtShort(st.expires)
+                            : "no expiry";
+                        return (
+                          <td key={c.id} style={{ background: h.bg, color: h.fg }}>
+                            {txt}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          );
+        })}
+
+        {/* Boş hücre açıklaması ŞART: olmadan denetçi her boşluğu eksik
+            kayıt olarak okur. */}
+        <div className="mx-key">
+          <p>
+            <b>Cells show the date the training remains valid until (dd.mm.yy).</b> An empty cell means the
+            training is <b>not required</b> for that person&rsquo;s authorisation scope.
+            &ldquo;MISSING&rdquo; means required but no record exists.
+          </p>
+          <p className="mx-key-colors">
+            {[
+              ["More than 1 year", HEAT.fresh],
+              ["90–365 days", HEAT.good],
+              ["60–90 days", HEAT.warn],
+              ["30–60 days", HEAT.near],
+              ["Under 30 days", HEAT.soon],
+              ["Expired", HEAT.over],
+              ["Never taken", HEAT.missing],
+            ].map(([l, c]) => (
+              <span key={l as string}>
+                <i style={{ background: c as string }} />
+                {l}
+              </span>
+            ))}
+          </p>
+        </div>
+
+        <table className="mx-sign">
+          <tbody>
+            <tr>
+              <th>Prepared by</th>
+              <td />
+              <th>Date</th>
+              <td />
+            </tr>
+            <tr>
+              <th>Quality approval</th>
+              <td />
+              <th>Date</th>
+              <td />
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
       {preview && (
         <FilePreview
