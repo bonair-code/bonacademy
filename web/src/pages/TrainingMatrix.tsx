@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import type { Timestamp } from "firebase/firestore";
@@ -188,7 +188,12 @@ export function TrainingMatrix() {
    * `section` alanı. Bölümü olmayan eski kurslar TRAINING sayılır,
    * yoksa alan eklenene kadar matris boşalırdı.
    */
-  const [tab, setTab] = useState<"TRAINING" | "BORESCOPE_RUNUP">("TRAINING");
+  const [params, setParams] = useSearchParams();
+  const tab: "TRAINING" | "BORESCOPE_RUNUP" =
+    params.get("tab") === "BORESCOPE_RUNUP" ? "BORESCOPE_RUNUP" : "TRAINING";
+  /** Sekme adreste duruyor: link verilebilir, yenilenince kaybolmaz. */
+  const setTab = (k: "TRAINING" | "BORESCOPE_RUNUP") =>
+    setParams(k === "TRAINING" ? {} : { tab: k }, { replace: true });
   /**
    * Eksik hücreden doğrudan kayıt girme. Eskiden kişi sayfasına gidip oradan
    * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
