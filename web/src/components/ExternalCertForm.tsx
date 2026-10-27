@@ -1,6 +1,12 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addDoc, collection, doc, serverTimestamp, Timestamp, updateDoc } from "firebase/firestore";
-import { getDownloadURL, ref as storageRef, uploadBytes } from "firebase/storage";
+import {
+  deleteObject,
+  getDownloadURL,
+  ref as storageRef,
+  uploadBytesResumable,
+  type UploadTask,
+} from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
@@ -124,9 +130,116 @@ export function ExternalCertForm({
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Belge SEÇİLİR SEÇİLMEZ yüklenir; kullanıcı alanları doldururken dosya
+   * arkada gider ve "Save Record" anında tamamlanır. Eskiden yükleme
+   * kaydetme anında başlıyordu ve büyük dosyada kullanıcı düğmeye bakarak
+   * bekliyordu.
+   *
+   * `uploadBytes` hiçbir ilerleme olayı yaymıyor; yüzde göstermek için
+   * `uploadBytesResumable` şart — iptal de onunla mümkün.
+   */
+  const [pct, setPct] = useState<number | null>(null);
+  const [uploaded, setUploaded] = useState<{ path: string; url: string } | null>(null);
+  const taskRef = useRef<UploadTask | null>(null);
+  /** Kayıt gerçekten yazıldıysa yüklenen dosya ARTIK öksüz değil. */
+  const savedRef = useRef(false);
+
+  /**
+   * Pencere kaydedilmeden kapanırsa yüklenen dosya Storage'da öksüz kalır.
+   * Süren yükleme iptal edilir (parça kalmaz); tamamlanmışsa silinmeye
+   * çalışılır. Silme kurallarda YALNIZCA admin'e açık — müdürde sessizce
+   * başarısız olur ve dosya kalır. Zararsız (hiçbir kayıt göstermiyor,
+   * okuması kısıtlı) ama temizlik gerekir; bkz. docs/BACKLOG.md.
+   */
+  /** Temizlik efekti bağımlılıksız çalışır; güncel değeri ref'ten okur. */
+  const uploadedRef = useRef<{ path: string; url: string } | null>(null);
+  uploadedRef.current = uploaded;
+
+  useEffect(() => {
+    return () => {
+      taskRef.current?.cancel();
+      const up = uploadedRef.current;
+      if (up && !savedRef.current) {
+        deleteObject(storageRef(storage, up.path)).catch(() => undefined);
+      }
+    };
+  }, []);
+
+  /** Dosyayı hemen yüklemeye başlar. */
+  function beginUpload(f: File) {
+    setErr(null);
+    /**
+     * Kurallar 20 MB ve PDF/PNG/JPEG/WEBP sınırını zaten koyuyor, ama orada
+     * reddedilince kullanıcı boşuna bekleyip ham bir yetki hatası görüyor.
+     * Baştan söylemek hem hızlı hem anlaşılır.
+     */
+    if (!/^(application\/pdf|image\/(png|jpeg|webp))$/.test(f.type)) {
+      setErr("Only PDF, PNG, JPEG or WEBP files can be uploaded.");
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+    if (f.size >= 20 * 1024 * 1024) {
+      setErr(`That file is ${(f.size / 1024 / 1024).toFixed(1)} MB — the limit is 20 MB.`);
+      if (fileRef.current) fileRef.current.value = "";
+      return;
+    }
+    setFile(f);
+    setPct(0);
+    setUploaded(null);
+    const safeName = f.name.replace(/[^\w.\-]+/g, "_");
+    const path = `externalCertificates/${user.id}/${Date.now()}-${safeName}`;
+    const task = uploadBytesResumable(storageRef(storage, path), f);
+    taskRef.current = task;
+    task.on(
+      "state_changed",
+      (snap) => setPct(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+      (e) => {
+        taskRef.current = null;
+        setPct(null);
+        // İptal kullanıcının kendi eylemi — hata gibi gösterilmez.
+        if ((e as { code?: string }).code !== "storage/canceled") {
+          setErr(`Upload failed: ${e.message}`);
+          setFile(null);
+          // Girdi sıfırlanmazsa AYNI dosya tekrar seçilince onChange hiç
+          // tetiklenmiyor ve kullanıcı yeniden deneyemiyor.
+          if (fileRef.current) fileRef.current.value = "";
+        }
+      },
+      async () => {
+        taskRef.current = null;
+        try {
+          setUploaded({ path, url: await getDownloadURL(task.snapshot.ref) });
+          setPct(100);
+        } catch (e) {
+          setErr(`Uploaded, but the address could not be read: ${(e as Error).message}`);
+          setPct(null);
+        }
+      }
+    );
+  }
+
+  /** Süren yüklemeyi iptal eder ya da yükleneni kaldırır. */
+  function clearFile() {
+    taskRef.current?.cancel();
+    taskRef.current = null;
+    if (uploaded) deleteObject(storageRef(storage, uploaded.path)).catch(() => undefined);
+    setUploaded(null);
+    setPct(null);
+    setFile(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  const uploading = pct !== null && !uploaded;
+
   // Belge yalnızca YENİ kayıtta zorunlu; düzenlerken mevcut dosya korunur.
+  // Yükleme sürerken kaydedilemez: dosyanın adresi henüz yok.
   const canSubmit =
-    !!title.trim() && !!provider.trim() && !!completed && (editing || paperOnly || !!file);
+    !!title.trim() &&
+    !!provider.trim() &&
+    !!completed &&
+    !uploading &&
+    (editing || paperOnly || !!file);
 
   /** Seçilen geçerliliği alınma tarihine uygular. */
   function applyValidity(key: ValidityKey, fromDate = completed) {
@@ -146,16 +259,10 @@ export function ExternalCertForm({
     try {
       const completedDate = new Date(completed);
       // Belge seçildiyse önce yüklenir; belgesiz YENİ kayıt oluşmasın.
+      // Dosya seçildiği anda yüklendi; burada yalnızca adresi yazılıyor.
       let fileFields: Record<string, unknown> = {};
-      if (file) {
-        const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-        const path = `externalCertificates/${user.id}/${Date.now()}-${safeName}`;
-        const snap = await uploadBytes(storageRef(storage, path), file);
-        fileFields = {
-          fileName: file.name,
-          filePath: path,
-          fileUrl: await getDownloadURL(snap.ref),
-        };
+      if (file && uploaded) {
+        fileFields = { fileName: file.name, filePath: uploaded.path, fileUrl: uploaded.url };
       }
       const expiry = validUntil ? new Date(validUntil) : null;
 
@@ -183,6 +290,7 @@ export function ExternalCertForm({
           updatedById: profile.uid,
           updatedAt: serverTimestamp(),
         });
+        savedRef.current = true;
         onDone(`${title.trim()} updated.`);
         return;
       }
@@ -206,6 +314,7 @@ export function ExternalCertForm({
           // Atama kapatılamazsa kayıt yine de geçerli; sessizce geç.
         }
       }
+      savedRef.current = true;
       onDone(
         `${title.trim()} recorded for ${user.name}${closed ? " — assignment closed." : "."}`
       );
@@ -222,7 +331,7 @@ export function ExternalCertForm({
     setDragging(false);
     if (paperOnly) return;
     const f = e.dataTransfer.files?.[0];
-    if (f) setFile(f);
+    if (f) beginUpload(f);
   }
 
   /** Seçili kursun metodları; metod bazlı değilse boş. */
@@ -386,7 +495,7 @@ export function ExternalCertForm({
             }}
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
-            onClick={() => !paperOnly && fileRef.current?.click()}
+            onClick={() => !paperOnly && !file && fileRef.current?.click()}
             className={`rounded-xl border-[1.5px] border-dashed px-4 py-7 text-center transition ${
               paperOnly
                 ? "border-slate-200 bg-slate-50 cursor-not-allowed"
@@ -400,12 +509,70 @@ export function ExternalCertForm({
                 No digital copy — the original stays in the personnel file.
               </p>
             ) : file ? (
-              <>
-                <p className="text-[13px] font-semibold text-slate-900">{file.name}</p>
-                <p className="text-[11.5px] text-slate-500 mt-0.5">
-                  {(file.size / 1024 / 1024).toFixed(1)} MB · click to replace
-                </p>
-              </>
+              /* Yükleme satırı: dosya seçilir seçilmez başlıyor, ilerleme
+                 burada — dosyanın yanında, düğmede değil. */
+              <div
+                className={`flex items-center gap-3 text-left rounded-lg -m-1 p-2 ${
+                  uploaded ? "bg-emerald-50" : ""
+                }`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span
+                  className={`shrink-0 grid place-items-center w-[34px] h-[42px] rounded border text-[8.5px] font-bold tracking-wide ${
+                    uploaded
+                      ? "bg-emerald-100 border-emerald-200 text-emerald-700"
+                      : "bg-brand-50 border-brand-100 text-brand-700"
+                  }`}
+                  aria-hidden
+                >
+                  {/\.pdf$/i.test(file.name) ? "PDF" : "IMG"}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-semibold text-slate-900 truncate">
+                    {file.name}
+                  </span>
+                  <span className="block text-[11.5px] text-slate-500 mt-0.5">
+                    {uploaded ? (
+                      <>
+                        <b className="text-emerald-700 font-semibold">✓ Uploaded</b> ·{" "}
+                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                      </>
+                    ) : (
+                      <>
+                        Uploading… {pct ?? 0}% ·{" "}
+                        {(((pct ?? 0) / 100) * (file.size / 1024 / 1024)).toFixed(2)} /{" "}
+                        {(file.size / 1024 / 1024).toFixed(1)} MB
+                      </>
+                    )}
+                  </span>
+                  <span
+                    className="block h-1 rounded-full bg-slate-200 mt-1.5 overflow-hidden"
+                    role="progressbar"
+                    aria-valuenow={pct ?? 0}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${file.name} yükleniyor`}
+                  >
+                    <span
+                      className={`block h-full rounded-full transition-[width] duration-150 ${
+                        uploaded ? "bg-emerald-600" : "bg-brand-600"
+                      }`}
+                      style={{ width: `${pct ?? 0}%` }}
+                    />
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFile}
+                  aria-label={uploaded ? "Belgeyi kaldır" : "Yüklemeyi iptal et"}
+                  title={uploaded ? "Remove" : "Cancel upload"}
+                  className="shrink-0 h-8 w-8 grid place-items-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.1} strokeLinecap="round" className="h-[15px] w-[15px]" aria-hidden>
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             ) : (
               <>
                 <p className="text-[13px] font-semibold text-slate-900">
@@ -427,7 +594,10 @@ export function ExternalCertForm({
             type="file"
             accept=".pdf,.jpg,.jpeg,.png"
             className="hidden"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) beginUpload(f);
+            }}
           />
 
           <label className="flex items-center gap-2 text-[12px] text-slate-600 cursor-pointer">
@@ -436,10 +606,8 @@ export function ExternalCertForm({
               checked={paperOnly}
               onChange={(e) => {
                 setPaperOnly(e.target.checked);
-                if (e.target.checked) {
-                  setFile(null);
-                  if (fileRef.current) fileRef.current.value = "";
-                }
+                // Kâğıt işaretlenirse yüklenen/yüklenmekte olan dosya kalkar.
+                if (e.target.checked) clearFile();
               }}
               className="rounded border-slate-300"
             />
@@ -497,7 +665,7 @@ export function ExternalCertForm({
               disabled={busy || !canSubmit}
               className="btn-primary text-xs py-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {busy ? "Saving…" : "Save Record"}
+              {busy ? "Saving…" : uploading ? "Uploading…" : "Save Record"}
             </button>
           </>
         )}

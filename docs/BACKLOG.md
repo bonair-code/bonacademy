@@ -33,6 +33,13 @@
   (/scorm-content). Risk sınırlandı (yalnız admin/kurs sahibi yükler, yalnız scorm/
   klasörü sunulur) ama kalıcı çözüm ayrı alan adı + postMessage ile SCORM API köprüsü.
 - **App Check (bot koruması):** girişsiz uçlar (yoklama formu, davet) için.
+- **Öksüz dış sertifika dosyaları.** Dış kayıt formu belgeyi SEÇİLİR SEÇİLMEZ
+  yüklüyor (ilerleme gösterebilmek için `uploadBytesResumable`). Pencere
+  kaydedilmeden kapanırsa dosya silinmeye çalışılıyor, ama `storage.rules`
+  silmeyi **yalnızca admin**'e açıyor — müdürde sessizce başarısız oluyor ve
+  dosya Storage'da kalıyor. Zararsız (hiçbir kayıt onu göstermiyor, okuması
+  kısıtlı) ama birikir. Çözüm: `externalTrainings` içinde `filePath` olarak
+  geçmeyen dosyaları silen bir temizlik betiği.
 - **SSO: `email_verified` kontrol edilmiyor** (bakıldı 20.10.2026, *kapatıldı*).
   `sso.js` → `start`, kimlik kaynağından gelen token’ın e-postasına güvenip
   yerel hesabı onunla eşliyor. IdP’de doğrulanmamış adresle hesap açılabiliyorsa
