@@ -62,6 +62,8 @@ type Course = {
   recurrenceUnit?: RecurUnit;
   /** Eğitim metodlara bölünüyorsa (ör. NDT: PT, MT, UT) bunların listesi. */
   methods?: string[];
+  /** Doluysa bu kurs başka bir eğitimin çeşidi (ilk / devamlılık). */
+  subject?: { courseId: string } | null;
 };
 
 type Toast = { msg: string; undo?: () => Promise<void> } | null;
@@ -567,7 +569,12 @@ function Authorisations({ rows, courses, say }: { rows: JobTitle[]; courses: Cou
   const sc = rows.find((r) => r.id === sel) ?? rows[0];
   const subs = sc?.subScopes ?? [];
   const sub = subs.find((s) => s.id === subSel);
-  const allIds = courses.map((c) => c.id);
+  /**
+   * Gerekli eğitim olarak seçilebilecekler. Başka bir eğitimin ÇEŞİDİ olan
+   * kurs listede yok: gereklilik konuya ait. "SHT-145" zorunlu tutulur,
+   * "SHT-145 Initial" onu karşılayan kurslardan biridir.
+   */
+  const allIds = courses.filter((c) => !c.subject?.courseId).map((c) => c.id);
   const title = (id: string) => courses.find((c) => c.id === id)?.title ?? "Deleted course";
   const ref = (jt: JobTitle) => doc(db, "jobTitles", jt.id);
 

@@ -190,9 +190,18 @@ export function CourseDetail() {
           for (const sub of v.subScopes ?? [])
             for (const cid of sub.requiredCourseIds ?? []) need.add(cid);
         }
+        // Takip edilen eğitim (EXTERNAL_ONLY) ya da bir kapsamın gerekli
+        // eğitimi olan her kurs seçilebilir. Yalnızca "gerekli olanlar"
+        // denseydi, eğitimi açıp kapsama HENÜZ eklememiş kullanıcı boş liste
+        // görürdü — kurulum sırası bu yönde işliyor.
         setTrackedOptions(
           cs.docs
-            .filter((d) => need.has(d.id) && d.id !== id)
+            .filter((d) => {
+              if (d.id === id) return false;
+              const v = d.data() as { delivery?: string; subject?: { courseId?: string } | null };
+              if (v.subject?.courseId) return false; // çeşidin çeşidi olmaz
+              return need.has(d.id) || v.delivery === "EXTERNAL_ONLY";
+            })
             .map((d) => ({ id: d.id, title: (d.data() as { title?: string }).title ?? d.id }))
             .sort((a, b) => a.title.localeCompare(b.title, "tr"))
         );
@@ -669,7 +678,7 @@ export function CourseDetail() {
             </select>
             <p className="text-[11px] text-slate-500 mt-1">
               {trackedOptions.length === 0
-                ? "No tracked trainings yet — add one under Settings › Authorisation scopes › Required training."
+                ? "No tracked trainings yet — add one under Settings › Tracked Trainings, or as a scope's required training."
                 : "Shows in Training Follow-Up under the training picked here."}
             </p>
           </Field>
