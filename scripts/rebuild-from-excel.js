@@ -231,9 +231,36 @@ async function main() {
       else if (c && c.section === "BORESCOPE_RUNUP") mapped.push(c.title);
       else lost.push(c?.title ?? id);
     }
-    keepPlan.push({ id: sc.id, name, subjects: [...new Set(mapped)], lost });
+    // Alt yetkiler de çevrilmeli: "Auditor › Product" 4 kişiye
+    // Aircraft Familiarization'ı zorunlu kılıyor ve kurs kimliği değişiyor.
+    const subPlan = (sc.subScopes ?? []).map((sub) => {
+      const conv = (ids) =>
+        (ids ?? [])
+          .map((id) => {
+            const c = courses.find((x) => x.id === id);
+            if (!c) return null;
+            return subjectForOld(c.title) ?? (c.section === "BORESCOPE_RUNUP" ? c.title : null);
+          })
+          .filter(Boolean);
+      return {
+        id: sub.id,
+        name: sub.name,
+        required: [...new Set(conv(sub.requiredCourseIds))],
+        excluded: [...new Set(conv(sub.excludedCourseIds))],
+        lostReq: (sub.requiredCourseIds ?? []).length - conv(sub.requiredCourseIds).length,
+      };
+    });
+    keepPlan.push({ id: sc.id, name, subjects: [...new Set(mapped)], lost, subPlan });
     console.log(`  ${name}: ${ids.length} eğitim → ${new Set(mapped).size} konu` + (lost.length ? `   ! ${lost.length} karşılıksız` : ""));
     lost.forEach((l) => console.log(`       ! ${l}`));
+    for (const sp of subPlan) {
+      if (!sp.required.length && !sp.excluded.length && !sp.lostReq) continue;
+      console.log(
+        `       › ${sp.name}: ${sp.required.length} gerekli, ${sp.excluded.length} düşen` +
+          (sp.lostReq ? `   ! ${sp.lostReq} karşılıksız` : "")
+      );
+      sp.required.forEach((x) => console.log(`           + ${x}`));
+    }
   }
 
   head("7. SİLİNECEKLER");
@@ -369,9 +396,20 @@ async function main() {
 
   // 6: dokunulmayan kapsamların gereklilikleri
   for (const k of keepPlan) {
-    const ids = k.subjects.map((s) => idOf.get(s) ?? aircraftId.get(norm(s))).filter(Boolean);
-    await db.doc(`jobTitles/${k.id}`).update({ requiredCourseIds: ids });
-    console.log(`kapsam (çevrildi): ${k.name} (${ids.length})`);
+    const toId = (s) => idOf.get(s) ?? aircraftId.get(norm(s));
+    const ids = k.subjects.map(toId).filter(Boolean);
+    const sc = scopeByName.get(norm(k.name));
+    const subs = (sc?.subScopes ?? []).map((sub) => {
+      const p = k.subPlan.find((x) => x.id === sub.id);
+      if (!p) return sub;
+      return {
+        ...sub,
+        requiredCourseIds: p.required.map(toId).filter(Boolean),
+        excludedCourseIds: p.excluded.map(toId).filter(Boolean),
+      };
+    });
+    await db.doc(`jobTitles/${k.id}`).update({ requiredCourseIds: ids, subScopes: subs });
+    console.log(`kapsam (çevrildi): ${k.name} (${ids.length}, alt yetki ${subs.length})`);
   }
 
   // 7: sil
@@ -400,6 +438,19 @@ async function main() {
   const aCe = await db.collection("certificates").get();
   const certSahipsiz = aCe.docs.filter((d) => d.data().courseId && !after.docs.some((c) => c.id === d.data().courseId));
   console.log(`sertifika: ${aCe.size}   sahipsiz: ${certSahipsiz.length}`);
+  // Hiçbir kapsam ya da alt yetki silinmiş bir kursu göstermemeli.
+  const jt2 = await db.collection("jobTitles").get();
+  const live = new Set(after.docs.map((d) => d.id));
+  let kirik = 0;
+  jt2.forEach((d) => {
+    const v = d.data();
+    for (const id of v.requiredCourseIds ?? []) if (!live.has(id)) kirik++;
+    for (const sub of v.subScopes ?? [])
+      for (const id of [...(sub.requiredCourseIds ?? []), ...(sub.excludedCourseIds ?? [])])
+        if (!live.has(id)) kirik++;
+  });
+  console.log(`kapsamlarda silinmiş kursa işaret: ${kirik}`);
+
   console.log("\nSıradaki adım: node scripts/import-trng-sts.js --apply");
 }
 

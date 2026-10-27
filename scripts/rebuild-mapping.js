@@ -153,60 +153,12 @@ module.exports.SUBJECTS = [
     years: 5,
   },
   {
-    subject: "ATA Spec 300",
-    trng: "ATA 300",
-    req: ["ATA Spec 300"],
-    cert: [],
-    old: [],
-    years: 2,
-  },
-  {
-    subject: "Dangerous Goods Awareness",
-    trng: "DGR AWARENESS",
-    req: ["Dangerous good regulations"],
-    cert: [],
-    old: [],
-    years: 2,
-  },
-  {
-    subject: "ESD",
-    trng: "ESD",
-    req: ["ESD"],
-    cert: [],
-    old: [],
-    years: 2,
-  },
-  {
-    subject: "Hidden Damage Inspection",
-    trng: "HIDDEN DAMAGE INSPECTION",
-    req: ["Hidden Damage Inspection"],
-    cert: [],
-    old: [],
-    years: 2,
-  },
-  {
-    subject: "Tool Calibration",
-    trng: "TOOL CALIBRATION",
-    req: [],
-    cert: [],
-    old: [],
-    years: 2,
-  },
-  {
     subject: "Train the Trainer",
     trng: "TRAIN TRAINER",
     req: ["Train The Trainer"],
     cert: [],
     old: ["Train The Trainer"],
     years: null, // süresiz (kullanıcı onayladı)
-  },
-  {
-    subject: "Basınçlı Tüp Eğitimi",
-    trng: "BASINÇLI TÜP EĞİTİMİ",
-    req: [],
-    cert: [],
-    old: [],
-    years: 2,
   },
   {
     // TRNG_STS'te sütunu yok; gereklilik ve elle girilmiş kayıtlardan geliyor.
@@ -248,6 +200,16 @@ module.exports.SUBJECTS = [
  * Bunlar yetki ve değerlendirme kayıtları; eğitim matrisine karıştırılmıyor.
  */
 module.exports.SKIP_TRNG = [
+  // Takip edilmeyecek eğitimler (kullanıcı kararı 27.10.2026). Kâğıtta
+  // kayıtları var ama sistemde takip edilmeyecekler; 37 kayıt içeri
+  // alınmıyor. MOE 3.14-2 bunlardan dördünü Incoming Inspector için
+  // zorunlu tutuyor — o şart sistemde temsil edilmeyecek, karar bilinçli.
+  "ATA 300",
+  "DGR AWARENESS",
+  "ESD",
+  "HIDDEN DAMAGE INSPECTION",
+  "TOOL CALIBRATION",
+  "BASINÇLI TÜP EĞİTİMİ",
   "COMPETENCE ASSESSMENT",
   "Mechanic Authorisation",
   "OJT ASSESSOR (B1.1/B2) BD-700 (RRD BR710)",
@@ -318,4 +280,12 @@ module.exports.AIRCRAFT_CERTS = [
  * REQ_TRNG'de geçip hiçbir konuya bağlanamayan ad. Kullanıcı da ne
  * olduğunu bilmiyor; içeri alınmıyor.
  */
-module.exports.UNMAPPED_REQ = ["Training on authorization subject course"];
+module.exports.UNMAPPED_REQ = [
+  "Training on authorization subject course",
+  // Bilerek takip edilmiyor (yukarıdaki karar). Kapsamın gerekli eğitim
+  // listesine girmezler.
+  "ATA Spec 300",
+  "Dangerous good regulations",
+  "ESD",
+  "Hidden Damage Inspection",
+];
