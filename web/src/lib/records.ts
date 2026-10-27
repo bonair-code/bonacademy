@@ -238,3 +238,114 @@ export function resolveCoverage(
   }
   return best;
 }
+
+/* ───────────────────────── KONU (subject) ─────────────────────────
+ *
+ * Takip ettiğimiz şey kurs değil KONU: "bu kişinin EWIS eğitimi var mı?"
+ * İlk eğitim (initial) de devamlılık eğitimi de aynı gerekliliği karşılar,
+ * ama ayrı kurslardır — içerikleri, süreleri ve sınavları farklı olabilir.
+ * O yüzden kurslar ayrı durur, ikisi de aynı konu etiketini taşır ve
+ * matriste TEK sütun olurlar.
+ *
+ * Neden `satisfiedBy` ile yapılmadı: bir kursun tek bir `satisfiedBy`'ı
+ * var ve "Safety Training (Include HF)" onu zaten ALL[HF, SMS] için
+ * kullanıyor. Safety'ye devamlılık eğitimi eklendiği an o eşdeğerlik
+ * kaybolurdu. Konu ayrı bir katman; eşdeğerlikle yan yana çalışır.
+ */
+
+/**
+ * Kursun üzerindeki konu etiketi. Yoksa kurs kendi başına bir konudur.
+ *
+ * `kind` kursun konu içindeki rolü: ilk eğitim mi, devamlılık eğitimi mi.
+ * Görüntüde bir şey değiştirmez; hiçbir kaydı olmayan kişiye eğitim
+ * atanırken DEVAMLILIK eğitiminin seçilmemesi için gerekli.
+ */
+export type SubjectTag = {
+  key: string;
+  name: string;
+  kind?: "INITIAL" | "CONTINUATION" | null;
+};
+
+export type SubjectLike = { id: string; title: string; subject?: SubjectTag | null };
+
+/** Konu ve onu karşılayan kurslar. `primary` işlem yapılacak varsayılan kurs. */
+export type Subject<T> = { key: string; name: string; members: T[]; primary: T };
+
+/**
+ * Etiketi olmayan kurs kendi başına bir konudur. Anahtarı `course:` ile
+ * başlar ki elle verilen bir etiketle çakışmasın.
+ */
+export const subjectKeyOf = (c: SubjectLike) => c.subject?.key?.trim() || `course:${c.id}`;
+
+/**
+ * Konu adından anahtar üretir. Anahtar addan türetiliyor ki "EWIS" ile
+ * "ewis " aynı konuya düşsün — iki kursu farklı sütuna bölen yazım farkı
+ * olmasın.
+ */
+export function subjectSlug(name: string): string {
+  const slug = name
+    .trim()
+    .toLocaleLowerCase("tr")
+    .replace(/[^\p{L}\p{N}]+/gu, "-")
+    .replace(/^-+|-+$/g, "");
+  // Hiç harf/rakam yoksa anahtar boş kalırdı; boş anahtar "etiket yok"
+  // sayılıp kurs sessizce kendi konusuna düşerdi. Adı olduğu gibi kullan.
+  return slug || name.trim().toLocaleLowerCase("tr");
+}
+
+/**
+ * Kursları konuya göre grupla. Sıra korunur: konu, ilk üyesinin listedeki
+ * yerinde çıkar — matris sütun sırası değişmesin diye.
+ *
+ * Birincil üye: ilk eğitim olarak işaretlenen kurs; yoksa listedeki ilk
+ * üye. Atama ve kayıt varsayılanı budur.
+ */
+export function groupSubjects<T extends SubjectLike>(courses: T[]): Subject<T>[] {
+  const out: Subject<T>[] = [];
+  const byKey = new Map<string, Subject<T>>();
+  for (const c of courses) {
+    const key = subjectKeyOf(c);
+    const found = byKey.get(key);
+    if (found) {
+      found.members.push(c);
+      continue;
+    }
+    const s: Subject<T> = {
+      key,
+      name: c.subject?.name?.trim() || c.title,
+      members: [c],
+      primary: c,
+    };
+    byKey.set(key, s);
+    out.push(s);
+  }
+  for (const s of out) {
+    const initial = s.members.find((m) => m.subject?.kind === "INITIAL");
+    if (initial) s.primary = initial;
+  }
+  return out;
+}
+
+/**
+ * Konunun kapsaması: üyelerin her birini KENDİ kuralıyla çözer (kendi tekrar
+ * süresi, kendi eşdeğerliği) ve en uzun koruyanı seçer. Hangi kursun kaydının
+ * kazandığı `courseId` ile döner — hücre o kaydın belgesini gösterebilsin.
+ *
+ * Tek üyeli konuda sonuç resolveCoverage ile birebir aynıdır; konu katmanı
+ * eklenince matris çıktısının değişmediği bununla doğrulandı.
+ */
+export function resolveSubjectCoverage<T extends CourseLike>(
+  userId: string,
+  members: T[],
+  completions: Map<string, DoneLike>,
+  courseById: Map<string, CourseLike>
+): (Coverage & { courseId: string }) | null {
+  let best: (Coverage & { courseId: string }) | null = null;
+  for (const m of members) {
+    const cov = resolveCoverage(userId, m, completions, courseById);
+    if (!cov) continue;
+    const tagged = { ...cov, courseId: m.id };
+    best = betterCoverage(best, tagged) as (Coverage & { courseId: string }) | null;
+  }
+  return best;
+}

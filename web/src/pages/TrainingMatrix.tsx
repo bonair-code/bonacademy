@@ -27,9 +27,11 @@ import {
   methodRecordIndex,
   openAssignmentSet,
   pickLatest,
-  resolveCoverage,
+  groupSubjects,
+  resolveSubjectCoverage,
   type Coverage,
   type SatisfiedBy,
+  type SubjectTag,
 } from "../lib/records";
 import { AnchoredCard } from "../components/AnchoredCard";
 import { AssignOne } from "../components/AssignOne";
@@ -71,7 +73,17 @@ type CourseRow = {
    * bağlamak 18 kursun 13'ünü matristen düşürüyordu.
    */
   section?: "TRAINING" | "BORESCOPE_RUNUP";
+  /** Konu etiketi — aynı etiketi taşıyan kurslar matriste tek sütun. */
+  subject?: SubjectTag | null;
 };
+
+/**
+ * Matrisin sütunu. Bir KURS gibi davranır (kimliği birincil kursun kimliği)
+ * ama arkasında konuyu karşılayan bütün kurslar durur. Tek üyeli konuda
+ * CourseRow'dan farkı yoktur — bu yüzden konu katmanı eklendiğinde matris
+ * çıktısı değişmedi.
+ */
+type SubjectRow = CourseRow & { members: CourseRow[] };
 type JobTitle = {
   id: string;
   name: string;
@@ -191,7 +203,7 @@ export function TrainingMatrix() {
   /** Tek hücreden atama. */
   const [assign, setAssign] = useState<{ user: UserRow; course: CourseRow } | null>(null);
   /** Bir kişinin bütün eksiklerini birden atama. */
-  const [bulk, setBulk] = useState<{ user: UserRow; courses: CourseRow[] } | null>(null);
+  const [bulk, setBulk] = useState<{ user: UserRow; courses: SubjectRow[] } | null>(null);
   /** Düzenlenecek dış kaydın id.si — detay kartındaki "Edit record" açar. */
   const [editId, setEditId] = useState<string | null>(null);
   const [preview, setPreview] = useState<{ url: string; title: string } | null>(null);
@@ -368,18 +380,22 @@ export function TrainingMatrix() {
    * olmayanın da içeriği yok. İkisi de sunucuda reddediliyor; düğmeyi hiç
    * göstermemek daha dürüst.
    */
-  const canAssignCourse = (c: CourseRow) =>
+  const isAssignable = (c: CourseRow) =>
     c.delivery !== "EXTERNAL_ONLY" && c.isActive !== false;
+  /** Konu atanabilir mi? Üyelerinden en az biri atanabiliyorsa evet. */
+  const canAssignCourse = (c: SubjectRow) => c.members.some(isAssignable);
 
-  function cellFor(u: UserRow, c: CourseRow): CellState {
+  function cellFor(u: UserRow, c: SubjectRow): CellState {
     /**
      * Metod bazlı eğitim (ör. NDT): kişinin tikli her metodu ayrı takip
      * edilir ve EN KÖTÜSÜ hücreyi belirler. Eskiden yalnızca en son kayıt
      * dikkate alınıyordu; PT geçerli, MT dolmuş bir kişi uyumlu görünüyordu.
      */
-    const ticked = heldMethods(u, c.id);
-    if (methodsOf(c).length > 0 && ticked.length > 0) {
-      const rows = methodBreakdown(ticked, methodRecords.get(keyOf(u.id, c.id)) ?? []);
+    // Metodlar kursun üzerinde; konuda metodu olan üye hangisiyse o geçerli.
+    const mc = c.members.find((m) => methodsOf(m).length > 0) ?? c;
+    const ticked = heldMethods(u, mc.id);
+    if (methodsOf(mc).length > 0 && ticked.length > 0) {
+      const rows = methodBreakdown(ticked, methodRecords.get(keyOf(u.id, mc.id)) ?? []);
       const { missing, date, expiry } = worstOf(rows);
       if (missing.length > 0) return { kind: "MISSING", methodsMissing: missing, methodRows: rows };
       return {
@@ -398,8 +414,10 @@ export function TrainingMatrix() {
      * sonucu gösteriyoruz. Hem doğrudan hem eşdeğer kayıt varsa daha uzun
      * koruyan seçilir.
      */
-    const cover = resolveCoverage(u.id, c, completions, courseById);
-    const done = cover?.via ? undefined : completions.get(keyOf(u.id, c.id));
+    // Konunun kapsaması: her üye KENDİ tekrar süresi ve KENDİ eşdeğerliğiyle
+    // çözülür, en uzun koruyan kazanır. Kazanan kursu `courseId` söylüyor.
+    const cover = resolveSubjectCoverage(u.id, c.members, completions, courseById);
+    const done = cover && !cover.via ? completions.get(keyOf(u.id, cover.courseId)) : undefined;
 
     // Gereklilik yalnızca eşdeğer kurslarla karşılanıyorsa: tarih ve bitiş
     // o kayıtlardan gelir, kursun kendi belgesi yoktur.
@@ -418,9 +436,12 @@ export function TrainingMatrix() {
       // Dış belgenin geçerliliği kursun tekrar süresinden değil, belgenin
       // kendi bitiş tarihinden gelir. Kural lib/records.ts'de — matris bunu
       // hesaplamıyordu ve üç ekran aynı kişi için farklı sonuç veriyordu.
+      // Tekrar süresi KAZANAN kursun süresidir, konunun değil: devamlılık
+      // eğitiminin süresi ilk eğitimden farklı olabilir.
+      const won = courseById.get(cover!.courseId) ?? c;
       const expires = expiryOf(
         { date: done.date, external: !!done.external, externalExpiry: done.expiresAt ?? null },
-        c
+        won
       );
       return {
         kind: "DONE",
@@ -437,11 +458,17 @@ export function TrainingMatrix() {
         recordTitle: done.recordTitle ?? null,
       };
     }
-    if (assignedSet.has(`${u.id}|${c.id}`)) return { kind: "PLANNED" };
-    if (isRequired(u, c)) return { kind: "MISSING" };
+    // Üyelerden herhangi birine atama açıksa konu planlanmış sayılır.
+    if (c.members.some((m) => assignedSet.has(keyOf(u.id, m.id)))) return { kind: "PLANNED" };
+    // Üyelerden biri bile zorunluysa konu zorunludur.
+    if (c.members.some((m) => isRequired(u, m))) return { kind: "MISSING" };
+    // Muafiyet ancak BÜTÜN üyeler için geçerliyse konuyu muaf kılar.
+    const exempts = c.members.map((m) =>
+      exclusionFor(m, u.jobTitleIds ?? [], jobTitles, u.subScopeIds ?? [])
+    );
     return {
       kind: "NA",
-      exemptBy: exclusionFor(c, u.jobTitleIds ?? [], jobTitles, u.subScopeIds ?? []),
+      exemptBy: exempts.every(Boolean) ? exempts[0] : null,
     };
   }
 
@@ -474,9 +501,22 @@ export function TrainingMatrix() {
     () => courses.filter((c) => (c.section ?? "TRAINING") === tab),
     [courses, tab]
   );
+  /**
+   * Sütunlar: kurslar konuya göre gruplanır. Konunun kimliği ve varsayılan
+   * işlem kursu birincil üyedir; başlık konunun adıdır.
+   */
+  const tabSubjects = useMemo<SubjectRow[]>(
+    () =>
+      groupSubjects(tabCourses).map((s) => ({
+        ...s.primary,
+        title: s.name,
+        members: s.members,
+      })),
+    [tabCourses]
+  );
   const visibleCourses = useMemo(
-    () => (fCourse ? tabCourses.filter((c) => c.id === fCourse) : tabCourses),
-    [tabCourses, fCourse]
+    () => (fCourse ? tabSubjects.filter((c) => c.id === fCourse) : tabSubjects),
+    [tabSubjects, fCourse]
   );
 
   /** Kişide bu durumdan en az bir hücre var mı? Sekme sayıları da buradan. */
@@ -589,7 +629,10 @@ export function TrainingMatrix() {
               >
                 {label}
                 <span className="text-[10.5px] text-slate-400 ml-1.5">
-                  {courses.filter((c) => (c.section ?? "TRAINING") === k).length}
+                  {
+                    groupSubjects(courses.filter((c) => (c.section ?? "TRAINING") === k))
+                      .length
+                  }
                 </span>
               </button>
             ))}
@@ -756,8 +799,8 @@ export function TrainingMatrix() {
                 onChange={(e) => setFCourse(e.target.value)}
                 className="input !w-full !py-1.5 !text-xs"
               >
-                <option value="">All trainings ({tabCourses.length})</option>
-                {tabCourses.map((c) => (
+                <option value="">All trainings ({tabSubjects.length})</option>
+                {tabSubjects.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.title}
                   </option>
@@ -1032,7 +1075,7 @@ export function TrainingMatrix() {
               : undefined
           }
           onRecord={
-            canRecordFor(hover.at.user)
+            canRecordFor(hover.at.user) && hover.at.course.members.length === 1
               ? () => {
                   const { user, course } = hover.at!;
                   hover.closeNow();
@@ -1041,7 +1084,7 @@ export function TrainingMatrix() {
               : undefined
           }
           onAssign={
-            canAssign && canAssignCourse(hover.at.course)
+            canAssign && canAssignCourse(hover.at.course) && hover.at.course.members.length === 1
               ? () => {
                   const { user, course } = hover.at!;
                   hover.closeNow();
@@ -1069,36 +1112,44 @@ export function TrainingMatrix() {
                 {menu.course.title}
               </p>
             </div>
-            {canRecordFor(menu.user) && (
-              <button
-                onClick={() => {
-                  setRecord({ user: menu.user, course: menu.course });
-                  setMenu(null);
-                }}
-                className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
-              >
-                + Record training
-                <span className="block text-[10px] text-slate-400 font-normal leading-tight">
-                  Already taken elsewhere
-                </span>
-              </button>
-            )}
+            {/* Konuyu birden fazla kurs karşılıyorsa (ör. ilk eğitim +
+                devamlılık eğitimi) hangisine işlem yapılacağı sorulur;
+                tek kurslu konuda eskisi gibi tek satır. */}
+            {canRecordFor(menu.user) &&
+              menu.course.members.map((m) => (
+                <button
+                  key={`rec-${m.id}`}
+                  onClick={() => {
+                    setRecord({ user: menu.user, course: m });
+                    setMenu(null);
+                  }}
+                  className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
+                >
+                  + Record training
+                  <span className="block text-[10px] text-slate-400 font-normal leading-tight">
+                    {menu.course.members.length > 1 ? m.title : "Already taken elsewhere"}
+                  </span>
+                </button>
+              ))}
             {!canAssign ? null : canAssignCourse(menu.course) ? (
-              <button
-                onClick={() => {
-                  setAssign({ user: menu.user, course: menu.course });
-                  setMenu(null);
-                }}
-                className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
-              >
-                + Assign training
-                <span className="block text-[10px] text-slate-400 font-normal leading-tight">
-                  Take it in the system
-                </span>
-              </button>
+              menu.course.members.filter(isAssignable).map((m) => (
+                <button
+                  key={`asg-${m.id}`}
+                  onClick={() => {
+                    setAssign({ user: menu.user, course: m });
+                    setMenu(null);
+                  }}
+                  className="w-full text-left px-2 py-2 rounded-lg text-[12px] font-medium text-slate-800 hover:bg-slate-100"
+                >
+                  + Assign training
+                  <span className="block text-[10px] text-slate-400 font-normal leading-tight">
+                    {menu.course.members.length > 1 ? m.title : "Take it in the system"}
+                  </span>
+                </button>
+              ))
             ) : (
               <p className="px-2 py-2 text-[10.5px] text-slate-400 leading-snug">
-                {menu.course.delivery === "EXTERNAL_ONLY"
+                {menu.course.members.every((m) => m.delivery === "EXTERNAL_ONLY")
                   ? "Tracked externally — cannot be assigned."
                   : "Not published — cannot be assigned."}
               </p>
@@ -1342,7 +1393,7 @@ type AssignmentRow = {
 
 type HoverState = {
   user: UserRow;
-  course: CourseRow;
+  course: SubjectRow;
   state: CellState;
   rect: DOMRect;
   /** Bu hücrede açık bir atama varsa — tamamlanmış kayıtla birlikte de olabilir. */
@@ -1364,7 +1415,7 @@ function useCellHover() {
   const enter = (
     el: HTMLElement,
     user: UserRow,
-    course: CourseRow,
+    course: SubjectRow,
     state: CellState,
     assignment?: AssignmentRow | null
   ) => {

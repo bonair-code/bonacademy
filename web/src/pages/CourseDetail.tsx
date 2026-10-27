@@ -21,6 +21,7 @@ import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage, FUNCTIONS_BASE } from "../lib/firebase";
 import { useScormSrc } from "../lib/scormAccess";
+import { subjectSlug, type SubjectTag } from "../lib/records";
 import { coverTone } from "../lib/coverTone";
 import { asLang, LANGS, LANG_LABEL, ofLang, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
@@ -55,6 +56,11 @@ type Course = {
    * matrisin bolumu.
    */
   section: "TRAINING" | "BORESCOPE_RUNUP";
+  /**
+   * Konu etiketi — aynı konuyu taşıyan kurslar matriste TEK sütun olur.
+   * Null ise kurs kendi başına bir konudur.
+   */
+  subject: SubjectTag | null;
   /** Öğrenci kartındaki kapak görseli. Yoksa başlıktan renk türetilir. */
   coverUrl: string | null;
   coverPath: string | null;
@@ -164,6 +170,24 @@ export function CourseDetail() {
   const [coverBusy, setCoverBusy] = useState(false);
   const coverRef = useRef<HTMLInputElement>(null);
 
+  /**
+   * Konu alanının öneri listesi: sistemde tanımlı konular. Tek seferlik
+   * okuma — yazım farkından aynı konunun ikiye bölünmesini engelliyor.
+   */
+  const [knownSubjects, setKnownSubjects] = useState<SubjectTag[]>([]);
+  useEffect(() => {
+    getDocs(collection(db, "courses"))
+      .then((s) => {
+        const m = new Map<string, SubjectTag>();
+        for (const d of s.docs) {
+          const t = (d.data() as { subject?: SubjectTag | null }).subject;
+          if (t?.key && t.name) m.set(t.key, t);
+        }
+        setKnownSubjects([...m.values()].sort((a, b) => a.name.localeCompare(b.name, "tr")));
+      })
+      .catch(() => setKnownSubjects([]));
+  }, []);
+
   // Eğitmen alanının öneri listesi: Instructor ve Admin rolündeki kişiler.
   // Okuma yetkisi yoksa liste boş kalır, alan yine elle yazılabilir.
   const [instructorOptions, setInstructorOptions] = useState<string[]>([]);
@@ -190,6 +214,7 @@ export function CourseDetail() {
         title: data.title ?? "",
         category: data.category ?? null,
         section: data.section === "BORESCOPE_RUNUP" ? "BORESCOPE_RUNUP" : "TRAINING",
+        subject: data.subject ?? null,
         coverUrl: data.coverUrl ?? null,
         coverPath: data.coverPath ?? null,
         durationHours: data.durationHours ?? null,
@@ -309,6 +334,7 @@ export function CourseDetail() {
         title: c.title.trim(),
         category: c.category?.trim() || null,
         section: c.section,
+        subject: c.subject,
         durationHours: c.durationHours ?? null,
         ownerInstructorName: c.instructorName.trim() || null,
         delivery: c.delivery,
@@ -605,6 +631,52 @@ export function CourseDetail() {
               onChange={(e) => set("category", e.target.value)}
               placeholder="e.g. Safety / Quality"
             />
+          </Field>
+          <Field label="Follow-Up subject">
+            {/* Aynı konu adını taşıyan kurslar matriste TEK sütunda
+                birleşir: "EWIS" sütunu hem ilk eğitimle hem devamlılık
+                eğitimiyle karşılanır. Boşsa kurs kendi başına bir konu. */}
+            <input
+              className="input"
+              list="subject-options"
+              value={c.subject?.name ?? ""}
+              onChange={(e) => {
+                const name = e.target.value;
+                set(
+                  "subject",
+                  name.trim()
+                    ? {
+                        key: subjectSlug(name),
+                        name: name.trim(),
+                        kind: c.subject?.kind ?? "INITIAL",
+                      }
+                    : null
+                );
+              }}
+              placeholder="Empty — this course is its own subject"
+            />
+            <datalist id="subject-options">
+              {knownSubjects.map((x) => (
+                <option key={x.key} value={x.name} />
+              ))}
+            </datalist>
+          </Field>
+          <Field label="Role within the subject">
+            <select
+              className="input"
+              disabled={!c.subject}
+              value={c.subject?.kind ?? "INITIAL"}
+              onChange={(e) =>
+                c.subject &&
+                set("subject", {
+                  ...c.subject,
+                  kind: e.target.value as "INITIAL" | "CONTINUATION",
+                })
+              }
+            >
+              <option value="INITIAL">Initial training</option>
+              <option value="CONTINUATION">Continuation training</option>
+            </select>
           </Field>
           <Field label="Follow-Up section">
             <select
