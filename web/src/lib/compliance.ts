@@ -6,12 +6,13 @@ import { requirementFor, type Scope } from "./requirements";
 import { heldMethods, methodBreakdown, methodsOf, worstOf } from "./methods";
 import { isStaffRole, type Role } from "./auth";
 import {
-  addValidity,
+  groupSubjects,
   isAssignmentOpen,
   keyOf,
   methodRecordIndex,
   openAssignmentSet,
   pickLatest,
+  resolveSubjectCoverage,
 } from "./records";
 
 /**
@@ -114,7 +115,9 @@ export function useCompliance(
     // bitiş tarihinden gelir — bu yüzden tarih ile birlikte taşınır. Aynı kurs
     // için birden fazla dış kayıt olabiliyor; kazanan en son TAMAMLANAN kayıt
     // olmalı. Eskiden döngüde en son gelen kazanıyordu, yani rastgeleydi.
-    type Done = { date: Date; expiry: Date | null; external: boolean };
+    // Biçim lib/records.ts'in beklediği biçim: matris ve kişi sayfası da
+    // aynı haritayı veriyor, üç ekran aynı fonksiyonu paylaşsın diye.
+    type Done = { date: Date; external: string | null; expiresAt: Date | null };
     const done = new Map<string, Done>();
     const put = (uid: string, cid: string, d: Done | null) => {
       if (!uid || !cid || !d) return;
@@ -122,20 +125,27 @@ export function useCompliance(
     };
     for (const c of certs) {
       const d = (c.issuedAt as Timestamp)?.toDate?.();
-      if (d) put(c.userId, c.courseId, { date: d, expiry: null, external: false });
+      if (d) put(c.userId, c.courseId, { date: d, external: null, expiresAt: null });
     }
     for (const e of externals) {
       const d = (e.completedAt as Timestamp)?.toDate?.();
       if (d)
         put(e.userId, e.courseId, {
           date: d,
-          expiry: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
-          external: true,
+          external: "External",
+          expiresAt: (e.expiresAt as Timestamp)?.toDate?.() ?? null,
         });
     }
 
     /** (userId, courseId) → o kursun bütün dış kayıtları; metod dökümü için. */
     const methodRecs = methodRecordIndex(externals);
+
+    /** Konu üyeleri — kurs kimliğinden konuyu karşılayan bütün kurslara. */
+    const courseRows = courses as (AnyRow & { id: string; title: string })[];
+    const courseById = new Map(courseRows.map((c) => [c.id, c]));
+    const membersOf = new Map<string, typeof courseRows>();
+    for (const sub of groupSubjects(courseRows))
+      for (const m of sub.members) membersOf.set(m.id, sub.members);
 
     const openAssignments = assignments.filter((a) => isAssignmentOpen(a.status));
     const assignedSet = openAssignmentSet(assignments);
@@ -149,7 +159,17 @@ export function useCompliance(
       for (const c of courses) {
         if (!requirementFor(c as any, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
         const k = `${u.id}|${c.id}`;
-        const d = done.get(k);
+        /**
+         * Gereklilik kursun KENDİ kaydıyla, eşdeğer eğitimle ya da aynı
+         * konudaki başka bir kursla (ilk ↔ devamlılık) karşılanmış olabilir.
+         * Kural tek yerde: lib/records.ts.
+         */
+        const cover = resolveSubjectCoverage(
+          u.id,
+          membersOf.get(c.id) ?? [c as (typeof courseRows)[number]],
+          done,
+          courseById
+        );
         const base = {
           userId: u.id,
           userName: u.name ?? "",
@@ -183,7 +203,7 @@ export function useCompliance(
           }
           continue;
         }
-        if (!d) {
+        if (!cover) {
           // Atanmış ve vadesi GELMEMİŞSE açık sayılmaz — iş sürüyor.
           // Vadesi geçmişse kişi o eğitime sahip değil demektir; eksik.
           const a = openByKey.get(k);
@@ -198,11 +218,9 @@ export function useCompliance(
           }
           continue;
         }
-        // Dış belgede geçerlilik belgenin kendi tarihinden; iç sertifikada
-        // kursun tekrar süresinden hesaplanır.
-        const exp = d.external
-          ? d.expiry
-          : addValidity(d.date, c.recurrenceEvery, c.recurrenceUnit);
+        // Bitiş tarihini kapsama veriyor: dış belgede belgenin kendi
+        // tarihi, iç sertifikada kaydın geldiği kursun tekrar süresi.
+        const exp = cover.expiry;
         if (!exp) continue;
         const days = Math.round((exp.getTime() - now) / DAY);
         if (days < 0) findings.push({ ...base, kind: "EXPIRED", days });

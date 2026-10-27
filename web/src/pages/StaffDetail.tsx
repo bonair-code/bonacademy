@@ -34,6 +34,8 @@ import {
   keyOf,
   pickLatest,
   resolveCoverage,
+  groupSubjects,
+  resolveSubjectCoverage,
   type Coverage,
 } from "../lib/records";
 import {
@@ -233,9 +235,20 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
       pickLatest(extByCourse, e.courseId, { ...e, date: dt });
     }
 
-    const relevant = courses.filter(
-      (c) => requiredIds.has(c.id) || assignedIds.has(c.id) || certByCourse.has(c.id) || extByCourse.has(c.id)
-    );
+    /**
+     * Konu üyeleri: aynı konu etiketini taşıyan kurslar. Bir satırın
+     * durumu kendi kursuna değil KONUsuna bakar — devamlılık eğitimini
+     * almış kişinin ilk eğitim satırı "eksik" görünmemeli.
+     */
+    const membersOf = new Map<string, CourseRow[]>();
+    for (const sub of groupSubjects(courses))
+      for (const m of sub.members) membersOf.set(m.id, sub.members);
+
+    const covered = (c: CourseRow) =>
+      requiredIds.has(c.id) || assignedIds.has(c.id) || certByCourse.has(c.id) || extByCourse.has(c.id);
+    // Konusu ilgiliyse kurs da ilgilidir: devamlılık eğitiminin kaydı varsa
+    // ilk eğitim satırı da görünsün, "neyle karşılandı" okunabilsin.
+    const relevant = courses.filter((c) => (membersOf.get(c.id) ?? [c]).some(covered));
 
     /**
      * resolveCoverage, matristekiyle AYNI girdiyi bekliyor: (kişi|kurs) →
@@ -277,6 +290,29 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
        * zorunda, yoksa aynı kişi iki ekranda farklı görünür (daha önce oldu).
        */
       if (!date && user) {
+        // Önce konunun tamamına bak: kardeş kurs (ilk ↔ devamlılık) da
+        // karşılar. Sonuç yine `via` ile gösteriliyor — ekranda "şununla
+        // karşılandı" satırı zaten var.
+        const members = membersOf.get(course.id) ?? [course];
+        const subj =
+          members.length > 1
+            ? resolveSubjectCoverage(user.id, members, completions, courseById)
+            : null;
+        if (subj && subj.courseId !== course.id) {
+          return {
+            course,
+            required: requiredIds.has(course.id),
+            state: "DONE" as const,
+            date: subj.date,
+            expires: subj.expiry,
+            days: daysLeft(subj.expiry),
+            external: null,
+            certificateId: null,
+            via: subj.via ?? [
+              { courseId: subj.courseId, date: subj.date, expiry: subj.expiry },
+            ],
+          };
+        }
         const cover = resolveCoverage(user.id, course, completions, courseById);
         if (cover && cover.via) {
           return {
