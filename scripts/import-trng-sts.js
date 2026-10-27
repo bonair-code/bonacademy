@@ -43,29 +43,22 @@ const TODAY = (() => {
   return new Date(Math.round((v - 25569) * 86400000));
 })();
 
-/** Matris kolonu → sistemdeki kurs başlığı. Burada olmayan kolon aktarılmaz. */
-const COURSE_BY_COLUMN = {
-  "SHT-145": "SHT-145 | Initial Training",
-  MOE: "Maintenance Organization Exposition (MOE) | Initial Training",
-  HF: "Human Factors | Initial Training",
-  EWIS: "Electrical Wiring Interconnection System | Initial Training",
-  "FUEL TANK SAFETY": "Fuel Tank Safety Training (Phase 2) | Initial Training",
-  "SHT-CAM": "SHT-CAM | Initial Training",
-  "SAFETY Training": "Safety Training (Include Human Factors) | Initial Training",
-  // Eski kayit tasiyicisi. Artik ayri verilmiyor; Safety Training onun yerine
-  // geciyor (kurs ayarindaki satisfiedBy esdegerligi). Kolon aktarilmazsa ayri
-  // SMS almis kisilerin kaydi sistemde hic gorunmuyordu.
-  SMS: "Safety Management System (SMS) | Initial Training",
-  "SHT-66": "SHT-66 | Initial Training",
-  "TECHNOLOGY UPDATE": "Technology Update | Initial Training",
-  "INCOMING INSPECTION": "Incoming Inspection | Initial Training",
-  "TRAIN TRAINER": "Train The Trainer",
-  // Tracked Training olarak sonradan açıldı (5 yıl). Matristeki diğer eksik
-  // kolonlar kurs olarak açılmadı: ESD, DGR Awareness, ATA 300, Hidden Damage
-  // Inspection, Tool Calibration, Basınçlı Tüp → Incoming Inspection eğitiminin
-  // içinde veriliyor; Module-10 ayrıldı, artık takip edilmiyor.
-  "ENGLISH EXAM": "English Exam",
-};
+/**
+ * Matris kolonu → sistemdeki kurs başlığı.
+ *
+ * Elle yazılmıyor: tek kaynak scripts/rebuild-mapping.js. Orada her konu
+ * hangi TRNG_STS sütunundan beslendiğini söylüyor; burada ters çevriliyor.
+ * Eskiden bu liste elle tutuluyordu ve kurs adı değiştiğinde sessizce
+ * kopuyordu.
+ *
+ * Burada olmayan kolon aktarılmaz (eğitim olmayan sütunlar: COMPETENCE
+ * ASSESSMENT, OJT …, LICENCE EXPIRE DATE — bkz. SKIP_TRNG).
+ */
+const COURSE_BY_COLUMN = Object.fromEntries(
+  require("./rebuild-mapping.js")
+    .SUBJECTS.filter((s) => s.trng)
+    .map((s) => [s.trng, s.subject])
+);
 
 const DEPTS = [
   "QUALITY DEPARTMENT",
