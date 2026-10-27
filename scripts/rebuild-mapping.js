@@ -82,9 +82,14 @@ module.exports.SUBJECTS = [
     years: 2,
   },
   {
-    // ? Kâğıtta "Level 1", "Level 2", "Phase 1", "Phase 2" geçiyor ama
-    //   TRNG_STS'te TEK sütun var ("FUEL TANK SAFETY"). Tek konu kabul
-    //   edildi. Ayrı takip edilmesi gerekiyorsa söyle.
+    // TEK konu (kullanıcı kararı). Phase 1 ve Phase 2 aynı eğitimin
+    // seviyeleri; kâğıttaki kayıt sayfasında da tek sütun olarak tutuluyor
+    // (64 kayıt), yani veri zaten ikisini ayırmıyor.
+    //
+    // Bilinen sınır: REQ_TRNG, Certifying Staff ve Mechanics için Level 2,
+    // Incoming Inspector ve TQM için Level 1 istiyor. Tek konuda bu ayrım
+    // yapılamaz — Phase 1 almış biri Level 2 gerektiren rolde de uyumlu
+    // görünür. Kayıtlar seviyeyi taşımadığı için başka türlüsü mümkün değil.
     subject: "Fuel Tank Safety",
     trng: "FUEL TANK SAFETY",
     req: ["Fuel Tank Safety Level 1", "Fuel Tank Safety Level 2", "Fuel Tank Safety Phase 1"],
@@ -122,6 +127,8 @@ module.exports.SUBJECTS = [
   {
     // ? REQ_TRNG'de "Technical Changes" yazıyor, TRNG_STS'te "TECHNOLOGY
     //   UPDATE". Aynı şey kabul edildi.
+    // "Technical Changes" (REQ_TRNG) = "Technology Update" (kayıt
+    // sayfası) — kullanıcı onayladı.
     subject: "Technology Update",
     trng: "TECHNOLOGY UPDATE",
     req: ["Technical Changes"],
@@ -191,7 +198,7 @@ module.exports.SUBJECTS = [
     req: ["Train The Trainer"],
     cert: [],
     old: ["Train The Trainer"],
-    years: null, // ? kâğıtta süre yok — süresiz kabul edildi
+    years: null, // süresiz (kullanıcı onayladı)
   },
   {
     subject: "Basınçlı Tüp Eğitimi",
@@ -264,10 +271,16 @@ module.exports.SCOPES = {
   "Category B1, B2, A Certifying Staff": "Certifying Staff",
   Mechanics: "Mechanic Technician",
   "Technical Quality Manager (1.3.2.2)": "Technical Quality & Safety Engineer",
-  "Incoming Inspector": null, // ? sistemde karşılığı yok
-  "Engineering and Planning Manager": null, // ? sistemde karşılığı yok
-  "Supply Manager (1.3.2.5)": null, // ? sistemde karşılığı yok
-  "Instructor Traınıng 3.14.2": null, // ? sistemde karşılığı yok
+  // Incoming Inspector sistemde ZATEN var: "Certifying Staff" kapsamının
+  // altında bir alt yetki ve 9 kişi bağlı. Yeni kapsam açmak o 9 kişiyi
+  // boşa düşürürdü. Gereklilikleri alt yetkiye yazılıyor; alt yetki
+  // kapsamın ÜSTÜNE eklediği için yalnızca Certifying Staff'ta olmayanlar
+  // giriyor.
+  "Incoming Inspector": { scope: "Certifying Staff", subScope: "Incoming Inspector" },
+  // Karşılığı yok — yeni kapsam olarak açılıyor. Kişi ataması kullanıcıda.
+  "Engineering and Planning Manager": { create: "Engineering and Planning Manager" },
+  "Supply Manager (1.3.2.5)": { create: "Supply Manager" },
+  "Instructor Traınıng 3.14.2": { create: "Instructor" },
 };
 
 /**
@@ -280,7 +293,7 @@ module.exports.KEEP_SCOPES = ["Technician", "NDT Staff", "Auditor"];
 /**
  * CERTIFICATE sayfasındaki uçak tipi eğitimleri. Bunlar eğitim matrisine
  * değil, "Borescope & Run-Up" bölümüne ait — orada zaten motor/uçak tipi
- * kalemleri var. ? Nereye gitsinler, karar bekliyor.
+ * kalemleri var. Oraya kalem olarak aciliyorlar; "Tap Test" zaten var.
  */
 module.exports.AIRCRAFT_CERTS = [
   "Gulfstream GV-SP Series - RRD BR710 Engine RunUp Training",
@@ -301,5 +314,8 @@ module.exports.AIRCRAFT_CERTS = [
   "TAP TEST (INITIAL) TRAINING", // Borescope bölümünde "Tap Test" olarak zaten var
 ];
 
-/** REQ_TRNG'de geçip hiçbir konuya bağlanamayan ad. ? */
+/**
+ * REQ_TRNG'de geçip hiçbir konuya bağlanamayan ad. Kullanıcı da ne
+ * olduğunu bilmiyor; içeri alınmıyor.
+ */
 module.exports.UNMAPPED_REQ = ["Training on authorization subject course"];
