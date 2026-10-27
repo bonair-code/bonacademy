@@ -21,7 +21,7 @@ import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage, FUNCTIONS_BASE } from "../lib/firebase";
 import { useScormSrc } from "../lib/scormAccess";
-import { subjectSlug, type SubjectTag } from "../lib/records";
+import type { SubjectTag } from "../lib/records";
 import { coverTone } from "../lib/coverTone";
 import { asLang, LANGS, LANG_LABEL, ofLang, publishedLangsOf, type Lang } from "../lib/lang";
 import { Flag } from "../components/Flag";
@@ -171,22 +171,34 @@ export function CourseDetail() {
   const coverRef = useRef<HTMLInputElement>(null);
 
   /**
-   * Konu alanının öneri listesi: sistemde tanımlı konular. Tek seferlik
-   * okuma — yazım farkından aynı konunun ikiye bölünmesini engelliyor.
+   * "Follow-Up subject" seçenekleri: TAKİP EDİLEN eğitimler — Settings'te
+   * bir kapsamın (ya da alt kapsamın) gerekli eğitimi olarak girilmiş
+   * kurslar. Matrisin sütunu bunlar; bir kursu buraya bağlamak "ben şu
+   * eğitimin bir çeşidiyim" demek.
    */
-  const [knownSubjects, setKnownSubjects] = useState<SubjectTag[]>([]);
+  const [trackedOptions, setTrackedOptions] = useState<{ id: string; title: string }[]>([]);
   useEffect(() => {
-    getDocs(collection(db, "courses"))
-      .then((s) => {
-        const m = new Map<string, SubjectTag>();
-        for (const d of s.docs) {
-          const t = (d.data() as { subject?: SubjectTag | null }).subject;
-          if (t?.key && t.name) m.set(t.key, t);
+    Promise.all([getDocs(collection(db, "jobTitles")), getDocs(collection(db, "courses"))])
+      .then(([sc, cs]) => {
+        const need = new Set<string>();
+        for (const d of sc.docs) {
+          const v = d.data() as {
+            requiredCourseIds?: string[];
+            subScopes?: { requiredCourseIds?: string[] }[];
+          };
+          for (const cid of v.requiredCourseIds ?? []) need.add(cid);
+          for (const sub of v.subScopes ?? [])
+            for (const cid of sub.requiredCourseIds ?? []) need.add(cid);
         }
-        setKnownSubjects([...m.values()].sort((a, b) => a.name.localeCompare(b.name, "tr")));
+        setTrackedOptions(
+          cs.docs
+            .filter((d) => need.has(d.id) && d.id !== id)
+            .map((d) => ({ id: d.id, title: (d.data() as { title?: string }).title ?? d.id }))
+            .sort((a, b) => a.title.localeCompare(b.title, "tr"))
+        );
       })
-      .catch(() => setKnownSubjects([]));
-  }, []);
+      .catch(() => setTrackedOptions([]));
+  }, [id]);
 
   // Eğitmen alanının öneri listesi: Instructor ve Admin rolündeki kişiler.
   // Okuma yetkisi yoksa liste boş kalır, alan yine elle yazılabilir.
@@ -633,33 +645,33 @@ export function CourseDetail() {
             />
           </Field>
           <Field label="Follow-Up subject">
-            {/* Aynı konu adını taşıyan kurslar matriste TEK sütunda
-                birleşir: "EWIS" sütunu hem ilk eğitimle hem devamlılık
-                eğitimiyle karşılanır. Boşsa kurs kendi başına bir konu. */}
-            <input
+            {/* Bu kurs hangi takip edilen eğitimin çeşidi? Aynı eğitime
+                bağlanan kurslar matriste TEK sütunda birleşir: "SHT-145"
+                sütunu hem ilk eğitimle hem devamlılık eğitimiyle karşılanır.
+                Boşsa kurs matriste kendi başına durur. */}
+            <select
               className="input"
-              list="subject-options"
-              value={c.subject?.name ?? ""}
+              value={c.subject?.courseId ?? ""}
               onChange={(e) => {
-                const name = e.target.value;
+                const courseId = e.target.value;
                 set(
                   "subject",
-                  name.trim()
-                    ? {
-                        key: subjectSlug(name),
-                        name: name.trim(),
-                        kind: c.subject?.kind ?? "INITIAL",
-                      }
-                    : null
+                  courseId ? { courseId, kind: c.subject?.kind ?? "INITIAL" } : null
                 );
               }}
-              placeholder="Empty — this course is its own subject"
-            />
-            <datalist id="subject-options">
-              {knownSubjects.map((x) => (
-                <option key={x.key} value={x.name} />
+            >
+              <option value="">— Tracked on its own —</option>
+              {trackedOptions.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.title}
+                </option>
               ))}
-            </datalist>
+            </select>
+            <p className="text-[11px] text-slate-500 mt-1">
+              {trackedOptions.length === 0
+                ? "No tracked trainings yet — add one under Settings › Authorisation scopes › Required training."
+                : "Shows in Training Follow-Up under the training picked here."}
+            </p>
           </Field>
           <Field label="Role within the subject">
             <select

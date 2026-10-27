@@ -254,15 +254,18 @@ export function resolveCoverage(
  */
 
 /**
- * Kursun üzerindeki konu etiketi. Yoksa kurs kendi başına bir konudur.
+ * Kursun konu etiketi: "ben şu eğitimin bir çeşidiyim".
+ *
+ * `courseId` takip edilen eğitimin kimliği — Settings'te kapsamın gerekli
+ * eğitimi olarak girilen kurs. Ad değil kimlik tutuluyor: iki kursa aynı
+ * adı elle yazmak, yazım farkıyla konuyu ikiye bölerdi.
  *
  * `kind` kursun konu içindeki rolü: ilk eğitim mi, devamlılık eğitimi mi.
  * Görüntüde bir şey değiştirmez; hiçbir kaydı olmayan kişiye eğitim
  * atanırken DEVAMLILIK eğitiminin seçilmemesi için gerekli.
  */
 export type SubjectTag = {
-  key: string;
-  name: string;
+  courseId: string;
   kind?: "INITIAL" | "CONTINUATION" | null;
 };
 
@@ -272,33 +275,21 @@ export type SubjectLike = { id: string; title: string; subject?: SubjectTag | nu
 export type Subject<T> = { key: string; name: string; members: T[]; primary: T };
 
 /**
- * Etiketi olmayan kurs kendi başına bir konudur. Anahtarı `course:` ile
- * başlar ki elle verilen bir etiketle çakışmasın.
+ * Konunun anahtarı: takip edilen eğitimin kimliği. Etiketi olmayan kurs
+ * kendi başına bir konudur — kendi kimliği anahtar olur. Bu sayede takip
+ * edilen eğitim ile çeşitleri KENDİLİĞİNDEN aynı gruba düşer: "SHT-145"
+ * kursunun anahtarı kendi kimliği, "SHT-145 Initial" de onu işaret eder.
  */
-export const subjectKeyOf = (c: SubjectLike) => c.subject?.key?.trim() || `course:${c.id}`;
+export const subjectKeyOf = (c: SubjectLike) => c.subject?.courseId?.trim() || c.id;
 
-/**
- * Konu adından anahtar üretir. Anahtar addan türetiliyor ki "EWIS" ile
- * "ewis " aynı konuya düşsün — iki kursu farklı sütuna bölen yazım farkı
- * olmasın.
- */
-export function subjectSlug(name: string): string {
-  const slug = name
-    .trim()
-    .toLocaleLowerCase("tr")
-    .replace(/[^\p{L}\p{N}]+/gu, "-")
-    .replace(/^-+|-+$/g, "");
-  // Hiç harf/rakam yoksa anahtar boş kalırdı; boş anahtar "etiket yok"
-  // sayılıp kurs sessizce kendi konusuna düşerdi. Adı olduğu gibi kullan.
-  return slug || name.trim().toLocaleLowerCase("tr");
-}
 
 /**
  * Kursları konuya göre grupla. Sıra korunur: konu, ilk üyesinin listedeki
  * yerinde çıkar — matris sütun sırası değişmesin diye.
  *
- * Birincil üye: ilk eğitim olarak işaretlenen kurs; yoksa listedeki ilk
- * üye. Atama ve kayıt varsayılanı budur.
+ * Konunun ADI ve kimliği, takip edilen eğitimin (anahtarın işaret ettiği
+ * kursun) kendisinden gelir. O kurs listede yoksa — süzülmüş ya da
+ * silinmişse — ilk üye devralır, böylece sütun kaybolmaz.
  */
 export function groupSubjects<T extends SubjectLike>(courses: T[]): Subject<T>[] {
   const out: Subject<T>[] = [];
@@ -310,16 +301,21 @@ export function groupSubjects<T extends SubjectLike>(courses: T[]): Subject<T>[]
       found.members.push(c);
       continue;
     }
-    const s: Subject<T> = {
-      key,
-      name: c.subject?.name?.trim() || c.title,
-      members: [c],
-      primary: c,
-    };
+    const s: Subject<T> = { key, name: c.title, members: [c], primary: c };
     byKey.set(key, s);
     out.push(s);
   }
   for (const s of out) {
+    // Konunun sahibi: anahtarın işaret ettiği kurs — Settings'te gerekli
+    // eğitim olarak girilen kurs. Sütunun adı ve kimliği ondan gelir.
+    const owner = s.members.find((m) => m.id === s.key);
+    if (owner) {
+      s.name = owner.title;
+      s.primary = owner;
+    }
+    // Atama varsayılanı ilk eğitim: hiçbir kaydı olmayan kişiye devamlılık
+    // eğitimi atamak yanlış olurdu. Takip edilen eğitimin kendisinde genelde
+    // içerik yok, o yüzden sahip varsayılan olarak kalmıyor.
     const initial = s.members.find((m) => m.subject?.kind === "INITIAL");
     if (initial) s.primary = initial;
   }
