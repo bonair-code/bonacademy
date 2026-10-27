@@ -10,7 +10,7 @@ import {
   signOut as fbSignOut,
   type User,
 } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, type Timestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 /**
@@ -38,6 +38,14 @@ export type Profile = {
   birthDate: string | null;
   /** Müşteri hesaplarında bağlı olduğu kurum; personelde boş. */
   company: string | null;
+  /**
+   * Eğitmen yetkisi: öğretebileceği kursların kimlikleri ve yetkinin bitişi
+   * (boşsa süresiz). Ekranlar bunu lib/instructors.ts → canTeach ile okuyor,
+   * o yüzden profilin taşıması şart — eksik olsa yetkili eğitmen bile hiçbir
+   * kurs göremezdi.
+   */
+  instructorFor: string[];
+  instructorAuthExpiry: Timestamp | null;
 };
 
 /** Sertifikada basıldığı için bu alanlar eksikse profil tamamlanmamış sayılır. */
@@ -98,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             birthPlace: data?.birthPlace ?? null,
             birthDate: data?.birthDate ?? null,
             company: data?.company ?? null,
+            instructorFor: data?.instructorFor ?? [],
+            instructorAuthExpiry: data?.instructorAuthExpiry ?? null,
           });
           setLoading(false);
         },

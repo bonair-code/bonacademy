@@ -62,6 +62,15 @@ type CourseRow = {
   recurrenceUnit?: string;
   /** Bu gerekliliğin yerine geçebilecek kurslar (ör. Safety = SMS + HF). */
   satisfiedBy?: SatisfiedBy | null;
+  /**
+   * Follow-Up sekmesi. Alanı olmayan eski kurslar TRAINING sayılır —
+   * yoksa alan girilene kadar matris boşalırdı.
+   *
+   * Kursun `category` alanı AYRI bir şey: serbest metin bir etiket
+   * ("Technic", "Quality"…), kurs kartında gösteriliyor. Sekmeyi ona
+   * bağlamak 18 kursun 13'ünü matristen düşürüyordu.
+   */
+  section?: "TRAINING" | "BORESCOPE_RUNUP";
 };
 type JobTitle = {
   id: string;
@@ -160,6 +169,14 @@ export function TrainingMatrix() {
   const [fStatus, setFStatus] = useState("");
   /** Departman/kapsam/eğitim paneli — normalde kapalı. */
   const [panelOpen, setPanelOpen] = useState(false);
+  /** Renk anahtarı — başvuru listesi, sürekli açık durmasına gerek yok. */
+  const [keyOpen, setKeyOpen] = useState(false);
+  /**
+   * Sekme. "Training" ve "Borescope & Run-Up" aynı matris; fark kursun
+   * `section` alanı. Bölümü olmayan eski kurslar TRAINING sayılır,
+   * yoksa alan eklenene kadar matris boşalırdı.
+   */
+  const [tab, setTab] = useState<"TRAINING" | "BORESCOPE_RUNUP">("TRAINING");
   /**
    * Eksik hücreden doğrudan kayıt girme. Eskiden kişi sayfasına gidip oradan
    * eklemek gerekiyordu; matriste eksiği görüp aynı yerde kapatamıyordun.
@@ -452,9 +469,14 @@ export function TrainingMatrix() {
   // Denetimde soru hep aynı: "şu departmanda, şu yetkide, şu eğitimi eksik
   // olan kim?" Filtreler bu soruyu tek ekranda cevaplasın diye.
   const norm = (s: string) => s.toLocaleLowerCase("tr");
+  /** Sekmenin kapsamındaki kurslar — kategori süzgeci her şeyin önünde. */
+  const tabCourses = useMemo(
+    () => courses.filter((c) => (c.section ?? "TRAINING") === tab),
+    [courses, tab]
+  );
   const visibleCourses = useMemo(
-    () => (fCourse ? courses.filter((c) => c.id === fCourse) : courses),
-    [courses, fCourse]
+    () => (fCourse ? tabCourses.filter((c) => c.id === fCourse) : tabCourses),
+    [tabCourses, fCourse]
   );
 
   /** Kişide bu durumdan en az bir hücre var mı? Sekme sayıları da buradan. */
@@ -537,111 +559,167 @@ export function TrainingMatrix() {
         title="Training Follow-Up"
       />
 
-      {/* Filtre çubuğu — "A" tasarımı (onaylandı 20.10.2026; seçenekler
-          docs/tasarim/followup-filtre.html). Eskiden beş özdeş açılır kutu
-          yan yanaydı: en çok sorulan soru ("kimde eksik var?") en derinde
-          kalıyordu ve hangisinin açık olduğu ancak tek tek bakarak
-          anlaşılıyordu. Şimdi durum sayılı sekme, geri kalanı panelde. */}
-      <div className="mb-2.5 flex flex-wrap items-center gap-2 no-print">
-        <div className="relative">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2.2}
-            strokeLinecap="round"
-            aria-hidden
-            className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
-          >
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-3.5-3.5" />
-          </svg>
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search personnel…"
-            className="input !w-full sm:!w-52 !py-1.5 !text-xs !pl-7"
-          />
-        </div>
-
-        {/* Durum sekmeleri: sayılar diğer filtreler uygulandıktan SONRAKİ
-            listeye ait, yani tıklamadan önce ne bulacağını söylüyor. */}
-        <div className="inline-flex bg-slate-100 rounded-[9px] p-[3px] gap-0.5 overflow-x-auto max-w-full">
-          {STATUS_TABS.map((st) => {
-            const on = fStatus === st.k;
-            const n = statusCounts[st.k] ?? 0;
-            return (
+      {/* Üst alan — "C" tasarımı (onaylandı 27.10.2026; seçenekler
+          scratchpad/filter-mock.html). Eskiden üç sıra chrome vardı ve veri
+          dördüncü sırada başlıyordu: sekmeler, sayılı durum sekmeleri
+          (üçü hep sıfır), ayrı sayaç satırı, sekiz renk kutucuğu.
+          Şimdi hepsi tek sırada; sayısı sıfır olan durum listede yok,
+          renk anahtarı düğmenin arkasında. */}
+      <div className="no-print border-b border-slate-200 mb-3">
+        <div className="flex flex-wrap items-center gap-2 pb-2">
+          <nav className="flex gap-0.5 flex-1 min-w-0" aria-label="Follow-up sections">
+            {([
+              ["TRAINING", "Training"],
+              ["BORESCOPE_RUNUP", "Borescope & Run-Up"],
+            ] as const).map(([k, label]) => (
               <button
-                key={st.k || "all"}
+                key={k}
                 type="button"
-                aria-pressed={on}
-                onClick={() => setFStatus(st.k)}
-                className={`rounded-[7px] px-2.5 py-[5px] text-[12px] font-semibold whitespace-nowrap flex items-center gap-1.5 transition ${
-                  on ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-900/5" : "text-slate-500 hover:text-slate-700"
+                aria-selected={tab === k}
+                role="tab"
+                onClick={() => {
+                  setTab(k);
+                  setFCourse("");
+                }}
+                className={`px-3.5 py-2 text-[13.5px] -mb-[9px] border-b-2 transition ${
+                  tab === k
+                    ? "text-brand-700 border-brand-600 font-semibold"
+                    : "text-slate-500 border-transparent hover:text-slate-800"
                 }`}
               >
-                {st.dot && (
-                  <span aria-hidden className="h-[7px] w-[7px] rounded-full" style={{ background: st.dot }} />
-                )}
-                {st.label}
-                <span
-                  className={`text-[10.5px] font-bold rounded-[5px] px-1 py-px ${
-                    on ? "bg-brand-50 text-brand-700" : "bg-slate-200 text-slate-500"
-                  }`}
-                >
-                  {n}
+                {label}
+                <span className="text-[10.5px] text-slate-400 ml-1.5">
+                  {courses.filter((c) => (c.section ?? "TRAINING") === k).length}
                 </span>
               </button>
-            );
-          })}
+            ))}
+            <Link
+              to="/instructors"
+              className="px-3.5 py-2 text-[13.5px] -mb-[9px] border-b-2 border-transparent text-slate-500 hover:text-slate-800"
+            >
+              Instructors
+            </Link>
+          </nav>
+
+          <div className="relative">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.2}
+              strokeLinecap="round"
+              aria-hidden
+              className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+            >
+              <circle cx="11" cy="11" r="7" />
+              <path d="M20 20l-3.5-3.5" />
+            </svg>
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search…"
+              className="input !w-[150px] !py-1.5 !text-xs !pl-7"
+            />
+          </div>
+
+          {/* Durum: sayısı sıfır olan seçenek listeye hiç girmiyor. */}
+          <select
+            value={fStatus}
+            onChange={(e) => setFStatus(e.target.value)}
+            className="input !w-auto !py-1.5 !text-xs"
+            aria-label="Status"
+          >
+            {STATUS_TABS.filter((st) => !st.k || (statusCounts[st.k] ?? 0) > 0 || st.k === fStatus).map(
+              (st) => (
+                <option key={st.k || "all"} value={st.k}>
+                  {st.label} · {statusCounts[st.k] ?? 0}
+                </option>
+              )
+            )}
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setPanelOpen((v) => !v)}
+            aria-expanded={panelOpen}
+            className={`h-[30px] rounded-lg border px-2.5 text-[12px] font-semibold inline-flex items-center gap-1.5 transition ${
+              panelCount > 0
+                ? "border-brand-200 bg-brand-50 text-brand-700"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+            }`}
+          >
+            Filters
+            {panelCount > 0 && (
+              <span className="bg-brand-600 text-white rounded-full min-w-[16px] h-4 px-1 grid place-items-center text-[10px] font-bold">
+                {panelCount}
+              </span>
+            )}
+          </button>
+
+          {/* Renk anahtarı — açılır, çünkü başvuru listesi. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setKeyOpen((v) => !v)}
+              aria-expanded={keyOpen}
+              className="h-[30px] rounded-lg border border-slate-200 bg-white px-2.5 text-[12px] font-semibold text-slate-600 hover:border-slate-300"
+            >
+              Key
+            </button>
+            {keyOpen && (
+              <div
+                className="absolute right-0 top-9 z-20 rounded-xl border border-slate-200 bg-white p-3 shadow-xl whitespace-nowrap"
+                onMouseLeave={() => setKeyOpen(false)}
+              >
+                <div className="flex flex-col gap-1.5 text-[11.5px] text-slate-700">
+                  <Swatch color={HEAT.fresh} label="More than 1 year" />
+                  <Swatch color={HEAT.good} label="90–365 days" />
+                  <Swatch color={HEAT.warn} label="60–90 days" />
+                  <Swatch color={HEAT.near} label="30–60 days" />
+                  <Swatch color={HEAT.soon} label="Under 30 days" />
+                  <Swatch color={HEAT.over} label="Expired" />
+                  <Swatch color={HEAT.missing} label="Never taken" />
+                  <Swatch color={HEAT.planned} label="Planned" />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <PrintButton label="PDF" />
+
+          {filtersOn && (
+            <button
+              onClick={clearAll}
+              className="text-[11px] font-semibold text-slate-500 hover:text-brand-700"
+            >
+              Clear
+            </button>
+          )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setPanelOpen((v) => !v)}
-          aria-expanded={panelOpen}
-          className={`h-[30px] rounded-lg border px-2.5 text-[12px] font-semibold inline-flex items-center gap-1.5 transition ${
-            panelCount > 0
-              ? "border-brand-200 bg-brand-50 text-brand-700"
-              : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
-          }`}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden className="h-3.5 w-3.5">
-            <path d="M3 5h18M6 12h12M10 19h4" />
-          </svg>
-          Filters
-          {panelCount > 0 && (
-            <span className="bg-brand-600 text-white rounded-full min-w-[16px] h-4 px-1 grid place-items-center text-[10px] font-bold">
-              {panelCount}
-            </span>
+        {/* Açık filtreler ve sayaç — ayrı sıra değil, sekme çizgisinin altında
+            ince bir satır. */}
+        <div className="flex flex-wrap items-center gap-2 pb-2 -mt-0.5">
+          {fDept && (
+            <FilterChip label={departments.get(fDept) ?? "Department"} onClear={() => setFDept("")} />
           )}
-        </button>
-
-        {/* Açık filtreler rozet olarak: "neden bu kadar az kişi var"
-            sorusunu ortadan kaldırıyor, tek tıkla kalkıyorlar. */}
-        {fDept && (
-          <FilterChip label={departments.get(fDept) ?? "Department"} onClear={() => setFDept("")} />
-        )}
-        {fScope && (
-          <FilterChip
-            label={jobTitles.find((j) => j.id === fScope)?.name ?? "Scope"}
-            onClear={() => setFScope("")}
-          />
-        )}
-        {fCourse && (
-          <FilterChip
-            label={courses.find((c) => c.id === fCourse)?.title ?? "Training"}
-            onClear={() => setFCourse("")}
-          />
-        )}
-        {filtersOn && (
-          <button
-            onClick={clearAll}
-            className="text-[11px] font-semibold text-slate-500 hover:text-brand-700"
-          >
-            Clear
-          </button>
-        )}
+          {fScope && (
+            <FilterChip
+              label={jobTitles.find((j) => j.id === fScope)?.name ?? "Scope"}
+              onClear={() => setFScope("")}
+            />
+          )}
+          {fCourse && (
+            <FilterChip
+              label={tabCourses.find((c) => c.id === fCourse)?.title ?? "Training"}
+              onClear={() => setFCourse("")}
+            />
+          )}
+          <span className="ml-auto text-[11.5px] text-slate-500">
+            {visibleCourses.length} training{visibleCourses.length === 1 ? "" : "s"} · {shownStaff}
+            {filtersOn ? ` of ${totalStaff}` : ""} staff
+          </span>
+        </div>
       </div>
 
       {panelOpen && (
@@ -684,8 +762,8 @@ export function TrainingMatrix() {
                 onChange={(e) => setFCourse(e.target.value)}
                 className="input !w-full !py-1.5 !text-xs"
               >
-                <option value="">All trainings ({courses.length})</option>
-                {courses.map((c) => (
+                <option value="">All trainings ({tabCourses.length})</option>
+                {tabCourses.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.title}
                   </option>
@@ -707,27 +785,6 @@ export function TrainingMatrix() {
           </div>
         </div>
       )}
-
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-[12px] font-semibold text-slate-700">
-            {visibleCourses.length} training{visibleCourses.length === 1 ? "" : "s"} · {shownStaff}{" "}
-            {filtersOn ? `of ${totalStaff} ` : ""}staff
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 text-[11px]">
-          <PrintButton />
-          <Swatch color={HEAT.fresh} label="1 yr+" />
-          <Swatch color={HEAT.good} label="90–365" />
-          <Swatch color={HEAT.warn} label="90–60" />
-          <Swatch color={HEAT.near} label="60–30" />
-          <Swatch color={HEAT.soon} label="30–0" />
-          <Swatch color={HEAT.over} label="Expired" />
-          <Swatch color={HEAT.missing} label="Never taken" />
-          <Swatch color={HEAT.planned} label="Planned" />
-        </div>
-      </div>
 
       {/* Telefon görünümü: 200px donmuş ilk kolon + ders başına bir kolon
           375px'e sığmıyor. Aynı `cellFor` hesabı, kişi kartı olarak. */}

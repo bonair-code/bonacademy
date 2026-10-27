@@ -59,6 +59,13 @@ const Icon = {
       <path d="M5 20c0-3.6 3.1-5.6 7-5.6s7 2 7 5.6" />
     </svg>
   ),
+  instructor: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <circle cx="10" cy="8" r="3.2" />
+      <path d="M4 20c0-3.5 2.7-5.5 6-5.5.9 0 1.8.2 2.5.4" />
+      <path d="M14.3 17.6l2.1 2.1 3.6-4.1" />
+    </svg>
+  ),
   assign: (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
       <path d="M4 6h11M4 12h7M4 18h10" />
@@ -102,6 +109,15 @@ const NAV: NavItem[] = [
     roles: ["ADMIN", "MANAGER", "INSTRUCTOR"],
     group: "Tracking",
     icon: Icon.matrix,
+  },
+  {
+    // Follow-Up'ta sekme olarak da duruyor; menude kendi girisi var cunku
+    // yetki yenileme eğitim takibinden bagimsiz bir is.
+    to: "/instructors",
+    label: "Instructor Authorisations",
+    roles: ["ADMIN"],
+    group: "Tracking",
+    icon: Icon.instructor,
   },
   {
     to: "/register",

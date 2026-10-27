@@ -17,6 +17,7 @@ import { httpsCallable } from "firebase/functions";
 import QRCode from "qrcode";
 import { db, functions } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
+import { canTeach } from "../lib/instructors";
 import { PageHead } from "../components/PageHead";
 import { printQr } from "../lib/print";
 import { Modal } from "../components/Modal";
@@ -334,11 +335,14 @@ function SessionForm({
   onClose: () => void;
 }) {
   const { profile, role } = useAuth();
-  // Eğitmen yalnızca kendi kursu için oturum açar (kural da aynısını istiyor).
+  /**
+   * Eğitmen yalnızca YETKİLİ olduğu konuda oturum açar; kural da aynısını
+   * istiyor (firestore.rules → teachAuthorised). Ölçü kursun sahipliği
+   * değil: kursun tek sahibi var ama aynı konuda birden çok eğitmen
+   * yetkili olabiliyor.
+   */
   const pickable =
-    role === "INSTRUCTOR"
-      ? courses.filter((c) => (c as { ownerInstructorId?: string }).ownerInstructorId === profile?.uid)
-      : courses;
+    role === "INSTRUCTOR" ? courses.filter((c) => canTeach(profile, c.id)) : courses;
   // "OTHER": sistemde kursu olmayan bir eğitim; adı elle yazılır.
   const [courseId, setCourseId] = useState(
     existing ? (existing.courseId ?? "OTHER") : ""

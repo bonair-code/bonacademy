@@ -14,6 +14,7 @@ import { Certificates } from "./pages/Certificates";
 import { CertificateRegister } from "./pages/CertificateRegister";
 import { Verify } from "./pages/Verify";
 import { TrainingMatrix } from "./pages/TrainingMatrix";
+import { Instructors } from "./pages/Instructors";
 import { StaffDetail } from "./pages/StaffDetail";
 import { ClassSessions, ClassSessionDetail } from "./pages/ClassSessions";
 import { JoinSession } from "./pages/JoinSession";
@@ -116,6 +117,16 @@ function AuthedApp() {
           element={
             <Only roles={STAFF_VIEW}>
               <StaffDetail />
+            </Only>
+          }
+        />
+        {/* Egitmen yetkileri: kim hangi konuyu OGRETEBILIR. Follow-Up ile
+            ayni sekme ailesinde ama ayri sayfa. */}
+        <Route
+          path="/instructors"
+          element={
+            <Only roles={["ADMIN"]}>
+              <Instructors />
             </Only>
           }
         />

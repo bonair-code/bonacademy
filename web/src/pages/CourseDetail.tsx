@@ -47,7 +47,14 @@ type ExamCfg = {
 
 type Course = {
   title: string;
+  /** Serbest metin etiket ("Technic", "Quality"…) — kurs kartinda gorunur. */
   category: string | null;
+  /**
+   * Training Follow-Up'ta hangi sekmede listelenecegi. Bos olan TRAINING
+   * sayilir. `category` ile karistirilmamali: o serbest bir etiket, bu
+   * matrisin bolumu.
+   */
+  section: "TRAINING" | "BORESCOPE_RUNUP";
   /** Öğrenci kartındaki kapak görseli. Yoksa başlıktan renk türetilir. */
   coverUrl: string | null;
   coverPath: string | null;
@@ -182,6 +189,7 @@ export function CourseDetail() {
       setC({
         title: data.title ?? "",
         category: data.category ?? null,
+        section: data.section === "BORESCOPE_RUNUP" ? "BORESCOPE_RUNUP" : "TRAINING",
         coverUrl: data.coverUrl ?? null,
         coverPath: data.coverPath ?? null,
         durationHours: data.durationHours ?? null,
@@ -300,6 +308,7 @@ export function CourseDetail() {
       await updateDoc(doc(db, "courses", id), {
         title: c.title.trim(),
         category: c.category?.trim() || null,
+        section: c.section,
         durationHours: c.durationHours ?? null,
         ownerInstructorName: c.instructorName.trim() || null,
         delivery: c.delivery,
@@ -596,6 +605,16 @@ export function CourseDetail() {
               onChange={(e) => set("category", e.target.value)}
               placeholder="e.g. Safety / Quality"
             />
+          </Field>
+          <Field label="Follow-Up section">
+            <select
+              className="input"
+              value={c.section}
+              onChange={(e) => set("section", e.target.value as Course["section"])}
+            >
+              <option value="TRAINING">Training</option>
+              <option value="BORESCOPE_RUNUP">Borescope &amp; Engine Run-Up</option>
+            </select>
           </Field>
           <Field label="Instructor">
             <input

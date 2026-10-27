@@ -26,6 +26,21 @@ service cloud.firestore {
     function isStaff()      { return signedIn() && myRole() != 'CUSTOMER'; }
     function courseData(cid){ return get(/databases/$(database)/documents/courses/$(cid)).data; }
     function ownsCourse(cid){ return isInstructor() && courseData(cid).ownerInstructorId == request.auth.uid; }
+    // Çağıranın kendi kaydı. Aynı get() bir değerlendirme içinde tekrar
+    // ederse Firestore onu tek okuma sayıyor.
+    function me(){ return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    /**
+     * Bu kişi bu konuyu ÖĞRETEBİLİR mi? Eğitmen yetkisi users.instructorFor
+     * listesinde; bitiş tarihi kişi başına tek (boşsa süresiz).
+     * Kursu "sahiplenmek" ile aynı şey DEĞİL: içeriği bir kişi düzenler,
+     * aynı konuyu birden fazla eğitmen verebilir.
+     */
+    function teachAuthorised(cid){
+      return isInstructor()
+        && cid in me().get('instructorFor', [])
+        && (me().get('instructorAuthExpiry', null) == null
+            || me().instructorAuthExpiry > request.time);
+    }
     // Kursun İÇERİĞİNE erişim: kişiye atanmış ve erişimi engellenmemiş olmalı.
     // Atama id'si belirlenimci (`${userId}_${courseId}`); atama kaldırılınca
     // (cancelAssignment) belge silinir ve içerik kapanır, sertifika kalır.
@@ -184,12 +199,14 @@ service cloud.firestore {
       // listeleyebiliyordu).
       allow get: if true;
       allow list: if isAdmin() || isInstructor();
-      // Eğitmen yalnızca KENDİ oturumunu açar/değiştirir (CAPELLA kararı).
-      // Kursa bağlı oturum yalnızca eğitmenin KENDİ kursu için ("Other" serbest).
+      // Eğitmen yalnızca KENDİ oturumunu açar/değiştirir.
+      // Kursa bağlı oturum için o konuda YETKİLİ olmak şart ("Other" serbest).
+      // Eskiden şart kursun sahibi olmaktı; kursun tek sahibi var ama aynı
+      // konuda birden çok eğitmen yetkili olabiliyor, o yüzden ölçü yetki.
       function ownCourseOrNone() {
         return request.resource.data.get('courseId', null) == null
           || request.resource.data.courseId == 'OTHER'
-          || ownsCourse(request.resource.data.courseId);
+          || teachAuthorised(request.resource.data.courseId);
       }
       allow create: if isAdmin()
                     || (isInstructor()
