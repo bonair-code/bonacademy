@@ -484,8 +484,18 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
     .toLocaleUpperCase("tr");
 
   const lineMenu = (l: Line) => [
+    /**
+     * Var olan kaydı DÜZELT — tarihi yanlış girilmiş bir belgeyi onarmanın
+     * tek yolu yoktu: ya yenisi ekleniyordu (eskisi "earlier record" olarak
+     * kalıyordu) ya da silinip baştan giriliyordu.
+     */
+    ...(l.external
+      ? [{ label: "Edit record", icon: "✎", onClick: () => setDialog({ kind: "edit", row: l.external! }) }]
+      : []),
     {
-      label: l.external ? "Replace external record" : "Add external certificate",
+      // "Replace" yanıltıcıydı: bu, kaydın yerine geçmiyor, YENİ bir kayıt
+      // açıyor ve eskisi geçmişte kalıyor. Yenileme akışı bu.
+      label: l.external ? "Add newer record" : "Add external certificate",
       icon: "↑",
       onClick: () => setDialog({ kind: "add", course: l.course }),
     },
@@ -1114,50 +1124,10 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
                         {canEdit && (
                           <RowMenu
                             label={`Actions for ${l.course.title}`}
-                            items={[
-                              {
-                                label: l.external ? "Replace external record" : "Add external certificate",
-                                icon: "↑",
-                                onClick: () => setDialog({ kind: "add", course: l.course }),
-                              },
-                              ...(l.external
-                                ? [
-                                    // Belge yoksa "Open document" boş sekme açıyordu.
-                                    ...(l.external.fileUrl
-                                      ? [
-                                          {
-                                            label: "Open document",
-                                            icon: "↗",
-                                            onClick: () =>
-                                              setPreview({
-                                                url: l.external!.fileUrl!,
-                                                name: l.external!.fileName ?? "certificate.pdf",
-                                                title: l.external!.title,
-                                              }),
-                                          },
-                                        ]
-                                      : []),
-                                    {
-                                      label: "Delete external record",
-                                      icon: "🗑",
-                                      danger: true,
-                                      onClick: () => setDialog({ kind: "remove", row: l.external! }),
-                                    },
-                                  ]
-                                : []),
-                              // İçerik açılmadığı için kilitli kalan atamayı
-                              // admin gerekçeyle kapatabilir. Sınavı olan kurs
-                              // bu yolla kapanmaz — Function reddeder.
-                              ...(role === "ADMIN" && l.state === "PLANNED"
-                                ? [
-                                    {
-                                      label: "Mark as completed (admin)",
-                                      icon: "✓",
-                                      onClick: () => setDialog({ kind: "force", line: l }),
-                                    },
-                                  ]
-                                : []),
-                            ]}
+                            /* Ekrandakiyle AYNI liste. Eskiden buraya birebir
+                               kopyalanmisti; biri guncellenince digeri geride
+                               kaliyordu. */
+                            items={lineMenu(l)}
                           />
                         )}
                       </td>
