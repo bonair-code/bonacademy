@@ -205,7 +205,6 @@ export function CertificateRegister() {
     <div>
       <PageHead
         title="Certificate Register"
-        subtitle="Every certificate the system has issued, newest number first."
       />
 
       <div className="mb-3 flex flex-wrap items-center gap-2">

@@ -535,7 +535,6 @@ export function TrainingMatrix() {
         form={{ no: "BON-F145-094", rev: "02" }}
         printTitle="Training Follow-Up Form"
         title="Training Follow-Up"
-        subtitle="Personnel × training matrix. Click a name for that person's full record."
       />
 
       {/* Filtre çubuğu — "A" tasarımı (onaylandı 20.10.2026; seçenekler

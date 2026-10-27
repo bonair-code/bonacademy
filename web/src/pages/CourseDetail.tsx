@@ -16,7 +16,7 @@ import {
   updateDoc,
   writeBatch,
 } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { getDownloadURL, ref, uploadBytes, uploadBytesResumable } from "firebase/storage";
 import JSZip from "jszip";
 import { httpsCallable } from "firebase/functions";
 import { db, functions, storage, FUNCTIONS_BASE } from "../lib/firebase";
@@ -405,7 +405,7 @@ export function CourseDetail() {
       <Link to="/courses" className="text-xs text-slate-500 hover:text-slate-800">
         ← Courses
       </Link>
-      <PageHead title={c.title} subtitle="Course content, sections and exam questions." />
+      <PageHead title={c.title} />
       <div className="mb-4" />
 
       {/* Kurs künyesi. Başlık üst barda zaten sabit duruyor, burada tekrar
@@ -1295,6 +1295,8 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
   const [type, setType] = useState<SectionContent["type"] | null>(null);
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
+  /** 0–100; null ise çubuk çizilmez (ör. paket açılırken). */
+  const [pct, setPct] = useState<number | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -1322,7 +1324,20 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
       const cid = crypto.randomUUID();
       const path = `content/${courseId}/${section.id}/${kind.toLowerCase()}/${cid}-${file.name}`;
       const r = ref(storage, path);
-      await uploadBytes(r, file);
+      // Video yüzlerce MB olabiliyor; `uploadBytes` hiç ilerleme vermiyordu.
+      const mb = (b: number) => (b / 1024 / 1024).toFixed(1);
+      await new Promise<void>((resolve, reject) => {
+        const task = uploadBytesResumable(r, file);
+        task.on(
+          "state_changed",
+          (sn) => {
+            setPct(Math.round((sn.bytesTransferred / sn.totalBytes) * 100));
+            setProgress(`${mb(sn.bytesTransferred)} / ${mb(sn.totalBytes)} MB`);
+          },
+          reject,
+          () => resolve()
+        );
+      });
       const url = await getDownloadURL(r);
       await addContent({ id: cid, type: kind, url, fileName: file.name, storagePath: path });
       setMsg(`${kind === "VIDEO" ? "Video" : "PDF"} added.`);
@@ -1341,6 +1356,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
     setMsg(null);
     setBusy(true);
     setProgress(null);
+    setPct(null);
     try {
       const cid = crypto.randomUUID();
       const zip = await JSZip.loadAsync(file);
@@ -1385,6 +1401,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
           }
           done++;
           setProgress(`${done} / ${fileEntries.length} files`);
+          setPct(Math.round((done / fileEntries.length) * 100));
         }
       };
       await Promise.all(Array.from({ length: 6 }, () => worker()));
@@ -1398,6 +1415,7 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
     } finally {
       setBusy(false);
       setProgress(null);
+      setPct(null);
     }
   }
 
@@ -1496,7 +1514,26 @@ function SectionContentEditor({ courseId, section }: { courseId: string; section
       )}
 
           {busy && (
-            <p className="text-xs text-slate-500 mt-2">Uploading… {progress ?? ""}</p>
+            <div className="mt-2.5">
+              <p className="text-xs text-slate-500">
+                {pct === null ? "Preparing…" : `Uploading… %${pct}`}
+                {progress ? ` · ${progress}` : ""}
+              </p>
+              {/* Yüzde bilinmiyorken (paket açılıyor) belirsiz bir şerit;
+                  bilindiğinde gerçek oran. */}
+              <div className="h-1 rounded-full bg-slate-200 mt-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full bg-brand-600 ${
+                    pct === null ? "w-1/3 animate-pulse" : "transition-[width] duration-150"
+                  }`}
+                  style={pct === null ? undefined : { width: `${pct}%` }}
+                  role="progressbar"
+                  aria-valuenow={pct ?? undefined}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                />
+              </div>
+            </div>
           )}
         </div>
       )}

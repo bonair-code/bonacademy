@@ -68,7 +68,6 @@ export function Certificates() {
     <div>
       <PageHead
         title="My Certificates"
-        subtitle="One row per training — the record that counts, and everything behind it."
       />
 
       {groups.length > 0 && <RecordTally counts={recordCounts(groups)} />}

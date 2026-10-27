@@ -463,7 +463,7 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
   if (!user)
     return (
       <div>
-        <PageHead title={self ? "My Record" : "Staff"} subtitle="Training status." />
+        <PageHead title={self ? "My Record" : "Staff"} />
         <p className="text-sm text-slate-400 py-10">
           {err ? err : "Loading…"}
         </p>
@@ -925,7 +925,6 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
         </Link>
         <PageHead
           title={user.name}
-          subtitle="Everything on this person: training, certificates, records and assignments."
         />
         <div className="mb-4" />
 

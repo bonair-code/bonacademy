@@ -249,7 +249,6 @@ export function Assignments() {
     <div>
       <PageHead
         title="Assign Training"
-        subtitle="Give training to one person or a whole group, and follow what happened next."
       />
 
       <div className="grid grid-cols-3 gap-3 mb-4">

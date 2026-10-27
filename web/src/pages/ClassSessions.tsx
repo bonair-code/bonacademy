@@ -224,7 +224,6 @@ export function ClassSessions() {
     <div>
       <PageHead
         title="Classroom Sessions"
-        subtitle="Face-to-face training — QR attendance and certificates."
       />
 
       <div className="mb-4 flex justify-end">
@@ -641,7 +640,7 @@ export function ClassSessionDetail() {
   if (!session)
     return (
       <div>
-        <PageHead title="Session" subtitle="Classroom training." />
+        <PageHead title="Session" />
         <p className="text-sm text-slate-400 py-10">{err ?? "Loading…"}</p>
       </div>
     );
@@ -658,7 +657,7 @@ export function ClassSessionDetail() {
       <Link to="/sessions" className="text-xs text-slate-500 hover:text-slate-800">
         ← Classroom Sessions
       </Link>
-      <PageHead title={session.courseTitle} subtitle="Attendance and certificates." />
+      <PageHead title={session.courseTitle} />
       <div className="mb-4" />
 
       <div className="grid lg:grid-cols-[320px_1fr] gap-4">

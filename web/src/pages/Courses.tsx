@@ -222,7 +222,6 @@ export function Courses() {
     <div>
       <PageHead
         title="Courses"
-        subtitle="Define training, upload content (video, PDF, SCORM) and exam questions."
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

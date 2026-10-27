@@ -109,7 +109,7 @@ export function Settings() {
 
   return (
     <div>
-      <PageHead title="Settings" subtitle="Everything the system is configured by." />
+      <PageHead title="Settings" />
 
       <div className="card flex flex-col lg:flex-row min-h-[560px] !overflow-visible">
         <nav className="lg:w-[210px] shrink-0 p-2 lg:p-3 flex lg:flex-col gap-1 overflow-x-auto border-b lg:border-b-0 lg:border-r border-slate-100">
