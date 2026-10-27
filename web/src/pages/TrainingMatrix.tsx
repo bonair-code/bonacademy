@@ -593,12 +593,6 @@ export function TrainingMatrix() {
                 </span>
               </button>
             ))}
-            <Link
-              to="/instructors"
-              className="px-3.5 py-2 text-[13.5px] -mb-[9px] border-b-2 border-transparent text-slate-500 hover:text-slate-800"
-            >
-              Instructors
-            </Link>
           </nav>
 
           <div className="relative">
