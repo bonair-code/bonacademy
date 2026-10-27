@@ -57,6 +57,31 @@ function placeCase(s: unknown): string {
 const ROLES = ["ADMIN", "MANAGER", "INSTRUCTOR", "USER", "CUSTOMER"];
 
 /**
+ * Bir kişi birden fazla rol taşıyabilir (kalite müdürü + eğitmen gibi).
+ * `roles` asıl kaynak, `role` bu listenin EN YETKİLİSİ — türetilmiş alan.
+ *
+ * CUSTOMER hiçbir rolle birleşmez: müşteri personel değildir, kurum
+ * uyumuna girmez. Birleştirilmek istenirse müşterilik düşer.
+ */
+function normalizeRoles(input: unknown, fallback?: unknown): string[] {
+  const raw = Array.isArray(input)
+    ? input.map(String)
+    : typeof input === "string"
+      ? [input]
+      : Array.isArray(fallback)
+        ? fallback.map(String)
+        : typeof fallback === "string"
+          ? [fallback]
+          : [];
+  const kept = ROLES.filter((r) => raw.includes(r));
+  if (kept.length === 0) return ["USER"];
+  const staff = kept.filter((r) => r !== "CUSTOMER");
+  return staff.length > 0 ? staff : ["CUSTOMER"];
+}
+/** En yetkili rol — ROLES zaten yetki sırasında. */
+const primaryOf = (roles: string[]) => ROLES.find((r) => roles.includes(r)) ?? "USER";
+
+/**
  * Admin, yeni bir kullanıcı (Auth hesabı + users/{uid} profili) oluşturur.
  * Client'tan Auth kullanıcısı yaratılamaz; admin SDK gerekir.
  */
@@ -70,7 +95,8 @@ export const createUser = onCall({ region: REGION, invoker: "public", secrets: m
   const email = String(d.email || "").trim().toLowerCase();
   const name = String(d.name || "").trim();
   if (!email || !name) throw new HttpsError("invalid-argument", "Email and name are required.");
-  const role = ROLES.includes(d.role) ? d.role : "USER";
+  const roles = normalizeRoles(d.roles, d.role);
+  const role = primaryOf(roles);
   const departmentId = d.departmentId ? String(d.departmentId) : null;
   const jobTitleIds: string[] = Array.isArray(d.jobTitleIds) ? d.jobTitleIds.map(String) : [];
   // Kapsam altındaki tikli alt yetkiler — kendi gerekli eğitimlerini getirir.
@@ -94,12 +120,13 @@ export const createUser = onCall({ region: REGION, invoker: "public", secrets: m
   } catch (e) {
     throw new HttpsError("already-exists", "Could not create the user: " + (e as Error).message);
   }
-  // Rolü custom claim'e de yaz (ileride claim-tabanlı kurallara geçiş için hazır).
-  await getAuth().setCustomUserClaims(userRecord.uid, { role, departmentId });
+  // Roller custom claim'e de yazılır; Storage kuralları claim'den okuyor.
+  await getAuth().setCustomUserClaims(userRecord.uid, { role, roles, departmentId });
   await getFirestore().doc(`users/${userRecord.uid}`).set({
     email,
     name,
     role,
+    roles,
     departmentId,
     jobTitleIds,
     subScopeIds,
@@ -283,7 +310,13 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   const d = req.data || {};
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof d.name === "string" && d.name.trim()) patch.name = d.name.trim();
-  if (ROLES.includes(d.role)) patch.role = d.role;
+  // Rol değişikliği: `roles` gelirse o, yoksa tek `role`. İkisi birlikte
+  // yazılır ki eski alanı okuyan hiçbir yer kırılmasın.
+  if (d.roles !== undefined || ROLES.includes(d.role)) {
+    const next = normalizeRoles(d.roles, d.role);
+    patch.roles = next;
+    patch.role = primaryOf(next);
+  }
   if (d.departmentId !== undefined) patch.departmentId = d.departmentId ? String(d.departmentId) : null;
   if (Array.isArray(d.jobTitleIds)) patch.jobTitleIds = d.jobTitleIds.map(String);
   if (Array.isArray(d.subScopeIds)) patch.subScopeIds = d.subScopeIds.map(String);
@@ -368,10 +401,11 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
     }
   }
 
-  const role = (patch.role as string) ?? snap.data()?.role ?? "USER";
+  const roles = (patch.roles as string[]) ?? normalizeRoles(snap.data()?.roles, snap.data()?.role);
+  const role = primaryOf(roles);
   const departmentId =
     patch.departmentId !== undefined ? patch.departmentId : snap.data()?.departmentId ?? null;
-  await getAuth().setCustomUserClaims(uid, { role, departmentId });
+  await getAuth().setCustomUserClaims(uid, { role, roles, departmentId });
 
   // Pasifleştirilen kullanıcı Auth tarafında da giriş yapamasın.
   if (typeof d.isActive === "boolean") {
@@ -379,7 +413,11 @@ export const updateUser = onCall({ region: REGION, invoker: "public" }, async (r
   }
   // Pasifleştirme ya da rol değişikliği HEMEN geçerli olsun: açık oturumlar
   // eski yetkiyle bir saate kadar çalışmaya devam ediyordu.
-  if (d.isActive === false || (patch.role !== undefined && patch.role !== snap.data()?.role)) {
+  const rolesChanged =
+    patch.roles !== undefined &&
+    JSON.stringify(patch.roles) !==
+      JSON.stringify(normalizeRoles(snap.data()?.roles, snap.data()?.role));
+  if (d.isActive === false || rolesChanged) {
     await getAuth().revokeRefreshTokens(uid);
   }
   return { ok: true };

@@ -16,10 +16,16 @@
 export type InstructorAuth = {
   instructorFor?: string[] | null;
   instructorAuthExpiry?: { toDate?: () => Date } | null;
-  role?: string;
+  /** Tek rol — eski kayıtlar için. Asıl kaynak `roles`. */
+  role?: string | null;
+  roles?: string[] | null;
 };
 
 /** Yetki bitiş tarihi — yoksa null (süresiz). */
+import { rolesOf } from "./roles";
+
+/* Rol listesi tek yerden: lib/roles.ts. */
+
 export function authExpiryOf(u: InstructorAuth): Date | null {
   return u.instructorAuthExpiry?.toDate?.() ?? null;
 }
@@ -38,13 +44,15 @@ export function authValid(u: InstructorAuth, now = new Date()): boolean {
  * açamaz hale gelmemeli).
  */
 export function canTeach(
-  u: (InstructorAuth & { role?: string }) | null | undefined,
+  u: InstructorAuth | null | undefined,
   courseId: string | null | undefined,
   now = new Date()
 ): boolean {
   if (!u) return false;
-  if (u.role === "ADMIN") return true;
-  if (u.role !== "INSTRUCTOR") return false;
+  // Bir kişi hem admin hem eğitmen olabilir; yetki rollerin TOPLAMI.
+  const roles = rolesOf(u);
+  if (roles.includes("ADMIN")) return true;
+  if (!roles.includes("INSTRUCTOR")) return false;
   if (!courseId) return true; // kursa bağlı olmayan ("Other") oturum
   return !!u.instructorFor?.includes(courseId) && authValid(u, now);
 }

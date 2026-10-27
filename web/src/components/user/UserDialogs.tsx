@@ -10,6 +10,7 @@ import { MAIL_ENABLED } from "../../lib/features";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../lib/firebase";
 import type { Role } from "../../lib/auth";
+import { primaryRole, roleConflict, rolesOf, sortRoles } from "../../lib/roles";
 import { assignCourses, skipNote } from "../../lib/assign";
 import { ScopePicker } from "./ScopePicker";
 import { ROLE_LABEL as ROLE_LABEL_, type MethodCourse, type Ref, type ScopeRef, type UserRow } from "./types";
@@ -155,7 +156,24 @@ export function UserForm({
   const editing = !!existing;
   const [name, setName] = useState(existing?.name ?? "");
   const [email, setEmail] = useState(existing?.email ?? "");
-  const [roleV, setRoleV] = useState<Role>(existing?.role ?? "USER");
+  /**
+   * Roller çoğul: kalite müdürü aynı zamanda eğitmen olabiliyor. `roleV`
+   * bunların en yetkilisi — eski alanı okuyan yerler için tutuluyor.
+   */
+  const [rolesV, setRolesV] = useState<Role[]>(() => {
+    const r = rolesOf(existing ?? null);
+    return r.length ? r : ["USER"];
+  });
+  const roleV = primaryRole(rolesV);
+  const roleError = roleConflict(rolesV);
+  /** Müşteri tek başınadır; personel rolleri birbiriyle birleşebilir. */
+  const toggleRole = (r: Role) =>
+    setRolesV((prev) => {
+      if (r === "CUSTOMER") return prev.includes("CUSTOMER") ? ["USER"] : ["CUSTOMER"];
+      const base = prev.filter((x) => x !== "CUSTOMER");
+      const next = base.includes(r) ? base.filter((x) => x !== r) : [...base, r];
+      return sortRoles(next.length ? next : ["USER"]);
+    });
   const [departmentId, setDepartmentId] = useState(existing?.departmentId ?? "");
   const [jobTitleIds, setJobTitleIds] = useState<string[]>(existing?.jobTitleIds ?? []);
   const [subScopeIds, setSubScopeIds] = useState<string[]>(existing?.subScopeIds ?? []);
@@ -212,6 +230,7 @@ export function UserForm({
           // Giriş adresi de buradan değişir (sunucu Auth hesabını da günceller).
           email: email.trim().toLowerCase(),
           role: roleV,
+          roles: rolesV,
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
@@ -226,6 +245,7 @@ export function UserForm({
           email: email.trim(),
           name: name.trim(),
           role: roleV,
+          roles: rolesV,
           departmentId: isCustomer ? null : departmentId || null,
           jobTitleIds: isCustomer ? [] : jobTitleIds,
           subScopeIds: isCustomer ? [] : validSubIds,
@@ -325,14 +345,43 @@ export function UserForm({
           </div>
         )}
         <div>
-          <label className="label">Role</label>
-          <select className="input" value={roleV} onChange={(e) => setRoleV(e.target.value as Role)}>
-            {(Object.keys(ROLE_LABEL_) as Role[]).map((r) => (
-              <option key={r} value={r}>
-                {ROLE_LABEL_[r]}
-              </option>
-            ))}
-          </select>
+          <label className="label">Roles</label>
+          {/* Birden fazla rol seçilebilir: aynı kişi hem yönetici hem
+              eğitmen olabiliyor. Yetki rollerin TOPLAMIdır. */}
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.keys(ROLE_LABEL_) as Role[]).map((r) => {
+              const on = rolesV.includes(r);
+              return (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => toggleRole(r)}
+                  aria-pressed={on}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12.5px] transition ${
+                    on
+                      ? "border-brand-200 bg-brand-50 text-brand-800 font-semibold"
+                      : "border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-700"
+                  }`}
+                >
+                  <span
+                    aria-hidden
+                    className={`grid place-items-center h-4 w-4 shrink-0 rounded-[5px] border text-[10px] leading-none ${
+                      on ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 text-transparent"
+                    }`}
+                  >
+                    ✓
+                  </span>
+                  {ROLE_LABEL_[r]}
+                </button>
+              );
+            })}
+          </div>
+          {roleError && <p className="text-[11px] text-red-700 mt-1.5">{roleError}</p>}
+          {rolesV.length > 1 && !roleError && (
+            <p className="text-[10.5px] text-slate-500 mt-1.5">
+              Signs in as {ROLE_LABEL_[roleV]}; can switch between roles from the sidebar.
+            </p>
+          )}
         </div>
         {isCustomer ? (
           <div>

@@ -163,6 +163,93 @@ const NAV: NavItem[] = [
   },
 ];
 
+/**
+ * Şapka değiştirici. Kişi birden fazla rol taşıyorsa hangi rolle
+ * çalıştığını seçer: menü ve ekranlar ona göre daralır. Yetkisi değişmez —
+ * sunucu her zaman rollerin toplamına bakar, o yüzden bu seçimle kimse
+ * kendini sistemden kilitleyemez.
+ */
+function RoleSwitch({
+  roles,
+  active,
+  onPick,
+}: {
+  roles: Role[];
+  active: Role;
+  onPick: (r: Role) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <div className="px-4 pb-1 relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[11px] font-semibold transition hover:bg-white/5"
+        style={{ color: "#98989d" }}
+      >
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.9}
+          strokeLinecap="round"
+          className="h-3.5 w-3.5 shrink-0"
+          aria-hidden
+        >
+          <path d="M4 8h13l-3-3M20 16H7l3 3" />
+        </svg>
+        <span className="flex-1 text-left truncate">Change role</span>
+        <span style={{ color: "#f2f2f7" }}>{ROLE_LABEL[active]}</span>
+      </button>
+
+      {open && (
+        <>
+          <button
+            type="button"
+            aria-label="Close"
+            onClick={() => setOpen(false)}
+            className="fixed inset-0 z-40 cursor-default"
+          />
+          <div
+            className="absolute z-50 bottom-full left-4 right-4 mb-1 rounded-xl overflow-hidden shadow-2xl"
+            style={{ background: "#2c2c2e", border: "1px solid rgba(255,255,255,.1)" }}
+          >
+            <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold uppercase tracking-wide" style={{ color: "#8e8e93" }}>
+              Work as
+            </p>
+            {roles.map((x) => (
+              <button
+                key={x}
+                type="button"
+                onClick={() => {
+                  onPick(x);
+                  setOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[12.5px] font-medium transition hover:bg-white/10"
+                style={{ color: x === active ? "#ff6b6f" : "#f2f2f7" }}
+              >
+                <span className="flex-1 text-left">{ROLE_LABEL[x]}</span>
+                {x === active && <span aria-hidden>✓</span>}
+              </button>
+            ))}
+            <p className="px-3 pt-1 pb-2.5 text-[10px] leading-snug" style={{ color: "#8e8e93" }}>
+              Changes what you see, not what you may do.
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const ROLE_LABEL: Record<Role, string> = {
   ADMIN: "Admin",
   MANAGER: "Manager",
@@ -181,7 +268,7 @@ export function Shell({ children }: { children: ReactNode }) {
 
 function ShellLayout({ children }: { children: ReactNode }) {
   // Giriş uçuşundan gelindiyse panel yumuşak belirir; bir kez oynar.
-  const { profile, role, signOut } = useAuth();
+  const { profile, role, roles, setActiveRole, signOut } = useAuth();
   const head = usePageHead();
   const r = role ?? "USER";
   const items = NAV.filter((n) => n.roles.includes(r));
@@ -287,6 +374,9 @@ function ShellLayout({ children }: { children: ReactNode }) {
           })}
         </nav>
 
+        {roles.length > 1 && (
+          <RoleSwitch roles={roles} active={r} onPick={setActiveRole} />
+        )}
         <AccountRow
           name={profile?.name || "User"}
           role={ROLE_LABEL[r]}

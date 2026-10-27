@@ -13,17 +13,24 @@ service cloud.firestore {
 
     function signedIn()  { return request.auth != null; }
     function prof()      { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
-    function myRole()    { return prof().role; }
+    /**
+     * Kişinin BÜTÜN rolleri. Yetki her zaman bunların toplamıdır; arayüzdeki
+     * "şu an hangi şapkayla çalışıyorum" seçimi sunucuya hiç gelmez.
+     * `roles` yoksa tek `role` alanına düşer — taşınmamış kayıt kilitlenmesin.
+     */
+    function myRoles()   { return prof().get('roles', [prof().role]); }
     function myDept()    { return prof().departmentId; }
-    function isAdmin()      { return signedIn() && myRole() == 'ADMIN'; }
+    function isAdmin()      { return signedIn() && 'ADMIN' in myRoles(); }
     // Departmansız müdür hiçbir departmanı görmez: null == null eşleşmesi
     // departmansız bütün kayıtları (müşteriler dahil) açıyordu.
-    function isManager()    { return signedIn() && myRole() == 'MANAGER' && myDept() != null; }
-    function isInstructor() { return signedIn() && myRole() == 'INSTRUCTOR'; }
+    function isManager()    { return signedIn() && 'MANAGER' in myRoles() && myDept() != null; }
+    function isInstructor() { return signedIn() && 'INSTRUCTOR' in myRoles(); }
     function isSelf(uid)    { return signedIn() && request.auth.uid == uid; }
     // CUSTOMER = dışarıdan eğitim alan müşteri. Personel değil: kurum yapısını
     // (departmanlar, yetki kapsamları, ayarlar) görmemeli.
-    function isStaff()      { return signedIn() && myRole() != 'CUSTOMER'; }
+    // Personel: müşterilik DIŞINDA en az bir rolü olan. Müşteri kurum
+    // yapısını (departman, kapsam, ayarlar) görmemeli.
+    function isStaff()      { return signedIn() && myRoles().hasAny(['ADMIN', 'MANAGER', 'INSTRUCTOR', 'USER']); }
     function courseData(cid){ return get(/databases/$(database)/documents/courses/$(cid)).data; }
     function ownsCourse(cid){ return isInstructor() && courseData(cid).ownerInstructorId == request.auth.uid; }
     // Çağıranın kendi kaydı. Aynı get() bir değerlendirme içinde tekrar

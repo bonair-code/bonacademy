@@ -28,12 +28,14 @@ import { db } from "../lib/firebase";
 import { useAuth } from "../lib/auth";
 import { PageHead } from "../components/PageHead";
 import { authDaysLeft, authExpiryOf, authValid } from "../lib/instructors";
+import { hasRole } from "../lib/roles";
 import { fmt } from "../lib/records";
 
 type Row = {
   id: string;
   name: string;
-  role: string;
+  role?: string | null;
+  roles?: string[] | null;
   isActive?: boolean;
   departmentId?: string | null;
   instructorFor?: string[];
@@ -75,9 +77,13 @@ export function Instructors() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  /** Yalnızca eğitmenler; admin listede yok çünkü zaten her şeyi yapabiliyor. */
+  /**
+   * Eğitmen rolü TAŞIYAN herkes — tek rolü eğitmen olmak gerekmiyor, bir
+   * kişi hem yönetici hem eğitmen olabilir. Sade admin listede yok: zaten
+   * her konuyu öğretebiliyor, yetkilendirmeye ihtiyacı yok.
+   */
   const instructors = useMemo(
-    () => rows.filter((u) => u.role === "INSTRUCTOR" && u.isActive !== false),
+    () => rows.filter((u) => hasRole(u, "INSTRUCTOR") && u.isActive !== false),
     [rows]
   );
 

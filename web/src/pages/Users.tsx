@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "../lib/firebase";
+import { hasRole, rolesOf } from "../lib/roles";
 import { useAuth, type Role } from "../lib/auth";
 import { Modal } from "../components/Modal";
 import { RowMenu } from "../components/RowMenu";
@@ -115,7 +116,9 @@ export function Users() {
   const sorted = useMemo(() => {
     const needle = q.trim().toLocaleLowerCase("tr");
     return users
-      .filter((u) => (roleFilter ? u.role === roleFilter : true))
+      // Rol süzgeci rollerin HERHANGİ birine bakar: hem yönetici hem
+      // eğitmen olan kişi iki süzgeçte de çıkmalı.
+      .filter((u) => (roleFilter ? hasRole(u, roleFilter) : true))
       .filter((u) =>
         needle
           ? `${u.name} ${u.email}`.toLocaleLowerCase("tr").includes(needle)
@@ -456,12 +459,16 @@ function UserRowView({
             </Link>
             <span className="block text-[11px] text-slate-400 leading-tight truncate">
               {u.email}
-              {u.role === "CUSTOMER" && u.company ? ` · ${u.company}` : ""}
+              {hasRole(u, "CUSTOMER") && u.company ? ` · ${u.company}` : ""}
             </span>
           </span>
         </span>
       </td>
-      <td className="td text-slate-600 hidden md:table-cell">{ROLE_LABEL[u.role]}</td>
+      <td className="td text-slate-600 hidden md:table-cell">
+        {rolesOf(u)
+          .map((r) => ROLE_LABEL[r])
+          .join(" · ") || "—"}
+      </td>
       <td className="td hidden md:table-cell">
         {titles.length === 0 ? (
           <span className="text-slate-300">—</span>
