@@ -453,6 +453,13 @@
     margin-left: 3mm;
   }
 
+  /* Matris A4 YATAY basiliyor (PrintButton landscape). Dikeyde sutun
+     basina 9.9mm dusuyordu ve hucreler kirpilıyordu: Inter 6.5pt ile
+     "06.05.28" 9.61mm, "MISSING" 9.68mm, arti 0.8mm ic bosluk = 10.5mm
+     gerekiyor. Yatayda (273mm - 38mm ad sutunu) 15 sutunda 15.7mm,
+     17 sutunda 13.8mm yer var.
+     SINIR: ~22 sutundan sonra yatayda da kirpilmaya baslar; o noktada
+     yazi boyutu ya da ad sutunu kuculmelı. */
   body.printing-report table.matrix-table {
     table-layout: fixed;
     width: 100%;

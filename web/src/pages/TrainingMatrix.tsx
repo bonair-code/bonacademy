@@ -544,6 +544,21 @@ export function TrainingMatrix() {
    * üzerinden hesaplanıyor: "Supply Department'ta eksiği olan kaç kişi var"
    * sorusunun cevabı, departman seçiliyken 67 değil 14 üzerinden verilmeli.
    */
+  /**
+   * Borescope ve engine run-up yetkisi yalnızca sertifika veren personele
+   * verilebiliyor (MOE 3.17.2: tip üzerinde B1 certifying staff şartı).
+   * Diğerleri bu sekmede boş satır olarak duruyordu.
+   *
+   * Kapsam ADIYLA bulunuyor; kapsam yeniden adlandırılırsa süzgeç
+   * uygulanmaz ve HERKES görünür — sessizce boş liste göstermektense
+   * fazla göstermek yeğdir.
+   */
+  const certifyingScopeId = useMemo(
+    () => jobTitles.find((j) => /certifying/i.test(j.name))?.id ?? null,
+    [jobTitles]
+  );
+  const boreOnlyCertifying = tab === "BORESCOPE_RUNUP" && certifyingScopeId !== null;
+
   const baseGroups = useMemo(
     () =>
       groups
@@ -553,11 +568,12 @@ export function TrainingMatrix() {
           list: g.list.filter(
             (u) =>
               (!q.trim() || norm(u.name).includes(norm(q.trim()))) &&
-              (!fScope || (u.jobTitleIds ?? []).includes(fScope))
+              (!fScope || (u.jobTitleIds ?? []).includes(fScope)) &&
+              (!boreOnlyCertifying || (u.jobTitleIds ?? []).includes(certifyingScopeId!))
           ),
         }))
         .filter((g) => g.list.length > 0),
-    [groups, q, fDept, fScope]
+    [groups, q, fDept, fScope, boreOnlyCertifying, certifyingScopeId]
   );
 
   const statusCounts = useMemo(() => {
@@ -727,7 +743,7 @@ export function TrainingMatrix() {
             )}
           </div>
 
-          <PrintButton label="PDF" />
+          <PrintButton label="PDF" landscape />
 
           {filtersOn && (
             <button
@@ -760,6 +776,8 @@ export function TrainingMatrix() {
           <span className="ml-auto text-[11.5px] text-slate-500">
             {visibleCourses.length} training{visibleCourses.length === 1 ? "" : "s"} · {shownStaff}
             {filtersOn ? ` of ${totalStaff}` : ""} staff
+            {/* Süzgeç görünmezse "insanlar nerede?" sorusu doğar. */}
+            {boreOnlyCertifying && " · certifying staff only"}
           </span>
         </div>
       </div>
@@ -1326,6 +1344,13 @@ export function TrainingMatrix() {
             training is <b>not required</b> for that person&rsquo;s authorisation scope.
             &ldquo;MISSING&rdquo; means required but no record exists.
           </p>
+          {/* Denetçi listenin neden kısa olduğunu bilmeli. */}
+          {boreOnlyCertifying && (
+            <p>
+              <b>Only certifying staff are listed.</b> Borescope and engine run-up authorisation
+              requires B1 certifying staff authorisation on the type (MOE 3.17.2).
+            </p>
+          )}
           <p className="mx-key-colors">
             {[
               ["More than 1 year", HEAT.fresh],
@@ -1348,12 +1373,6 @@ export function TrainingMatrix() {
           <tbody>
             <tr>
               <th>Prepared by</th>
-              <td />
-              <th>Date</th>
-              <td />
-            </tr>
-            <tr>
-              <th>Quality approval</th>
               <td />
               <th>Date</th>
               <td />
