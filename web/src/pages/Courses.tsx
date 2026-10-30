@@ -512,6 +512,28 @@ function DeleteConfirm({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /**
+   * Bu kursa bağlı kaç kayıt var? Kurs silinince bu kayıtlar silinmez ama
+   * silinmiş bir kimliğe işaret ettikleri için hiçbir ekranda görünmezler.
+   * null = henüz sayılıyor.
+   */
+  const [tied, setTied] = useState<{ records: number; certs: number } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.all([
+      getDocs(query(collection(db, "externalTrainings"), where("courseId", "==", course.id))),
+      getDocs(query(collection(db, "certificates"), where("courseId", "==", course.id))),
+    ])
+      .then(([r, c]) => alive && setTied({ records: r.size, certs: c.size }))
+      // Sayamadıysak engellemiyoruz ama uyarıyı da gösteremeyiz.
+      .catch(() => alive && setTied({ records: -1, certs: -1 }));
+    return () => {
+      alive = false;
+    };
+  }, [course.id]);
+
+  const total = tied ? Math.max(0, tied.records) + Math.max(0, tied.certs) : 0;
 
   async function remove() {
     setBusy(true);
@@ -529,15 +551,42 @@ function DeleteConfirm({
   return (
     <div>
       <p className="text-sm text-slate-700 mb-2">
-        Delete <strong>{course.title}</strong>? Staff already assigned keep their records, but the
-        course disappears from the catalogue.
+        Delete <strong>{course.title}</strong>?
       </p>
-      <p className="text-[11px] text-slate-500">
-        Deactivating instead hides it from new assignments and is reversible.
-      </p>
+      {tied === null ? (
+        <p className="text-[11px] text-slate-400">Checking what is attached…</p>
+      ) : total > 0 ? (
+        /* Kayıtlar silinmez ama silinmiş bir kursa bağlı kalır ve hiçbir
+           ekranda görünmez — bunu söylemeden silmek doğru değil. */
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] text-amber-900">
+          <strong>
+            {tied.records > 0 && `${tied.records} training record${tied.records === 1 ? "" : "s"}`}
+            {tied.records > 0 && tied.certs > 0 && " and "}
+            {tied.certs > 0 && `${tied.certs} certificate${tied.certs === 1 ? "" : "s"}`}
+          </strong>{" "}
+          are attached to this course. They are not deleted, but they become unreachable — they
+          disappear from the follow-up matrix, from people&rsquo;s records and from the certificate
+          register.
+          <span className="block mt-1.5 font-semibold">
+            Deactivate instead: it hides the course and keeps everything readable.
+          </span>
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-500">
+          Nothing is attached to this course. Deactivating instead is reversible.
+        </p>
+      )}
       <div className="flex items-center gap-3 mt-5 pt-4 border-t border-slate-100">
-        <button onClick={remove} disabled={busy} className="btn-primary text-xs py-2">
-          {busy ? "Deleting…" : "Delete Course"}
+        <button
+          onClick={remove}
+          disabled={busy || tied === null}
+          className="btn-primary text-xs py-2"
+        >
+          {busy
+            ? "Deleting…"
+            : total > 0
+              ? `Delete anyway (${total} will be unreachable)`
+              : "Delete Course"}
         </button>
         <button onClick={onCancel} className="btn-secondary text-xs py-2">
           Cancel
