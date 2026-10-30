@@ -263,6 +263,24 @@ async function main() {
     }
   }
 
+  head("6b. NDT METODLARI");
+  // methods dizisi kursta, kişinin tikli metodları users.courseMethods'ta
+  // kurs kimliğine bağlı. İkisi de yeni konuya taşınmalı.
+  const usSnap = await db.collection("users").get();
+  const methodCourses = courses.filter((c) => (c.methods ?? []).length > 0);
+  const methodMoves = [];
+  for (const mc of methodCourses) {
+    const subj = subjectForOld(mc.title);
+    const holders = usSnap.docs.filter((d) => ((d.data().courseMethods ?? {})[mc.id] ?? []).length > 0);
+    methodMoves.push({ from: mc.id, fromTitle: mc.title, to: subj, methods: mc.methods, holders });
+    console.log(`  ${mc.title}  [${mc.methods.join(", ")}]  →  ${subj ?? "! KONU YOK"}`);
+    holders.forEach((h) =>
+      console.log(`     ${h.data().name}: ${(h.data().courseMethods[mc.id] ?? []).join(", ")}`)
+    );
+    if (!holders.length) console.log("     (kimsede tikli metod yok)");
+  }
+  if (!methodCourses.length) console.log("  metod tanımlı kurs yok");
+
   head("7. SİLİNECEKLER");
   const delRecs = exSnap.docs.filter((d) => d.data().importedFrom === "TRNG_STS");
   const keepTitles = new Set(MAP.SUBJECTS.map((s) => norm(s.subject)));
@@ -340,6 +358,23 @@ async function main() {
     await db.doc(`courses/${hf}`).update({ satisfiedBy: { mode: "ANY", courseIds: [safety] } });
     await db.doc(`courses/${sms}`).update({ satisfiedBy: { mode: "ANY", courseIds: [safety] } });
     console.log("eşdeğerlik kuruldu: Safety = SMS + HF");
+  }
+
+  // Metodlar: önce konuya methods dizisi, sonra kişilerin tikli metodları.
+  for (const mv of methodMoves) {
+    const to = mv.to ? idOf.get(mv.to) : null;
+    if (!to) {
+      console.log(`! metod taşınamadı: ${mv.fromTitle}`);
+      continue;
+    }
+    await db.doc(`courses/${to}`).update({ methods: mv.methods });
+    for (const h of mv.holders) {
+      const cm = { ...(h.data().courseMethods ?? {}) };
+      cm[to] = cm[mv.from];
+      delete cm[mv.from];
+      await db.doc(`users/${h.id}`).update({ courseMethods: cm });
+    }
+    console.log(`metod taşındı: ${mv.fromTitle} → ${mv.to} (${mv.holders.length} kişi)`);
   }
 
   // 3: sertifikalar
@@ -450,6 +485,13 @@ async function main() {
         if (!live.has(id)) kirik++;
   });
   console.log(`kapsamlarda silinmiş kursa işaret: ${kirik}`);
+  const us2 = await db.collection("users").get();
+  let kirikMetod = 0;
+  us2.forEach((d) => {
+    for (const [cid, ms] of Object.entries(d.data().courseMethods ?? {}))
+      if ((ms ?? []).length && !live.has(cid)) kirikMetod++;
+  });
+  console.log(`kişilerde silinmiş kursa bağlı metod: ${kirikMetod}`);
 
   console.log("\nSıradaki adım: node scripts/import-trng-sts.js --apply");
 }
