@@ -414,14 +414,15 @@ function ShellLayout({ children }: { children: ReactNode }) {
             form={head.form}
             userName={profile?.name}
             role={r}
+            /* Kapsam yalnizca GERCEK bir kisit varsa yaziliyor. Admin ve
+               egitmende "All records visible to this account" hicbir sey
+               anlatmiyordu, kunye satirini uzatiyordu. */
             scope={
               role === "MANAGER"
                 ? "Own department only"
-                : role === "CUSTOMER"
-                ? "Own training records only"
-                : role === "USER"
-                ? "Own training records only"
-                : "All records visible to this account"
+                : role === "CUSTOMER" || role === "USER"
+                  ? "Own training records only"
+                  : undefined
             }
           />
           {children}
