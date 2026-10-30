@@ -179,6 +179,13 @@ export function TrainingMatrix() {
   const [fScope, setFScope] = useState("");
   const [fCourse, setFCourse] = useState("");
   const [fStatus, setFStatus] = useState("");
+  /**
+   * Elle seçilen kişiler. Boşsa süzgeç yok. Baskı da aynı listeden
+   * çizildiği için seçim doğrudan PDF'e yansıyor.
+   */
+  const [fPeople, setFPeople] = useState<string[]>([]);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [pq, setPq] = useState("");
   /** Departman/kapsam/eğitim paneli — normalde kapalı. */
   const [panelOpen, setPanelOpen] = useState(false);
   /** Renk anahtarı — başvuru listesi, sürekli açık durmasına gerek yok. */
@@ -559,6 +566,27 @@ export function TrainingMatrix() {
   );
   const boreOnlyCertifying = tab === "BORESCOPE_RUNUP" && certifyingScopeId !== null;
 
+  /**
+   * Seçim listesinde kimler çıkacak: departman, kapsam ve sekme süzgeci
+   * uygulanmış hâli. Listede olmayan birini seçili bırakmak kafa
+   * karıştırır — ekran boşalır, sebebi görünmez.
+   */
+  const peopleOptions = useMemo(
+    () =>
+      groups
+        .filter((g) => !fDept || g.deptId === fDept)
+        .flatMap((g) =>
+          g.list
+            .filter(
+              (u) =>
+                (!fScope || (u.jobTitleIds ?? []).includes(fScope)) &&
+                (!boreOnlyCertifying || (u.jobTitleIds ?? []).includes(certifyingScopeId!))
+            )
+            .map((u) => ({ id: u.id, name: u.name, dept: g.name }))
+        ),
+    [groups, fDept, fScope, boreOnlyCertifying, certifyingScopeId]
+  );
+
   const baseGroups = useMemo(
     () =>
       groups
@@ -569,11 +597,12 @@ export function TrainingMatrix() {
             (u) =>
               (!q.trim() || norm(u.name).includes(norm(q.trim()))) &&
               (!fScope || (u.jobTitleIds ?? []).includes(fScope)) &&
-              (!boreOnlyCertifying || (u.jobTitleIds ?? []).includes(certifyingScopeId!))
+              (!boreOnlyCertifying || (u.jobTitleIds ?? []).includes(certifyingScopeId!)) &&
+              (fPeople.length === 0 || fPeople.includes(u.id))
           ),
         }))
         .filter((g) => g.list.length > 0),
-    [groups, q, fDept, fScope, boreOnlyCertifying, certifyingScopeId]
+    [groups, q, fDept, fScope, boreOnlyCertifying, certifyingScopeId, fPeople]
   );
 
   const statusCounts = useMemo(() => {
@@ -598,7 +627,7 @@ export function TrainingMatrix() {
 
   const shownStaff = filteredGroups.reduce((n, g) => n + g.list.length, 0);
   const totalStaff = groups.reduce((n, g) => n + g.list.length, 0);
-  const filtersOn = !!(q.trim() || fDept || fScope || fCourse || fStatus);
+  const filtersOn = !!(q.trim() || fDept || fScope || fCourse || fStatus || fPeople.length);
   /** Panelin arkasındaki üç filtreden kaçı açık — düğmedeki rozet. */
   const panelCount = (fDept ? 1 : 0) + (fScope ? 1 : 0) + (fCourse ? 1 : 0);
   const clearAll = () => {
@@ -607,6 +636,7 @@ export function TrainingMatrix() {
     setFScope("");
     setFCourse("");
     setFStatus("");
+    setFPeople([]);
   };
 
   if (role !== "ADMIN" && role !== "MANAGER" && role !== "INSTRUCTOR")
@@ -714,6 +744,106 @@ export function TrainingMatrix() {
             )}
           </button>
 
+          {/* Kişi seçici — tiklenenler hem ekranda hem PDF'te görünür. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPeopleOpen((v) => !v)}
+              aria-expanded={peopleOpen}
+              className={`h-[30px] rounded-lg border px-2.5 text-[12px] font-semibold inline-flex items-center gap-1.5 transition ${
+                fPeople.length > 0
+                  ? "border-brand-200 bg-brand-50 text-brand-700"
+                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"
+              }`}
+            >
+              People
+              {fPeople.length > 0 && (
+                <span className="bg-brand-600 text-white rounded-full min-w-[16px] h-4 px-1 grid place-items-center text-[10px] font-bold">
+                  {fPeople.length}
+                </span>
+              )}
+            </button>
+            {peopleOpen && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Close"
+                  onClick={() => setPeopleOpen(false)}
+                  className="fixed inset-0 z-20 cursor-default"
+                />
+                <div className="absolute right-0 top-9 z-30 w-[300px] rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                  <div className="p-2 border-b border-slate-100">
+                    <input
+                      autoFocus
+                      value={pq}
+                      onChange={(e) => setPq(e.target.value)}
+                      placeholder="Search personnel…"
+                      className="input !py-1.5 !text-[12.5px]"
+                    />
+                  </div>
+                  <div className="max-h-[290px] overflow-y-auto py-1">
+                    {peopleOptions
+                      .filter((p) => !pq.trim() || norm(p.name).includes(norm(pq.trim())))
+                      .map((p) => {
+                        const on = fPeople.includes(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() =>
+                              setFPeople((prev) =>
+                                prev.includes(p.id)
+                                  ? prev.filter((x) => x !== p.id)
+                                  : [...prev, p.id]
+                              )
+                            }
+                            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left hover:bg-slate-50"
+                          >
+                            <span
+                              aria-hidden
+                              className={`grid place-items-center h-4 w-4 shrink-0 rounded-[5px] border text-[10px] leading-none ${
+                                on
+                                  ? "border-brand-600 bg-brand-600 text-white"
+                                  : "border-slate-300 bg-white text-transparent"
+                              }`}
+                            >
+                              ✓
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-[12.5px] text-slate-800 truncate">
+                                {p.name}
+                              </span>
+                              <span className="block text-[10.5px] text-slate-400 truncate">
+                                {p.dept}
+                              </span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    {peopleOptions.length === 0 && (
+                      <p className="px-3 py-4 text-[12px] text-slate-400">
+                        No one matches the other filters.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-slate-100 text-[11.5px]">
+                    <span className="text-slate-500">
+                      {fPeople.length} of {peopleOptions.length} selected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setFPeople([])}
+                      className="font-semibold text-slate-500 hover:text-brand-700"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {/* Renk anahtarı — açılır, çünkü başvuru listesi. */}
           <div className="relative">
             <button
@@ -765,6 +895,12 @@ export function TrainingMatrix() {
             <FilterChip
               label={jobTitles.find((j) => j.id === fScope)?.name ?? "Scope"}
               onClear={() => setFScope("")}
+            />
+          )}
+          {fPeople.length > 0 && (
+            <FilterChip
+              label={`${fPeople.length} selected person${fPeople.length === 1 ? "" : "s"}`}
+              onClear={() => setFPeople([])}
             />
           )}
           {fCourse && (
@@ -1344,6 +1480,12 @@ export function TrainingMatrix() {
             training is <b>not required</b> for that person&rsquo;s authorisation scope.
             &ldquo;MISSING&rdquo; means required but no record exists.
           </p>
+          {fPeople.length > 0 && (
+            <p>
+              <b>This form lists selected personnel only</b> ({shownStaff} of {totalStaff}), chosen
+              by the person who produced it.
+            </p>
+          )}
           {/* Denetçi listenin neden kısa olduğunu bilmeli. */}
           {boreOnlyCertifying && (
             <p>
