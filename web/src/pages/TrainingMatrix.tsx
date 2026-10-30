@@ -1369,16 +1369,6 @@ export function TrainingMatrix() {
           </p>
         </div>
 
-        <table className="mx-sign">
-          <tbody>
-            <tr>
-              <th>Prepared by</th>
-              <td />
-              <th>Date</th>
-              <td />
-            </tr>
-          </tbody>
-        </table>
       </div>
 
       {preview && (

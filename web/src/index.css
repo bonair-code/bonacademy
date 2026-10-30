@@ -321,6 +321,13 @@
     color: #475569;
     margin-top: 1mm;
   }
+  /* Künye tek satır — eskiden kutulu bir tabloydu, sayfanın üstünde
+     gereksiz yer kaplıyordu. */
+  body.printing-report .rh-meta-line {
+    font-size: 7.5pt;
+    color: #64748b;
+    margin: 0 0 3mm;
+  }
   body.printing-report table.rh-meta {
     width: 100%;
     border-collapse: collapse;
@@ -535,29 +542,6 @@
     border-radius: 0.5mm;
     display: block;
   }
-  body.printing-report table.mx-sign {
-    break-inside: avoid;
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 5mm;
-    font-size: 7.5pt;
-  }
-  body.printing-report table.mx-sign th,
-  body.printing-report table.mx-sign td {
-    border: 0.2mm solid #94a3b8;
-    padding: 2mm;
-    text-align: left;
-  }
-  body.printing-report table.mx-sign th {
-    background: #f1f5f9;
-    font-weight: 600;
-    width: 26mm;
-    white-space: nowrap;
-  }
-  body.printing-report table.mx-sign td {
-    width: 34%;
-  }
-
   /* Lejant kutucukları renkli basılsın — çıktının anahtarı bu. */
   body.printing-report .card + div i,
   body.printing-report i[aria-hidden="true"] {
