@@ -1,7 +1,9 @@
+import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, needsOnboarding, type Role } from "./lib/auth";
 import { Shell } from "./components/Shell";
 import { AppFlagDefs } from "./components/Flag";
+import { WelcomeGuide } from "./components/WelcomeGuide";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Courses } from "./pages/Courses";
@@ -178,6 +180,11 @@ function AuthedApp() {
 
 export function App() {
   const { user, profile, loading } = useAuth();
+  /**
+   * Karşılama penceresi bir kez açılır. Yerel durum da tutuluyor: profil
+   * dinleyicisi guideSeenAt'i geri okuyana kadar pencere ekranda kalırdı.
+   */
+  const [guideDone, setGuideDone] = useState(false);
   if (loading) return <FullScreen>Loading…</FullScreen>;
 
   // İlk giriş: şifre ve eksik profil tamamlanmadan uygulamaya girilemez.
@@ -186,7 +193,13 @@ export function App() {
   const isPublic = path.startsWith("/verify") || path.startsWith("/join") || path.startsWith("/invite");
   if (user && !isPublic && needsOnboarding(profile)) return <Onboarding />;
 
+  // Onboarding bittikten SONRA, uygulamanın üstünde bir kez.
+  const showGuide =
+    !!user && !isPublic && !!profile && !profile.guideSeenAt && !guideDone;
+
   return (
+    <>
+      {showGuide && <WelcomeGuide onDone={() => setGuideDone(true)} />}
     <Routes>
       {/* Herkese açık — QR sertifika doğrulama */}
       <Route path="/verify/:serialNo" element={<Verify />} />
@@ -201,5 +214,6 @@ export function App() {
         element={user ? <AuthedApp /> : <Navigate to="/login" replace />}
       />
     </Routes>
+    </>
   );
 }

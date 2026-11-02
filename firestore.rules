@@ -72,7 +72,7 @@ service cloud.firestore {
       allow update: if isAdmin()
                     || (isSelf(uid)
                         && request.resource.data.diff(resource.data)
-                             .affectedKeys().hasOnly(['locale', 'phone', 'updatedAt'])
+                             .affectedKeys().hasOnly(['locale', 'phone', 'updatedAt', 'guideSeenAt'])
                         && request.resource.data.get('locale', 'tr') in ['tr', 'en', 'TR', 'EN']
                         && (request.resource.data.get('phone', null) == null
                             || (request.resource.data.phone is string

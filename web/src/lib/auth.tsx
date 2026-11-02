@@ -53,6 +53,8 @@ export type Profile = {
    * aynıdır.
    */
   roles: Role[];
+  /** İlk giriş karşılama penceresi görüldü mü? Boşsa bir kez açılır. */
+  guideSeenAt: Timestamp | null;
 };
 
 /** Sertifikada basıldığı için bu alanlar eksikse profil tamamlanmamış sayılır. */
@@ -157,6 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             company: data?.company ?? null,
             instructorFor: data?.instructorFor ?? [],
             instructorAuthExpiry: data?.instructorAuthExpiry ?? null,
+            guideSeenAt: data?.guideSeenAt ?? null,
           });
           setLoading(false);
         },
