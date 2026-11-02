@@ -3,7 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth, needsOnboarding, type Role } from "./lib/auth";
 import { Shell } from "./components/Shell";
 import { AppFlagDefs } from "./components/Flag";
-import { WelcomeGuide } from "./components/WelcomeGuide";
+import { WelcomeGuide, guideSeenLocally } from "./components/WelcomeGuide";
 import { Login } from "./pages/Login";
 import { Dashboard } from "./pages/Dashboard";
 import { Courses } from "./pages/Courses";
@@ -195,7 +195,12 @@ export function App() {
 
   // Onboarding bittikten SONRA, uygulamanın üstünde bir kez.
   const showGuide =
-    !!user && !isPublic && !!profile && !profile.guideSeenAt && !guideDone;
+    !!user &&
+    !isPublic &&
+    !!profile &&
+    !profile.guideSeenAt &&
+    !guideDone &&
+    !guideSeenLocally(user.uid);
 
   return (
     <>

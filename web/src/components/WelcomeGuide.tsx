@@ -22,6 +22,25 @@ import { Flag } from "./Flag";
 import type { Lang } from "../lib/lang";
 
 const ORG_URL = "academy.bonair.com.tr";
+const SUPPORT_MAIL = "qualitytechnic@bonair.com.tr";
+
+/**
+ * Pencerenin görüldüğü, tarayıcıda da işaretleniyor.
+ *
+ * Asıl kayıt users/{uid}.guideSeenAt — cihazdan bağımsız olması için.
+ * Ama o yazma başarısız olursa (çevrimdışı, kural reddi) pencere her
+ * girişte geri gelirdi; bu yerel işaret onu engelliyor. Okunamazsa
+ * (gizli pencere, kapalı depolama) yalnızca sunucudaki kayda düşülür.
+ */
+export const guideSeenKey = (uid: string) => `bonacademy.guideSeen.${uid}`;
+export function guideSeenLocally(uid?: string | null): boolean {
+  if (!uid) return false;
+  try {
+    return localStorage.getItem(guideSeenKey(uid)) === "1";
+  } catch {
+    return false;
+  }
+}
 
 type Copy = {
   eyebrow: string;
@@ -56,7 +75,7 @@ const COPY: Record<Lang, Copy> = {
     warnText:
       "Bu bilgiler düzenlenen tüm eğitim sertifikalarının üzerine basılmaktadır. Hatalı girildiyse eğitim birimine bildiriniz.",
     helpTitle: "Destek",
-    helpText: "Giriş veya kayıtlarınızla ilgili sorunlarda eğitim birimi ile iletişime geçiniz.",
+    helpText: "Giriş veya kayıtlarınızla ilgili sorunlarda eğitim birimine yazınız:",
     addressLabel: "Sistem adresi",
     cta: "Başlayalım",
   },
@@ -79,7 +98,7 @@ const COPY: Record<Lang, Copy> = {
     warnText:
       "These are printed on every training certificate issued to you. If either is wrong, inform the training department.",
     helpTitle: "Support",
-    helpText: "Contact the training department for any problem with sign-in or with your records.",
+    helpText: "For any problem with sign-in or with your records, write to the training department:",
     addressLabel: "System address",
     cta: "Get started",
   },
@@ -88,19 +107,27 @@ const COPY: Record<Lang, Copy> = {
 export function WelcomeGuide({ onDone }: { onDone: () => void }) {
   const { user, profile } = useAuth();
   const [lang, setLang] = useState<Lang>(profile?.locale === "en" ? "EN" : "TR");
-  const [busy, setBusy] = useState(false);
   const t = COPY[lang];
 
-  async function close() {
-    setBusy(true);
-    try {
-      if (user) await updateDoc(doc(db, "users", user.uid), { guideSeenAt: serverTimestamp() });
-    } catch {
-      // Yazılamazsa pencere yine kapanır: karşılama metni yüzünden
-      // kullanıcıyı uygulamanın dışında tutmak doğru olmaz.
-    } finally {
-      onDone();
+  /**
+   * Kapanmak bir ağ isteğine BAĞLI DEĞİL. Önce kapatılır, kalıcı işaret
+   * arka planda yazılır. Eskiden yazma await ediliyordu ve istek
+   * takıldığında pencere hiç kapanmıyordu.
+   */
+  function close() {
+    if (user) {
+      try {
+        localStorage.setItem(guideSeenKey(user.uid), "1");
+      } catch {
+        /* depolama kapalıysa sunucudaki kayıt yeter */
+      }
+      void updateDoc(doc(db, "users", user.uid), { guideSeenAt: serverTimestamp() }).catch(
+        () => {
+          /* yazılamazsa yerel işaret devrede */
+        }
+      );
     }
+    onDone();
   }
 
   return (
@@ -171,14 +198,18 @@ export function WelcomeGuide({ onDone }: { onDone: () => void }) {
               <div className="text-[10.5px] font-semibold uppercase tracking-wide text-slate-400">
                 {t.helpTitle}
               </div>
-              <p className="text-[12px] leading-snug text-slate-600">{t.helpText}</p>
+              <p className="text-[12px] leading-snug text-slate-600">
+                {t.helpText}{" "}
+                <a href={`mailto:${SUPPORT_MAIL}`} className="font-semibold text-brand-700 underline">
+                  {SUPPORT_MAIL}
+                </a>
+              </p>
             </div>
           </div>
 
           <button
             type="button"
-            onClick={() => void close()}
-            disabled={busy}
+            onClick={close}
             className="btn-primary w-full mt-5 py-2.5 text-[14px]"
           >
             {t.cta}
