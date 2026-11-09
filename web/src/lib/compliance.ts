@@ -228,6 +228,43 @@ export function useCompliance(
       }
     }
 
+    /**
+     * Borescope ve engine run-up yetkileri.
+     *
+     * Bunlar hiçbir kapsamda zorunlu değil ve olmamalı: yetki kişi ve
+     * motor/uçak tipi bazında veriliyor, herkese zorunlu tutulamaz. Bu
+     * yüzden yukarıdaki döngü onlara hiç bakmıyor ve süresi dolmak üzere
+     * olan bir yetki panelde görünmüyordu.
+     *
+     * Burada yalnızca KAYDI OLAN kişi için bitiş uyarısı üretiliyor.
+     * "Eksik" uyarısı üretilmiyor — taşımadığı bir yetkiyi kimseye eksik
+     * yazmak yanlış olur.
+     */
+    for (const u of activeUsers) {
+      for (const c of courseRows) {
+        if (c.section !== "BORESCOPE_RUNUP") continue;
+        // Birinin kapsamında zorunlu kılınmışsa yukarıdaki döngü zaten ele aldı.
+        if (requirementFor(c, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
+        const cover = resolveSubjectCoverage(
+          u.id,
+          membersOf.get(c.id) ?? [c as (typeof courseRows)[number]],
+          done,
+          courseById
+        );
+        if (!cover?.expiry) continue;
+        const days = Math.round((cover.expiry.getTime() - now) / DAY);
+        if (days > 90) continue;
+        const base = {
+          userId: u.id,
+          userName: u.name ?? "",
+          departmentId: u.departmentId ?? null,
+          courseId: c.id,
+          courseTitle: c.title ?? "",
+        };
+        findings.push({ ...base, kind: days < 0 ? "EXPIRED" : "SOON", days });
+      }
+    }
+
     // En acil önce: süresi geçmiş → eksik → yaklaşan.
     const rank = { EXPIRED: 0, MISSING: 1, SOON: 2 } as const;
     findings.sort((a, b) => rank[a.kind] - rank[b.kind] || (a.days ?? 0) - (b.days ?? 0));
