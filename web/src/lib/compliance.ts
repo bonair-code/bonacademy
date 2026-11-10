@@ -229,39 +229,52 @@ export function useCompliance(
     }
 
     /**
-     * Borescope ve engine run-up yetkileri.
+     * Kaydı olan ama kapsamında ZORUNLU OLMAYAN eğitimler.
      *
-     * Bunlar hiçbir kapsamda zorunlu değil ve olmamalı: yetki kişi ve
-     * motor/uçak tipi bazında veriliyor, herkese zorunlu tutulamaz. Bu
-     * yüzden yukarıdaki döngü onlara hiç bakmıyor ve süresi dolmak üzere
-     * olan bir yetki panelde görünmüyordu.
+     * Yukarıdaki döngü yalnızca zorunlu eğitimleri tarıyor. Kişinin
+     * elinde duran ama kapsamında zorunlu olmayan bir kayıt — ya da hiç
+     * kapsamı olmayan birinin bütün kayıtları — bitmek üzereyken panelde
+     * hiç görünmüyordu. Matris aynı hücreyi kırmızı boyuyordu: iki ekran
+     * aynı kişi için farklı şey söylüyordu.
      *
-     * Burada yalnızca KAYDI OLAN kişi için bitiş uyarısı üretiliyor.
-     * "Eksik" uyarısı üretilmiyor — taşımadığı bir yetkiyi kimseye eksik
-     * yazmak yanlış olur.
+     * Borescope ve engine run-up da buraya düşüyor: o yetkiler kişi ve
+     * motor/uçak tipi bazında veriliyor, hiçbir kapsamda zorunlu değil.
+     *
+     * Yalnızca BİTİŞ uyarısı üretiliyor; "eksik" uyarısı ÜRETİLMİYOR —
+     * zorunlu olmayan bir eğitimi kimseye eksik yazmak yanlış olur.
      */
     for (const u of activeUsers) {
       for (const c of courseRows) {
-        if (c.section !== "BORESCOPE_RUNUP") continue;
-        // Birinin kapsamında zorunlu kılınmışsa yukarıdaki döngü zaten ele aldı.
-        if (requirementFor(c, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
-        const cover = resolveSubjectCoverage(
-          u.id,
-          membersOf.get(c.id) ?? [c as (typeof courseRows)[number]],
-          done,
-          courseById
-        );
-        if (!cover?.expiry) continue;
-        const days = Math.round((cover.expiry.getTime() - now) / DAY);
+        if (requirementFor(c as any, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
+        const k = `${u.id}|${c.id}`;
+        const ticked = heldMethods(u, c.id);
+        // Metod bazlı eğitimde en kötü metod belirler — üstteki döngüyle
+        // aynı kural, iki ekran ayrışmasın.
+        const worst =
+          methodsOf(c as any).length > 0 && ticked.length > 0
+            ? worstOf(methodBreakdown(ticked, methodRecs.get(k) ?? []))
+            : null;
+        if (worst && worst.missing.length > 0) continue; // elinde yok; "eksik" demiyoruz
+        const exp = worst
+          ? worst.expiry
+          : resolveSubjectCoverage(
+              u.id,
+              membersOf.get(c.id) ?? [c as (typeof courseRows)[number]],
+              done,
+              courseById
+            )?.expiry ?? null;
+        if (!exp) continue;
+        const days = Math.round((exp.getTime() - now) / DAY);
         if (days > 90) continue;
-        const base = {
+        findings.push({
           userId: u.id,
           userName: u.name ?? "",
           departmentId: u.departmentId ?? null,
           courseId: c.id,
           courseTitle: c.title ?? "",
-        };
-        findings.push({ ...base, kind: days < 0 ? "EXPIRED" : "SOON", days });
+          kind: days < 0 ? "EXPIRED" : "SOON",
+          days,
+        });
       }
     }
 
