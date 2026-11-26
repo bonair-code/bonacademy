@@ -281,12 +281,12 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
     }
 
     /**
-     * Takibi durdurulanlar. Bayrak yalnızca kapsamda ZORUNLU OLMAYAN
-     * eğitimde geçerli; eğitim sonradan zorunlu olursa takip kendiliğinden
-     * geri döner. Aynı kural matriste de burada uygulanıyor.
+     * Takibi durdurulanlar. Zorunlu eğitimlerde de geçerli; satırda
+     * "required by scope" yazdığı için bir gerekliliğin elle kapatıldığı
+     * görünür kalıyor.
      */
     const untrackedIds = new Set(user?.untrackedCourseIds ?? []);
-    const isUntracked = (cid: string) => untrackedIds.has(cid) && !requiredIds.has(cid);
+    const isUntracked = (cid: string) => untrackedIds.has(cid);
 
     return relevant.map((course) => {
       const ext = extByCourse.get(course.id) ?? null;
@@ -346,7 +346,8 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
         // Kayıt duruyor, tarih duruyor; yalnızca gün sayacı ve uyarı yok.
         return {
           course,
-          required: false,
+          // Zorunluluk korunuyor: satır "required by scope" diyebilsin.
+          required: requiredIds.has(course.id),
           untracked: true,
           state: "DONE" as const,
           date,
@@ -579,7 +580,7 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
     ...(l.external
       ? [{ label: "Edit record", icon: "✎", onClick: () => setDialog({ kind: "edit", row: l.external! }) }]
       : []),
-    ...(!self && role === "ADMIN" && !l.required
+    ...(!self && role === "ADMIN"
       ? [
           {
             label: l.untracked ? "Resume tracking" : "Stop tracking",
@@ -646,7 +647,13 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
     const cert = l.certificateId ? certs.find((c) => c.__id === l.certificateId) : null;
     const until = l.expires ? `until ${fmt(l.expires)}` : "no expiry";
     const sub = l.untracked
-      ? `Tracking stopped${l.expires ? ` · last valid until ${fmt(l.expires)}` : ""}`
+      ? [
+          "Tracking stopped",
+          l.required ? "required by scope" : null,
+          l.expires ? `last valid until ${fmt(l.expires)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")
       : l.state === "MISSING"
         ? l.required
           ? "Required · not on record"

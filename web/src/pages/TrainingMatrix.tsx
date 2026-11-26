@@ -418,15 +418,12 @@ export function TrainingMatrix() {
      * dikkate alınıyordu; PT geçerli, MT dolmuş bir kişi uyumlu görünüyordu.
      */
     /**
-     * Takibi durdurulmuş mu? Bayrak YALNIZCA kapsamda zorunlu olmayan
-     * eğitimde geçerli: eğitim sonradan zorunlu hale gelirse bayrak yok
-     * sayılır ve takip kendiliğinden geri döner. Kural arayüzde değil
-     * burada, çünkü MOE'nin zorunlu tuttuğu bir eğitim tek bir bayrakla
-     * sessizce kapsam dışına çıkmamalı.
+     * Takibi durdurulmuş mu? Zorunlu eğitimlerde de geçerli (kullanıcı
+     * kararı). Sessiz düşmesin diye hücre boş kalmıyor: "OFF" işaretiyle
+     * çıkıyor ve basılı formun anahtarında ne demek olduğu yazıyor.
      */
     const required = c.members.some((m) => isRequired(u, m));
-    if (!required && (u.untrackedCourseIds ?? []).includes(c.id))
-      return { kind: "NA", untracked: true };
+    if ((u.untrackedCourseIds ?? []).includes(c.id)) return { kind: "NA", untracked: true };
 
     // Metodlar kursun üzerinde; konuda metodu olan üye hangisiyse o geçerli.
     const mc = c.members.find((m) => methodsOf(m).length > 0) ?? c;

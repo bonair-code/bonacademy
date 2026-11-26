@@ -158,6 +158,9 @@ export function useCompliance(
     for (const u of activeUsers) {
       for (const c of courses) {
         if (!requirementFor(c as any, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
+        // Takibi elle durdurulmuş eğitim uyarı üretmez — zorunlu olsa da.
+        // Kararı veren admin; matris ve basılı form "OFF" ile gösteriyor.
+        if ((u.untrackedCourseIds ?? []).includes(c.id)) continue;
         const k = `${u.id}|${c.id}`;
         /**
          * Gereklilik kursun KENDİ kaydıyla, eşdeğer eğitimle ya da aynı
