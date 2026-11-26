@@ -52,6 +52,12 @@ type UserRow = {
   role?: string;
   /** Metod bazlı eğitimlerde kişinin yetkili olduğu metodlar. */
   courseMethods?: Record<string, string[]>;
+  /**
+   * Takibi durdurulan eğitimler. Kayıt duruyor ama gün sayılmıyor,
+   * uyarı üretilmiyor. Yalnızca kapsamda zorunlu OLMAYAN eğitimler için
+   * geçerli — bkz. cellFor.
+   */
+  untrackedCourseIds?: string[];
 };
 type CourseRow = {
   id: string;
@@ -92,8 +98,11 @@ type JobTitle = {
 };
 
 type CellState =
-  /** Gerekmiyor. `exemptBy` doluysa bir alt yetki bunu düşürmüş demektir. */
-  | { kind: "NA"; exemptBy?: string | null }
+  /**
+   * Gerekmiyor. `exemptBy` doluysa bir alt yetki bunu düşürmüş demektir.
+   * `untracked` ise takip elle durdurulmuştur: boş hücreden ayrı gösterilir.
+   */
+  | { kind: "NA"; exemptBy?: string | null; untracked?: boolean }
   | { kind: "PLANNED" }
   | { kind: "MISSING"; methodsMissing?: string[]; methodRows?: MethodRow[] }
   | {
@@ -150,7 +159,12 @@ const HEAT = {
 function heat(state: CellState): { bg: string; fg: string } {
   if (state.kind === "MISSING") return { bg: HEAT.missing, fg: "#fff" };
   if (state.kind === "PLANNED") return { bg: HEAT.planned, fg: "#7a5c0a" };
-  if (state.kind === "NA") return { bg: "transparent", fg: "#c7c7cc" };
+  // Takibi durdurulmuş hücre boş değil: soluk bir zemin taşır ki
+  // "zorunlu değil" ile karışmasın.
+  if (state.kind === "NA")
+    return state.untracked
+      ? { bg: "#eef1f5", fg: "#64748b" }
+      : { bg: "transparent", fg: "#c7c7cc" };
   const d = state.days;
   if (d === null) return { bg: HEAT.fresh, fg: "#0f2f1a" };
   if (d < 0) return { bg: HEAT.over, fg: "#fff" };
@@ -403,6 +417,17 @@ export function TrainingMatrix() {
      * edilir ve EN KÖTÜSÜ hücreyi belirler. Eskiden yalnızca en son kayıt
      * dikkate alınıyordu; PT geçerli, MT dolmuş bir kişi uyumlu görünüyordu.
      */
+    /**
+     * Takibi durdurulmuş mu? Bayrak YALNIZCA kapsamda zorunlu olmayan
+     * eğitimde geçerli: eğitim sonradan zorunlu hale gelirse bayrak yok
+     * sayılır ve takip kendiliğinden geri döner. Kural arayüzde değil
+     * burada, çünkü MOE'nin zorunlu tuttuğu bir eğitim tek bir bayrakla
+     * sessizce kapsam dışına çıkmamalı.
+     */
+    const required = c.members.some((m) => isRequired(u, m));
+    if (!required && (u.untrackedCourseIds ?? []).includes(c.id))
+      return { kind: "NA", untracked: true };
+
     // Metodlar kursun üzerinde; konuda metodu olan üye hangisiyse o geçerli.
     const mc = c.members.find((m) => methodsOf(m).length > 0) ?? c;
     const ticked = heldMethods(u, mc.id);
@@ -473,7 +498,7 @@ export function TrainingMatrix() {
     // Üyelerden herhangi birine atama açıksa konu planlanmış sayılır.
     if (c.members.some((m) => assignedSet.has(keyOf(u.id, m.id)))) return { kind: "PLANNED" };
     // Üyelerden biri bile zorunluysa konu zorunludur.
-    if (c.members.some((m) => isRequired(u, m))) return { kind: "MISSING" };
+    if (required) return { kind: "MISSING" };
     // Muafiyet ancak BÜTÜN üyeler için geçerliyse konuyu muaf kılar.
     const exempts = c.members.map((m) =>
       exclusionFor(m, u.jobTitleIds ?? [], jobTitles, u.subScopeIds ?? [])
@@ -868,6 +893,7 @@ export function TrainingMatrix() {
                   <Swatch color={HEAT.over} label="Expired" />
                   <Swatch color={HEAT.missing} label="Never taken" />
                   <Swatch color={HEAT.planned} label="Planned" />
+                  <Swatch color="#eef1f5" label="OFF — tracking stopped" />
                 </div>
               </div>
             )}
@@ -1450,7 +1476,9 @@ export function TrainingMatrix() {
                         const h = heat(st);
                         const txt =
                           st.kind === "NA"
-                            ? ""
+                            ? st.untracked
+                              ? "OFF"
+                              : ""
                             : st.kind === "MISSING"
                             ? "MISSING"
                             : st.kind === "PLANNED"
@@ -1479,6 +1507,8 @@ export function TrainingMatrix() {
             <b>Cells show the date the training remains valid until (dd.mm.yy).</b> An empty cell means the
             training is <b>not required</b> for that person&rsquo;s authorisation scope.
             &ldquo;MISSING&rdquo; means required but no record exists.
+            &ldquo;OFF&rdquo; means tracking of that training was stopped for that person &mdash;
+            the record is kept but no longer monitored.
           </p>
           {fPeople.length > 0 && (
             <p>
@@ -1578,7 +1608,7 @@ function useCellHover() {
     clear();
     holdOpen();
     // Gerekli olmayan hücrede yalnızca muafiyet varsa gösterilecek bir şey var.
-    if (state.kind === "NA" && !state.exemptBy) return;
+    if (state.kind === "NA" && !state.exemptBy && !state.untracked) return;
     const rect = el.getBoundingClientRect();
     timer.current = window.setTimeout(
       () => setAt({ user, course, state, rect, assignment }),
@@ -1669,6 +1699,13 @@ function CellDetail({
     >
       <div className="text-[12.5px] font-semibold text-slate-900 leading-snug">{user.name}</div>
       <div className="text-[11px] text-slate-500 leading-snug mb-2">{course.title}</div>
+
+      {state.kind === "NA" && state.untracked && (
+        <p className="text-[11.5px] text-slate-600">
+          <b className="text-slate-800">Tracking stopped</b> for this person. The record is kept
+          but no days are counted and no warning is raised.
+        </p>
+      )}
 
       {state.kind === "NA" && state.exemptBy && (
         <p className="text-[11.5px] text-slate-600">
@@ -1881,7 +1918,9 @@ function Cell({
   // "N/A" açıkça yazılır: nokta, hücrenin boş kaldığı mı yoksa gerekli
   // olmadığı mı belirsiz bırakıyordu.
   if (state.kind === "NA")
-    return (
+    return state.untracked ? (
+      <span className="text-[10px] font-semibold tracking-wide">OFF</span>
+    ) : (
       <span className={`text-[10px] ${state.exemptBy ? "opacity-80 underline decoration-dotted" : "opacity-55"}`}>
         N/A
       </span>

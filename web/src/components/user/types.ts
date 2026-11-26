@@ -9,6 +9,12 @@ import type { Role } from "../../lib/auth";
 import type { SubScope } from "../../lib/requirements";
 
 export type UserRow = {
+  /**
+   * Takibi durdurulan eğitimler. Kayıt duruyor ama gün sayılmıyor ve
+   * uyarı üretilmiyor. Yalnızca kapsamda zorunlu OLMAYAN eğitimde
+   * geçerli — zorunlu hale gelirse yok sayılır.
+   */
+  untrackedCourseIds?: string[];
   id: string;
   email: string;
   name: string;

@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   doc,
+  updateDoc,
   onSnapshot,
   orderBy,
   query,
@@ -98,6 +101,8 @@ type ExternalRow = {
 type Line = {
   course: CourseRow;
   required: boolean;
+  /** Takip elle durduruldu: gün sayılmaz, uyarı üretilmez. */
+  untracked?: boolean;
   state: "DONE" | "PLANNED" | "MISSING";
   /** Gereklilik başka eğitimlerle karşılandıysa onların kayıtları. */
   via?: Coverage["via"];
@@ -275,6 +280,14 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
       });
     }
 
+    /**
+     * Takibi durdurulanlar. Bayrak yalnızca kapsamda ZORUNLU OLMAYAN
+     * eğitimde geçerli; eğitim sonradan zorunlu olursa takip kendiliğinden
+     * geri döner. Aynı kural matriste de burada uygulanıyor.
+     */
+    const untrackedIds = new Set(user?.untrackedCourseIds ?? []);
+    const isUntracked = (cid: string) => untrackedIds.has(cid) && !requiredIds.has(cid);
+
     return relevant.map((course) => {
       const ext = extByCourse.get(course.id) ?? null;
       const internalCert = certByCourse.get(course.id) ?? null;
@@ -327,6 +340,25 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
             via: cover.via,
           };
         }
+      }
+
+      if (isUntracked(course.id)) {
+        // Kayıt duruyor, tarih duruyor; yalnızca gün sayacı ve uyarı yok.
+        return {
+          course,
+          required: false,
+          untracked: true,
+          state: "DONE" as const,
+          date,
+          expires:
+            date && expiryOf(
+              { date, external: useExt, externalExpiry: ext?.expiresAt?.toDate?.() ?? null },
+              course
+            ),
+          days: null,
+          external: useExt ? ext : null,
+          certificateId: useExt ? null : internalCert?.id ?? null,
+        };
       }
 
       if (date) {
@@ -519,6 +551,25 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
     .join("")
     .toLocaleUpperCase("tr");
 
+  /**
+   * Takibi durdur / sürdür. Yalnızca ADMIN: users/{uid} yazmasına güvenlik
+   * kuralı yalnızca admine izin veriyor, müdüre göstermek bastığında yetki
+   * hatası yemesi demekti. Kapsamında ZORUNLU olan eğitimde menüde yok —
+   * onu düşürmenin doğru yeri kapsam/alt yetki ayarı.
+   */
+  async function toggleTracking(l: Line) {
+    if (!user) return;
+    const on = !l.untracked;
+    try {
+      await updateDoc(doc(db, "users", user.id), {
+        untrackedCourseIds: on ? arrayUnion(l.course.id) : arrayRemove(l.course.id),
+      });
+      setToast(on ? `${l.course.title}: tracking stopped.` : `${l.course.title}: tracking resumed.`);
+    } catch (e) {
+      setToast((e as Error).message);
+    }
+  }
+
   const lineMenu = (l: Line) => [
     /**
      * Var olan kaydı DÜZELT — tarihi yanlış girilmiş bir belgeyi onarmanın
@@ -527,6 +578,15 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
      */
     ...(l.external
       ? [{ label: "Edit record", icon: "✎", onClick: () => setDialog({ kind: "edit", row: l.external! }) }]
+      : []),
+    ...(!self && role === "ADMIN" && !l.required
+      ? [
+          {
+            label: l.untracked ? "Resume tracking" : "Stop tracking",
+            icon: l.untracked ? "◉" : "◌",
+            onClick: () => void toggleTracking(l),
+          },
+        ]
       : []),
     {
       // "Replace" yanıltıcıydı: bu, kaydın yerine geçmiyor, YENİ bir kayıt
@@ -573,13 +633,21 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
   function renderLine(l: Line) {
     const exp = isExpired(l);
     const dueSoon = isSoon(l);
-    const tone =
-      l.state === "MISSING" || exp ? "bg-red-500" : dueSoon ? "bg-amber-500" : l.state === "PLANNED" ? "bg-sky-500" : "bg-emerald-500";
+    const tone = l.untracked
+      ? "bg-slate-300"
+      : l.state === "MISSING" || exp
+        ? "bg-red-500"
+        : dueSoon
+          ? "bg-amber-500"
+          : l.state === "PLANNED"
+            ? "bg-sky-500"
+            : "bg-emerald-500";
     const a = openByCourse.get(l.course.id);
     const cert = l.certificateId ? certs.find((c) => c.__id === l.certificateId) : null;
     const until = l.expires ? `until ${fmt(l.expires)}` : "no expiry";
-    const sub =
-      l.state === "MISSING"
+    const sub = l.untracked
+      ? `Tracking stopped${l.expires ? ` · last valid until ${fmt(l.expires)}` : ""}`
+      : l.state === "MISSING"
         ? l.required
           ? "Required · not on record"
           : "Not on record"

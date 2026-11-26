@@ -246,6 +246,10 @@ export function useCompliance(
     for (const u of activeUsers) {
       for (const c of courseRows) {
         if (requirementFor(c as any, u.jobTitleIds ?? [], scopes, u.subScopeIds ?? [])) continue;
+        // Takibi elle durdurulmuş eğitim uyarı üretmez. Bayrak yalnızca
+        // zorunlu olmayanda geçerli; zorunlu olanlar zaten üstteki
+        // döngüde ele alınıp buraya hiç gelmiyor.
+        if ((u.untrackedCourseIds ?? []).includes(c.id)) continue;
         const k = `${u.id}|${c.id}`;
         const ticked = heldMethods(u, c.id);
         // Metod bazlı eğitimde en kötü metod belirler — üstteki döngüyle
