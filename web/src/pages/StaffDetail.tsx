@@ -770,6 +770,37 @@ export function StaffDetail({ self = false }: { self?: boolean } = {}) {
                   Open
                 </button>
               )}
+              {/* Eski kaydın da kendi menüsü var: yanlış girilmiş bir
+                  tarihi düzeltmenin ya da yanlış kaydı silmenin başka
+                  yolu yoktu. Yalnızca dış kayıtta — BonAcademy
+                  sertifikasının kaynağı sınıf oturumu, buradan
+                  düzenlenmez. */}
+              {/* Kaydın kendisini listeden buluyoruz: geçmiş satırının
+                  taşıdığı kopya daha gevşek tipli, diyaloglar ise ana
+                  satırdakiyle aynı nesneyi bekliyor. */}
+              {(() => {
+                const row = r.external ? externals.find((x) => x.id === r.id) ?? null : null;
+                return canEdit && row ? (
+                <RowMenu
+                  label={`Actions for the record dated ${fmt(r.date)}`}
+                  items={[
+                    {
+                      label: "Edit record",
+                      icon: "✎",
+                      onClick: () => setDialog({ kind: "edit", row }),
+                    },
+                    {
+                      label: "Delete external record",
+                      icon: "🗑",
+                      danger: true,
+                      onClick: () => setDialog({ kind: "remove", row }),
+                    },
+                  ]}
+                />
+                ) : (
+                  <span className="w-7 shrink-0" />
+                );
+              })()}
             </div>
           ))}
       </li>
